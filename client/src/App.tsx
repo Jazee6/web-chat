@@ -1,13 +1,17 @@
-import { BrowserRouter, Routes, Route } from "react-router";
 import Index from "@/pages";
-import Room from "@/pages/room.tsx";
+import Layout from "@/pages/layout.tsx";
+import Login from "@/pages/login.tsx";
+import { BrowserRouter, Route, Routes } from "react-router";
 
 function App() {
   return (
     <BrowserRouter>
       <Routes>
-        <Route path="/" element={<Index />} />
-        <Route path="/room/:id?" element={<Room />} />
+        <Route path="/login" element={<Login />} />
+
+        <Route element={<Layout />}>
+          <Route path="/room?/:id?" element={<Index />} />
+        </Route>
       </Routes>
     </BrowserRouter>
   );

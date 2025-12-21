@@ -8,5 +8,29 @@
   ],
   "dev": {
     "port": 3001
-  }
+  },
+  "d1_databases": [
+    {
+      "binding": "web_chat",
+      "database_name": "web-chat",
+      "database_id": "bf97bb1a-64ed-4399-a8e0-b425269bc368",
+      "migrations_dir": "drizzle"
+    }
+  ],
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "ROOM",
+        "class_name": "Room"
+      }
+    ]
+  },
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_sqlite_classes": [
+        "Room"
+      ]
+    }
+  ]
 }

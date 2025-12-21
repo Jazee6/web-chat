@@ -1,41 +1,26 @@
-import { Separator } from "@/components/ui/separator.tsx";
+import { RoomCreateDialog } from "@/components/room-create-dialog.tsx";
 import { Button } from "@/components/ui/button.tsx";
-import Footer from "@/components/footer.tsx";
-import { authClient, useSession } from "@/lib/auth-client.ts";
-import { useEffect } from "react";
-import { useNavigate } from "react-router";
+import { useState } from "react";
+import { useParams } from "react-router";
 
 const Index = () => {
-  const { data } = useSession();
-  const nav = useNavigate();
+  const { id } = useParams() as { id?: string };
+  const [roomCreateDialogOpen, setRoomCreateDialogOpen] = useState(false);
 
-  useEffect(() => {
-    if (data?.user) {
-      nav("/room");
-    }
-  }, [data?.user, nav]);
+  if (!id) {
+    return (
+      <div className="flex justify-center items-center h-full">
+        <Button onClick={() => setRoomCreateDialogOpen(true)}>
+          Create Room
+        </Button>
 
-  const onSignIn = () => {
-    authClient.signIn.oauth2({
-      providerId: "easy-auth",
-      callbackURL: `${window.location.origin}/room`,
-      scopes: ["openid", "profile", "email", "offline_access"],
-    });
-  };
-
-  return (
-    <main className="flex flex-col items-center justify-center h-screen relative">
-      <div className="flex space-x-8">
-        <h1 className="font-mono text-4xl font-semibold">Web Chat</h1>
-
-        <Separator orientation="vertical" />
-
-        <Button onClick={onSignIn}>Sign in</Button>
+        <RoomCreateDialog
+          open={roomCreateDialogOpen}
+          onOpenChange={setRoomCreateDialogOpen}
+        />
       </div>
-
-      <Footer classname="absolute bottom-2" />
-    </main>
-  );
+    );
+  }
 };
 
 export default Index;
