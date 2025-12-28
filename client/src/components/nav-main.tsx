@@ -12,29 +12,32 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
 } from "@/components/ui/sidebar";
-import { showAlertDialog } from "@/lib/utils.ts";
+import { api, showAlertDialog } from "@/lib/utils.ts";
+import { useQueryClient } from "@tanstack/react-query";
 import { MoreHorizontal } from "lucide-react";
-import { NavLink, useLocation } from "react-router";
+import { NavLink, useLocation, useNavigate } from "react-router";
+import { toast } from "sonner";
 
 export function NavMain({
+  label,
   items,
 }: {
+  label?: string;
   items: {
     title: string;
     url: string;
-    isActive?: boolean;
   }[];
 }) {
   const location = useLocation();
+  const queryClient = useQueryClient();
+  const nav = useNavigate();
 
   return (
     <SidebarGroup>
-      <SidebarGroupLabel>
-        {items.length === 0 ? "No Rooms" : "Your Rooms"}
-      </SidebarGroupLabel>
+      {label && <SidebarGroupLabel>{label}</SidebarGroupLabel>}
       <SidebarMenu>
         {items.map((item) => (
-          <SidebarMenuItem key={item.title}>
+          <SidebarMenuItem key={item.url}>
             <SidebarMenuButton
               asChild
               tooltip={item.title}
@@ -60,6 +63,12 @@ export function NavMain({
                         description:
                           "Are you sure you want to delete this room? This action cannot be undone.",
                         confirmText: "Delete",
+                        onConfirmAction: async () => {
+                          await api.delete("room/" + item.url.split("/").pop());
+                          toast.success("Room deleted successfully");
+                          queryClient.refetchQueries({ queryKey: ["room"] });
+                          nav("/");
+                        },
                       });
                     }}
                   >

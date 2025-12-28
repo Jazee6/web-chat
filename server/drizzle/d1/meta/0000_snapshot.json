@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "4810f52d-12e1-49fc-9c8d-5178ce3cd691",
+  "id": "4fa9f9ab-7403-4718-8b23-ff822df5956c",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "room": {
@@ -21,6 +21,13 @@
           "notNull": true,
           "autoincrement": false
         },
+        "type": {
+          "name": "type",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
         "userId": {
           "name": "userId",
           "type": "text",
@@ -33,8 +40,7 @@
           "type": "integer",
           "primaryKey": false,
           "notNull": true,
-          "autoincrement": false,
-          "default": "'\"2025-12-20T11:09:06.550Z\"'"
+          "autoincrement": false
         }
       },
       "indexes": {},

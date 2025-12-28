@@ -25,13 +25,13 @@ const Layout = () => {
       <AppSidebar />
 
       <SidebarInset>
-        <header className="h-16 flex items-center px-4 absolute">
-          <SidebarTrigger className="-ml-1" />
-        </header>
+        <div className="h-16 flex items-center px-4 absolute">
+          <SidebarTrigger className="-ml-1 z-20" />
+        </div>
 
-        <main className="h-full">
+        <div className="h-full scrollbar-thumb-border scrollbar-track-transparent">
           <Outlet />
-        </main>
+        </div>
       </SidebarInset>
     </SidebarProvider>
   );

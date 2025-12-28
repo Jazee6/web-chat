@@ -28,3 +28,19 @@ export const api = ky.extend({
 export const showAlertDialog = (options: AlertDialogOptions) => {
   dispatchEvent(new CustomEvent("alert-dialog:open", { detail: options }));
 };
+
+export const pushNotification = (
+  title: string,
+  options?: NotificationOptions,
+) => {
+  if (!("Notification" in window)) {
+    return;
+  }
+
+  if (Notification.permission === "granted") {
+    return new Notification(title, {
+      icon: "/icon.svg",
+      ...options,
+    });
+  }
+};

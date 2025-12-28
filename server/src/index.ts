@@ -1,5 +1,5 @@
 import { zValidator } from "@hono/zod-validator";
-import { desc, eq } from "drizzle-orm";
+import { and, desc, eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
@@ -9,15 +9,15 @@ import {
   createRoomSchema,
   roomIdSchema,
 } from "web-chat-share";
-import { auth } from "./lib/auth";
-import { roomTable } from "./lib/schema";
+import { auth, Session, User } from "./lib/auth";
+import { roomTable } from "./lib/schema/d1";
 import { Room } from "./room";
 export { Room } from "./room";
 
 const app = new Hono<{
   Variables: {
-    user: typeof auth.$Infer.Session.user;
-    session: typeof auth.$Infer.Session.session;
+    user: User;
+    session: Session;
   };
   Bindings: {
     web_chat: D1Database;
@@ -30,6 +30,7 @@ app.onError((err) => {
     return err.getResponse();
   }
 
+  console.error(err);
   return new Response("Internal Server Error", { status: 500 });
 });
 
@@ -37,7 +38,7 @@ app.use(
   cors({
     origin: process.env.SITE_URL,
     allowHeaders: ["Content-Type", "Authorization"],
-    allowMethods: ["POST", "GET", "OPTIONS"],
+    allowMethods: ["POST", "GET", "OPTIONS", "DELETE"],
     exposeHeaders: ["Content-Length"],
     maxAge: 600,
     credentials: true,
@@ -62,14 +63,13 @@ app.post("/room", zValidator("json", createRoomSchema), async (c) => {
   const { name } = c.req.valid("json");
   const user = c.get("user");
   const db = drizzle(c.env.web_chat);
-  const { id } = await db
-    .insert(roomTable)
-    .values({
-      name,
-      userId: user.id,
-    })
-    .returning()
-    .then((r) => r[0]);
+  const id = c.env.ROOM.newUniqueId().toString();
+  await db.insert(roomTable).values({
+    id,
+    name,
+    type: "private",
+    userId: user.id,
+  });
   return c.json(
     {
       id,
@@ -92,7 +92,7 @@ app.get("/room", zValidator("query", basePaginationSchema), async (c) => {
   return c.json(rooms);
 });
 
-app.get("/room/:id", zValidator("param", roomIdSchema), async (c) => {
+app.get("/room/:id/ws", zValidator("param", roomIdSchema), async (c) => {
   const { id } = c.req.valid("param");
   const db = drizzle(c.env.web_chat);
   const room = await db
@@ -105,9 +105,24 @@ app.get("/room/:id", zValidator("param", roomIdSchema), async (c) => {
     throw new HTTPException(404, { message: "Room not found" });
   }
 
-  const room_id = c.env.ROOM.idFromName(room.id);
+  const room_id = c.env.ROOM.idFromString(room.id);
   const stub = c.env.ROOM.get(room_id);
-  return stub.fetch(c.req.raw);
+  const url = new URL(c.req.url);
+  url.searchParams.set("user_id", c.get("user").id);
+  return stub.fetch(url, c.req.raw);
+});
+
+app.delete("/room/:id", zValidator("param", roomIdSchema), async (c) => {
+  const { id } = c.req.valid("param");
+  const user = c.get("user");
+  const db = drizzle(c.env.web_chat);
+  const room_id = c.env.ROOM.idFromString(id);
+  const stub = c.env.ROOM.get(room_id);
+  await stub.clearStorage();
+  await db
+    .delete(roomTable)
+    .where(and(eq(roomTable.id, id), eq(roomTable.userId, user.id)));
+  return c.body(null, 204);
 });
 
 export default app;

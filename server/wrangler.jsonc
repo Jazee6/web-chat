@@ -14,7 +14,7 @@
       "binding": "web_chat",
       "database_name": "web-chat",
       "database_id": "bf97bb1a-64ed-4399-a8e0-b425269bc368",
-      "migrations_dir": "drizzle"
+      "migrations_dir": "drizzle/d1"
     }
   ],
   "durable_objects": {
@@ -31,6 +31,15 @@
       "new_sqlite_classes": [
         "Room"
       ]
+    }
+  ],
+  "rules": [
+    {
+      "type": "Text",
+      "globs": [
+        "**/*.sql"
+      ],
+      "fallthrough": true
     }
   ]
 }

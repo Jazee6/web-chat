@@ -5,7 +5,8 @@
     "dev": "wrangler dev",
     "deploy": "wrangler deploy --minify",
     "cf-typegen": "wrangler types --env-interface CloudflareBindings",
-    "db:push": "drizzle-kit push && drizzle-kit generate && bunx wrangler d1 migrations apply web-chat"
+    "db:push": "drizzle-kit push && drizzle-kit generate && bunx wrangler d1 migrations apply web-chat",
+    "db:generate": "drizzle-kit generate --config=./drizzle-room.config.ts"
   },
   "dependencies": {
     "web-chat-share": "workspace:*",

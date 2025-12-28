@@ -1,17 +1,28 @@
 import { DurableObject } from "cloudflare:workers";
+import { drizzle, DrizzleSqliteDODatabase } from "drizzle-orm/durable-sqlite";
+import { migrate } from "drizzle-orm/durable-sqlite/migrator";
+import { ClientMessage, gm, Message, RoomUser } from "web-chat-share";
+import migrations from "../drizzle/room/migrations.js";
+import { messageTable } from "./lib/schema/room";
 import Env = Cloudflare.Env;
 
+type WsSession = RoomUser;
+
 export class Room extends DurableObject {
-  sessions: Map<WebSocket, { [key: string]: string }>;
+  sessions: Map<WebSocket, WsSession>;
+  storage: DurableObjectStorage;
+  db: DrizzleSqliteDODatabase;
 
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
     this.sessions = new Map();
+    this.storage = ctx.storage;
+    this.db = drizzle(this.storage, { logger: false });
 
     this.ctx.getWebSockets().forEach((ws) => {
       let attachment = ws.deserializeAttachment();
       if (attachment) {
-        this.sessions.set(ws, { ...attachment });
+        this.sessions.set(ws, attachment);
       }
     });
 
@@ -21,16 +32,28 @@ export class Room extends DurableObject {
         JSON.stringify({ type: "pong" }),
       ),
     );
+
+    ctx.blockConcurrencyWhile(async () => {
+      await this._migrate();
+    });
+  }
+
+  async _migrate() {
+    await migrate(this.db, migrations);
   }
 
   async fetch(request: Request): Promise<Response> {
+    const url = new URL(request.url);
+    const userId = url.searchParams.get("user_id");
+    if (!userId) {
+      return new Response(null, { status: 400 });
+    }
+
     const webSocketPair = new WebSocketPair();
     const [client, server] = Object.values(webSocketPair);
     this.ctx.acceptWebSocket(server);
-
-    const id = crypto.randomUUID();
-    server.serializeAttachment({ id });
-    this.sessions.set(server, { id });
+    server.serializeAttachment({ id: userId });
+    this.sessions.set(server, { id: userId });
 
     return new Response(null, {
       status: 101,
@@ -38,25 +61,70 @@ export class Room extends DurableObject {
     });
   }
 
-  async webSocketMessage(ws: WebSocket, message: ArrayBuffer | string) {
-    const session = this.sessions.get(ws)!;
-
-    this.sessions.forEach((attachment, connectedWs) => {
-      if (connectedWs !== ws) {
-        connectedWs.send(
-          `[Durable Object] message: ${message}, from: ${session.id}, to: all clients except the initiating client. Total connections: ${this.sessions.size}`,
-        );
+  broadcast(message: Message, excludeWs?: WebSocket) {
+    this.sessions.forEach((attachment, ws) => {
+      if (ws !== excludeWs) {
+        ws.send(gm(message));
       }
     });
   }
 
-  async webSocketClose(
-    ws: WebSocket,
-    code: number,
-    reason: string,
-    wasClean: boolean,
-  ) {
+  async webSocketMessage(ws: WebSocket, message: string) {
+    const clientMessage = JSON.parse(message) as ClientMessage;
+
+    switch (clientMessage.type) {
+      case "join":
+        this.broadcast({
+          type: "roomStats",
+          data: {
+            users: Array.from(this.sessions.values()),
+          },
+        });
+        const history = await this.db.select().from(messageTable).limit(100);
+        ws.send(
+          gm({
+            type: "history",
+            data: history,
+          }),
+        );
+        break;
+      case "send":
+        const meta = this.sessions.get(ws);
+        if (!meta) {
+          ws.close();
+          return;
+        }
+        const data = await this.db
+          .insert(messageTable)
+          .values({
+            content: clientMessage.data,
+            userId: meta.id,
+          })
+          .returning()
+          .then((i) => i[0]);
+        this.broadcast(
+          {
+            type: "message",
+            data,
+          },
+          ws,
+        );
+        ws.send(gm({ type: "received" }));
+        break;
+    }
+  }
+
+  async webSocketClose(ws: WebSocket, code: number, reason: string) {
     this.sessions.delete(ws);
-    ws.close(code, "Durable Object is closing WebSocket");
+    ws.close(code, reason);
+  }
+
+  async webSocketError(ws: WebSocket) {
+    this.sessions.delete(ws);
+    ws.close();
+  }
+
+  async clearStorage() {
+    await this.ctx.storage.deleteAll();
   }
 }

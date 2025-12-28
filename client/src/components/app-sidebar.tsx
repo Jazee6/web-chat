@@ -16,7 +16,7 @@ import { useSession } from "@/lib/auth-client.ts";
 import { api } from "@/lib/utils.ts";
 import { useInfiniteQuery } from "@tanstack/react-query";
 import { MessageCircle } from "lucide-react";
-import { type ComponentProps, Fragment } from "react";
+import { type ComponentProps } from "react";
 import { Link } from "react-router";
 
 interface Room {
@@ -44,6 +44,8 @@ export function AppSidebar({ ...props }: ComponentProps<typeof Sidebar>) {
     getNextPageParam: (_, __, lastPageParam) => lastPageParam + 20,
   });
 
+  const roomsData = rooms?.pages.flat() ?? [];
+
   return (
     <Sidebar variant="inset" {...props}>
       <SidebarHeader>
@@ -70,16 +72,13 @@ export function AppSidebar({ ...props }: ComponentProps<typeof Sidebar>) {
             <Skeleton className="h-8 px-2" />
           </>
         ) : (
-          rooms?.pages.map((group, index) => (
-            <Fragment key={index}>
-              <NavMain
-                items={group.map((i) => ({
-                  title: i.name,
-                  url: `/room/${i.id}`,
-                }))}
-              />
-            </Fragment>
-          ))
+          <NavMain
+            label={roomsData.length === 0 ? "No Rooms" : "Your Rooms"}
+            items={roomsData.map((i) => ({
+              title: i.name,
+              url: `/room/${i.id}`,
+            }))}
+          />
         )}
       </SidebarContent>
       <SidebarFooter>

@@ -22,6 +22,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useQueryClient } from "@tanstack/react-query";
 import { useId, useState } from "react";
 import { Controller, useForm } from "react-hook-form";
+import { useNavigate } from "react-router";
 import { toast } from "sonner";
 import { createRoomSchema } from "web-chat-share";
 import { z } from "zod";
@@ -37,6 +38,7 @@ export function RoomCreateDialog({
   const formId = useId();
   const [isLoading, setIsLoading] = useState(false);
   const queryClient = useQueryClient();
+  const nav = useNavigate();
 
   const form = useForm<z.infer<typeof createRoomSchema>>({
     resolver: zodResolver(createRoomSchema),
@@ -47,9 +49,13 @@ export function RoomCreateDialog({
 
   const onSubmit = async (data: z.infer<typeof createRoomSchema>) => {
     setIsLoading(true);
-    await api.post("room", { json: data }).finally(() => setIsLoading(false));
+    const { id } = await api
+      .post<{ id: string }>("room", { json: data })
+      .json()
+      .finally(() => setIsLoading(false));
     queryClient.refetchQueries({ queryKey: ["room"] });
     toast.success("Room created");
+    nav("/room/" + id);
     onOpenChange(false);
   };
 
