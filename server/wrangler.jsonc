@@ -1,6 +1,6 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "server",
+  "name": "web-chat",
   "main": "src/index.ts",
   "compatibility_date": "2025-12-19",
   "compatibility_flags": [
@@ -41,5 +41,13 @@
       ],
       "fallthrough": true
     }
-  ]
+  ],
+  "observability": {
+    "logs": {
+      "enabled": true,
+      "head_sampling_rate": 1,
+      "invocation_logs": true,
+      "persist": true
+    }
+  }
 }
