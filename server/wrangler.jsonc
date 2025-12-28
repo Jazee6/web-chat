@@ -9,6 +9,11 @@
   "dev": {
     "port": 3001
   },
+  "vars": {
+    "BETTER_AUTH_URL": "https://s.chat.jaze.top",
+    "EASY_AUTH_CLIENT_ID": "shufEajlWcTIXTHZgTHsNMdJIUNuBRXX",
+    "SITE_URL": "https://chat.jaze.top"
+  },
   "d1_databases": [
     {
       "binding": "web_chat",
