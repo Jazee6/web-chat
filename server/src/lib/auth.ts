@@ -11,7 +11,7 @@ export const auth = betterAuth({
           clientSecret: process.env.EASY_AUTH_CLIENT_SECRET,
           discoveryUrl:
             process.env.NODE_ENV === "production"
-              ? `${new URL(process.env.SITE_URL).origin}/api/auth/.well-known/openid-configuration`
+              ? "https://account.jaze.top/api/auth/.well-known/openid-configuration"
               : "http://localhost:3000/api/auth/.well-known/openid-configuration",
         },
       ],
