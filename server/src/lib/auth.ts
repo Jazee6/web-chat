@@ -10,7 +10,9 @@ export const auth = betterAuth({
           clientId: process.env.EASY_AUTH_CLIENT_ID,
           clientSecret: process.env.EASY_AUTH_CLIENT_SECRET,
           discoveryUrl:
-            "http://localhost:3000/api/auth/.well-known/openid-configuration",
+            process.env.NODE_ENV === "production"
+              ? `${new URL(process.env.SITE_URL).origin}/api/auth/.well-known/openid-configuration`
+              : "http://localhost:3000/api/auth/.well-known/openid-configuration",
         },
       ],
     }),
