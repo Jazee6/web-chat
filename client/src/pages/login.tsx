@@ -1,10 +1,15 @@
-import { Separator } from "@/components/ui/separator.tsx";
-import { Button } from "@/components/ui/button.tsx";
 import Footer from "@/components/footer.tsx";
+import { Button } from "@/components/ui/button.tsx";
+import { Separator } from "@/components/ui/separator.tsx";
+import { Spinner } from "@/components/ui/spinner.tsx";
 import { authClient } from "@/lib/auth-client.ts";
+import { useState } from "react";
 
 const Login = () => {
+  const [isLoading, setIsLoading] = useState(false);
+
   const onSignIn = () => {
+    setIsLoading(true);
     authClient.signIn.oauth2({
       providerId: "easy-auth",
       callbackURL: `${window.location.origin}`,
@@ -19,7 +24,10 @@ const Login = () => {
 
         <Separator orientation="vertical" />
 
-        <Button onClick={onSignIn}>Sign in</Button>
+        <Button onClick={onSignIn} disabled={isLoading}>
+          {isLoading && <Spinner />}
+          Sign in
+        </Button>
       </div>
 
       <Footer classname="absolute bottom-2" />

@@ -116,11 +116,23 @@ export class Room extends DurableObject {
 
   async webSocketClose(ws: WebSocket, code: number, reason: string) {
     this.sessions.delete(ws);
+    this.broadcast({
+      type: "roomStats",
+      data: {
+        users: Array.from(this.sessions.values()),
+      },
+    });
     ws.close(code, reason);
   }
 
   async webSocketError(ws: WebSocket) {
     this.sessions.delete(ws);
+    this.broadcast({
+      type: "roomStats",
+      data: {
+        users: Array.from(this.sessions.values()),
+      },
+    });
     ws.close();
   }
 
