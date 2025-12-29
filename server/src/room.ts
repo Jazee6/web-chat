@@ -1,4 +1,5 @@
 import { DurableObject } from "cloudflare:workers";
+import { desc } from "drizzle-orm";
 import { drizzle, DrizzleSqliteDODatabase } from "drizzle-orm/durable-sqlite";
 import { migrate } from "drizzle-orm/durable-sqlite/migrator";
 import { ClientMessage, gm, Message, RoomUser } from "web-chat-share";
@@ -80,7 +81,11 @@ export class Room extends DurableObject {
             users: Array.from(this.sessions.values()),
           },
         });
-        const history = await this.db.select().from(messageTable).limit(100);
+        const history = await this.db
+          .select()
+          .from(messageTable)
+          .orderBy(desc(messageTable.createdAt))
+          .limit(100);
         ws.send(
           gm({
             type: "history",

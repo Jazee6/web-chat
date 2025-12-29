@@ -79,11 +79,13 @@ const Room = ({ id, user }: { id: string; user: User }) => {
             break;
           case "message": {
             setChats((chats) => [...chats, m.data]);
-            const n = pushNotification("New message", {
-              body: m.data.content,
-            });
-            if (n) {
-              notificationListRef.current.push(n);
+            if (document.visibilityState !== "visible") {
+              const n = pushNotification("New message", {
+                body: m.data.content,
+              });
+              if (n) {
+                notificationListRef.current.push(n);
+              }
             }
             break;
           }
@@ -128,7 +130,7 @@ const Room = ({ id, user }: { id: string; user: User }) => {
   });
 
   const onSubmit = async (data: z.infer<typeof sendMessageSchema>) => {
-    if ("Notification" in window && Notification.permission !== "granted") {
+    if ("Notification" in window && Notification.permission === "default") {
       await Notification.requestPermission();
     }
 
@@ -220,7 +222,7 @@ const Room = ({ id, user }: { id: string; user: User }) => {
       )}
 
       <form
-        className="absolute bottom-0 w-full max-md:px-2 bg-linear-to-t from-background to-transparent rounded-t-xl"
+        className="absolute bottom-0 w-full max-md:px-2 bg-linear-to-t from-background to-transparent rounded-b-xl"
         onSubmit={form.handleSubmit(onSubmit)}
       >
         <InputGroup className="max-w-3xl mx-auto max-h-64 dark:!bg-[#151515]">

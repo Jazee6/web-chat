@@ -3,6 +3,7 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import {
@@ -12,7 +13,8 @@ import {
   useSidebar,
 } from "@/components/ui/sidebar";
 import { authClient } from "@/lib/auth-client.ts";
-import { ChevronsUpDown, LogOut } from "lucide-react";
+import { ChevronsUpDown, IdCard, LogOut } from "lucide-react";
+import { Link } from "react-router";
 
 export function NavUser({
   user,
@@ -57,6 +59,13 @@ export function NavUser({
             align="end"
             sideOffset={4}
           >
+            <Link to="https://account.jaze.top/profile" target="_blank">
+              <DropdownMenuItem>
+                <IdCard />
+                Account Settings
+              </DropdownMenuItem>
+            </Link>
+            <DropdownMenuSeparator />
             <DropdownMenuItem onClick={onLogOut}>
               <LogOut />
               Log out
