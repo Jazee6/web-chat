@@ -9,12 +9,12 @@
     "db:generate": "drizzle-kit generate --config=./drizzle-room.config.ts"
   },
   "dependencies": {
-    "web-chat-share": "workspace:*",
     "@hono/zod-validator": "^0.7.6",
     "better-auth": "^1.4.7",
     "dotenv": "^17.2.3",
     "drizzle-orm": "^0.45.1",
     "hono": "^4.11.1",
+    "web-chat-share": "workspace:*",
     "zod": "^4.2.1"
   },
   "devDependencies": {

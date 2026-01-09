@@ -74,7 +74,7 @@ const Room = ({ id, user }: { id: string; user: User }) => {
             setRoomStats(m.data);
             break;
           case "history":
-            setChats(m.data);
+            setChats(m.data.reverse());
             setIsLoading(false);
             break;
           case "message": {

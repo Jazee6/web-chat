@@ -10,11 +10,12 @@ const Login = () => {
 
   const onSignIn = () => {
     setIsLoading(true);
-    authClient.signIn.oauth2({
-      providerId: "easy-auth",
-      callbackURL: `${window.location.origin}`,
-      scopes: ["openid", "profile", "email", "offline_access"],
-    });
+    authClient.signIn
+      .oauth2({
+        providerId: "easy-auth",
+        callbackURL: `${window.location.origin}`,
+      })
+      .finally(() => setIsLoading(false));
   };
 
   return (

@@ -13,16 +13,32 @@ export const auth = betterAuth({
             process.env.NODE_ENV === "production"
               ? "https://account.jaze.top/api/auth/.well-known/openid-configuration"
               : "http://localhost:3000/api/auth/.well-known/openid-configuration",
+          pkce: true,
+          scopes: ["openid", "profile", "email", "offline_access"],
         },
       ],
     }),
   ],
+  databaseHooks: {
+    user: {
+      create: {
+        // @ts-ignore
+        before: (user) => {
+          return {
+            data: {
+              ...user,
+              id: user.sub,
+            },
+          };
+        },
+      },
+    },
+  },
   trustedOrigins: [process.env.SITE_URL],
   session: {
     cookieCache: {
       enabled: true,
       maxAge: 7 * 24 * 60 * 60,
-      strategy: "jwt",
       refreshCache: true,
     },
   },

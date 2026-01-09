@@ -85,7 +85,7 @@ export class Room extends DurableObject {
           .select()
           .from(messageTable)
           .orderBy(desc(messageTable.createdAt))
-          .limit(100);
+          .limit(50);
         ws.send(
           gm({
             type: "history",
