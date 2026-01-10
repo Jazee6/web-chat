@@ -1,36 +1,19 @@
 import ChatList from "@/components/chat-list.tsx";
 import Footer from "@/components/footer.tsx";
-import { Badge } from "@/components/ui/badge.tsx";
-import { Button } from "@/components/ui/button.tsx";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog.tsx";
+import RoomStateDialog from "@/components/room-state-dialog.tsx";
 import {
   InputGroup,
   InputGroupAddon,
   InputGroupButton,
   InputGroupTextarea,
 } from "@/components/ui/input-group.tsx";
-import {
-  Item,
-  ItemActions,
-  ItemContent,
-  ItemGroup,
-  ItemSeparator,
-  ItemTitle,
-} from "@/components/ui/item.tsx";
 import { Spinner } from "@/components/ui/spinner.tsx";
 import { pushNotification } from "@/lib/utils.ts";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useWebSocket } from "ahooks";
 import type { User } from "better-auth";
-import { ArrowUpIcon, PhoneCall } from "lucide-react";
-import { Fragment, useEffect, useRef, useState } from "react";
+import { ArrowUpIcon } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
 import { Controller, useForm } from "react-hook-form";
 import { toast } from "sonner";
 import {
@@ -49,9 +32,21 @@ const Room = ({ id, user }: { id: string; user: User }) => {
   const [isLoading, setIsLoading] = useState(true);
   const [roomStats, setRoomStats] = useState<RoomStats>();
   const [chats, setChats] = useState<ChatMessage[]>([]);
+  const [hasMore, setHasMore] = useState(true);
+
   const chatListRef = useRef<HTMLDivElement>(null);
   const notificationListRef = useRef<Notification[]>([]);
-  const [scroll, setScroll] = useState(true);
+  const loaderRef = useRef<HTMLDivElement>(null);
+  const oldestChatTimeRef = useRef<string>(null);
+
+  const scrollToBottom = (behavior: ScrollBehavior = "smooth") => {
+    if (chatListRef.current) {
+      chatListRef.current.scrollTo({
+        top: chatListRef.current.scrollHeight,
+        behavior,
+      });
+    }
+  };
 
   const { sendMessage } = useWebSocket(
     `${import.meta.env.VITE_API_URL}/room/${id}/ws`,
@@ -73,9 +68,21 @@ const Room = ({ id, user }: { id: string; user: User }) => {
           case "roomStats":
             setRoomStats(m.data);
             break;
-          case "history":
-            setChats(m.data.reverse());
+          case "initHistory":
+            setChats(m.data);
             setIsLoading(false);
+            oldestChatTimeRef.current = m.data[0].createdAt;
+            setTimeout(() => scrollToBottom("instant"));
+            break;
+          case "history":
+            if (m.data.length < 25) {
+              setHasMore(false);
+            }
+            if (m.data.length === 0) {
+              return;
+            }
+            setChats((chats) => [...m.data, ...chats]);
+            oldestChatTimeRef.current = m.data[0].createdAt;
             break;
           case "message": {
             setChats((chats) => [...chats, m.data]);
@@ -89,11 +96,35 @@ const Room = ({ id, user }: { id: string; user: User }) => {
             }
             break;
           }
-          case "received":
         }
       },
     },
   );
+
+  useEffect(() => {
+    if (!loaderRef.current || isLoading) return;
+
+    const observer = new IntersectionObserver((entries) => {
+      entries.forEach((entry) => {
+        if (entry.isIntersecting && oldestChatTimeRef.current) {
+          sendMessage(
+            gm({
+              type: "loadHistory",
+              data: {
+                before: oldestChatTimeRef.current,
+              },
+            }),
+          );
+        }
+      });
+    });
+
+    observer.observe(loaderRef.current);
+
+    return () => {
+      observer.disconnect();
+    };
+  }, [sendMessage, isLoading]);
 
   useEffect(() => {
     const handleVisibilityChange = () => {
@@ -108,19 +139,6 @@ const Room = ({ id, user }: { id: string; user: User }) => {
       document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
   }, []);
-
-  const scrollToBottom = () => {
-    if (chatListRef.current) {
-      chatListRef.current.scrollTo({
-        top: chatListRef.current.scrollHeight,
-        behavior: "smooth",
-      });
-    }
-  };
-
-  useEffect(() => {
-    scrollToBottom();
-  }, [scroll]);
 
   const form = useForm<z.infer<typeof sendMessageSchema>>({
     resolver: zodResolver(sendMessageSchema),
@@ -142,16 +160,16 @@ const Room = ({ id, user }: { id: string; user: User }) => {
         data: message,
       }),
     );
-    setChats([
-      ...chats,
+    setChats((p) => [
+      ...p,
       {
         id: crypto.randomUUID(),
         userId: user.id,
         content: message,
-        createdAt: new Date(),
+        createdAt: new Date().toISOString(),
       },
     ]);
-    setScroll(!scroll);
+    scrollToBottom();
   };
 
   return (
@@ -159,54 +177,7 @@ const Room = ({ id, user }: { id: string; user: User }) => {
       {roomStats && (
         <header className="h-16 absolute top-0 w-full z-10 bg-linear-to-b from-background to-transparent rounded-t-xl">
           <div className="max-w-3xl max-md:px-2 mx-auto h-full flex items-center">
-            <Dialog>
-              <DialogTrigger asChild>
-                <Badge className="ml-auto">{roomStats?.users.length}</Badge>
-              </DialogTrigger>
-              <DialogContent>
-                <DialogHeader>
-                  <DialogTitle>Users in Room</DialogTitle>
-                  <DialogDescription></DialogDescription>
-                </DialogHeader>
-
-                <ItemGroup>
-                  {roomStats.users.map((u, index) => (
-                    <Fragment key={u.id}>
-                      <Item className="p-0">
-                        {/*<ItemMedia>*/}
-                        {/*  <Avatar>*/}
-                        {/*    <AvatarImage*/}
-                        {/*      src={person.avatar}*/}
-                        {/*      className="grayscale"*/}
-                        {/*    />*/}
-                        {/*    <AvatarFallback>*/}
-                        {/*      {person.username.charAt(0)}*/}
-                        {/*    </AvatarFallback>*/}
-                        {/*  </Avatar>*/}
-                        {/*</ItemMedia>*/}
-                        <ItemContent className="gap-1">
-                          <ItemTitle>{u.id}</ItemTitle>
-                          {/*<ItemDescription></ItemDescription>*/}
-                        </ItemContent>
-                        <ItemActions>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="rounded-full"
-                            disabled
-                          >
-                            <PhoneCall />
-                          </Button>
-                        </ItemActions>
-                      </Item>
-                      {index !== roomStats.users.length - 1 && (
-                        <ItemSeparator />
-                      )}
-                    </Fragment>
-                  ))}
-                </ItemGroup>
-              </DialogContent>
-            </Dialog>
+            <RoomStateDialog roomStats={roomStats} />
           </div>
         </header>
       )}
@@ -214,16 +185,22 @@ const Room = ({ id, user }: { id: string; user: User }) => {
       {chats && (
         <div
           style={{ scrollbarGutter: "stable both-edges" }}
-          className="overflow-y-auto scrollbar pt-20 pb-60 h-[calc(100vh-1rem)]"
+          className="overflow-y-auto scrollbar pt-16 pb-60 h-[calc(100vh-1rem)]"
           ref={chatListRef}
         >
+          {hasMore && !isLoading && (
+            <div ref={loaderRef} className="flex justify-center py-4">
+              <Spinner />
+            </div>
+          )}
+
           <ChatList chats={chats} userId={user.id} />
         </div>
       )}
 
       <form
         className="absolute bottom-0 w-full max-md:px-2 bg-linear-to-t from-background to-transparent rounded-b-xl"
-        onSubmit={form.handleSubmit(onSubmit)}
+        onSubmit={(e) => form.handleSubmit(onSubmit)(e)}
       >
         <InputGroup className="max-w-3xl mx-auto max-h-64 dark:!bg-[#151515]">
           <Controller

@@ -10,7 +10,7 @@ export interface ChatMessage {
   id: string;
   userId: string;
   content: string;
-  createdAt: Date;
+  createdAt: string;
 }
 
 export type ServerMessage =
@@ -29,6 +29,10 @@ export type ServerMessage =
       data: ChatMessage[];
     }
   | {
+      type: "initHistory";
+      data: ChatMessage[];
+    }
+  | {
       type: "message";
       data: ChatMessage;
     };
@@ -43,6 +47,12 @@ export type ClientMessage =
   | {
       type: "send";
       data: string;
+    }
+  | {
+      type: "loadHistory";
+      data: {
+        before: string;
+      };
     };
 
 export type Message = ServerMessage | ClientMessage;

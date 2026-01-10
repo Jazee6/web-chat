@@ -1,8 +1,14 @@
 import { DurableObject } from "cloudflare:workers";
-import { desc } from "drizzle-orm";
+import { desc, lt } from "drizzle-orm";
 import { drizzle, DrizzleSqliteDODatabase } from "drizzle-orm/durable-sqlite";
 import { migrate } from "drizzle-orm/durable-sqlite/migrator";
-import { ClientMessage, gm, Message, RoomUser } from "web-chat-share";
+import {
+  ChatMessage,
+  ClientMessage,
+  gm,
+  Message,
+  RoomUser,
+} from "web-chat-share";
 import migrations from "../drizzle/room/migrations.js";
 import { messageTable } from "./lib/schema/room";
 import Env = Cloudflare.Env;
@@ -85,11 +91,11 @@ export class Room extends DurableObject {
           .select()
           .from(messageTable)
           .orderBy(desc(messageTable.createdAt))
-          .limit(50);
+          .limit(25);
         ws.send(
           gm({
-            type: "history",
-            data: history,
+            type: "initHistory",
+            data: history.reverse() as unknown as ChatMessage[],
           }),
         );
         break;
@@ -110,11 +116,26 @@ export class Room extends DurableObject {
         this.broadcast(
           {
             type: "message",
-            data,
+            data: data as unknown as ChatMessage,
           },
           ws,
         );
         ws.send(gm({ type: "received" }));
+        break;
+      case "loadHistory":
+        const before = clientMessage.data.before;
+        const moreHistory = await this.db
+          .select()
+          .from(messageTable)
+          .where(lt(messageTable.createdAt, new Date(before)))
+          .orderBy(desc(messageTable.createdAt))
+          .limit(25);
+        ws.send(
+          gm({
+            type: "history",
+            data: moreHistory.reverse() as unknown as ChatMessage[],
+          }),
+        );
         break;
     }
   }
