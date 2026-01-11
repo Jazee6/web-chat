@@ -94,7 +94,7 @@ export class Room extends DurableObject {
           .limit(25);
         ws.send(
           gm({
-            type: "initHistory",
+            type: "history",
             data: history.reverse() as unknown as ChatMessage[],
           }),
         );

@@ -35,7 +35,7 @@ const Index = () => {
     );
   }
 
-  return <Room id={id} user={data.user} />;
+  return <Room id={id} user={data.user} key={id} />;
 };
 
 export default Index;

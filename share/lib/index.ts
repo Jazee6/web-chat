@@ -29,10 +29,6 @@ export type ServerMessage =
       data: ChatMessage[];
     }
   | {
-      type: "initHistory";
-      data: ChatMessage[];
-    }
-  | {
       type: "message";
       data: ChatMessage;
     };

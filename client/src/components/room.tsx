@@ -13,7 +13,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useWebSocket } from "ahooks";
 import type { User } from "better-auth";
 import { ArrowUpIcon } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Controller, useForm } from "react-hook-form";
 import { toast } from "sonner";
 import {
@@ -38,6 +38,8 @@ const Room = ({ id, user }: { id: string; user: User }) => {
   const notificationListRef = useRef<Notification[]>([]);
   const loaderRef = useRef<HTMLDivElement>(null);
   const oldestChatTimeRef = useRef<string>(null);
+  const previousScrollHeightRef = useRef<number>(0);
+  const isLoadingHistoryRef = useRef(false);
 
   const scrollToBottom = (behavior: ScrollBehavior = "smooth") => {
     if (chatListRef.current) {
@@ -68,18 +70,21 @@ const Room = ({ id, user }: { id: string; user: User }) => {
           case "roomStats":
             setRoomStats(m.data);
             break;
-          case "initHistory":
-            setChats(m.data);
-            setIsLoading(false);
-            oldestChatTimeRef.current = m.data[0].createdAt;
-            setTimeout(() => scrollToBottom("instant"));
-            break;
           case "history":
+            if (isLoading) {
+              setIsLoading(false);
+              setTimeout(() => scrollToBottom("instant"));
+            }
             if (m.data.length < 25) {
               setHasMore(false);
             }
             if (m.data.length === 0) {
               return;
+            }
+            if (chatListRef.current) {
+              previousScrollHeightRef.current =
+                chatListRef.current.scrollHeight;
+              isLoadingHistoryRef.current = true;
             }
             setChats((chats) => [...m.data, ...chats]);
             oldestChatTimeRef.current = m.data[0].createdAt;
@@ -100,6 +105,15 @@ const Room = ({ id, user }: { id: string; user: User }) => {
       },
     },
   );
+
+  useLayoutEffect(() => {
+    if (isLoadingHistoryRef.current && chatListRef.current) {
+      const newScrollHeight = chatListRef.current.scrollHeight;
+      const diff = newScrollHeight - previousScrollHeightRef.current;
+      chatListRef.current.scrollTop += diff;
+      isLoadingHistoryRef.current = false;
+    }
+  }, [chats]);
 
   useEffect(() => {
     if (!loaderRef.current || isLoading) return;
