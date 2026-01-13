@@ -15,6 +15,13 @@
       "when": 1768307435683,
       "tag": "0001_real_storm",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1768311470843,
+      "tag": "0002_vengeful_joseph",
+      "breakpoints": true
     }
   ]
 }
