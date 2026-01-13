@@ -12,4 +12,6 @@ export const authClient = createAuthClient({
   plugins: [genericOAuthClient()],
 });
 
+export type User = typeof authClient.$Infer.Session.user;
+
 export const { useSession } = authClient;

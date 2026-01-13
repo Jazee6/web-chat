@@ -1,17 +1,51 @@
-import { Avatar, AvatarFallback } from "@/components/ui/avatar.tsx";
-import { cn } from "@/lib/utils.ts";
+import {
+  Avatar,
+  AvatarFallback,
+  AvatarImage,
+} from "@/components/ui/avatar.tsx";
+import type { User } from "@/lib/auth-client.ts";
+import { api, cn } from "@/lib/utils.ts";
 import dayjs from "dayjs";
+import { useEffect, useState } from "react";
 import type { ChatMessage } from "web-chat-share";
 
 const ChatList = ({
   chats,
   className,
   userId,
+  userIds,
 }: {
   chats: ChatMessage[];
   className?: string;
   userId: string;
+  userIds: string[];
 }) => {
+  const [users, setUsers] = useState<{
+    [userId: string]: User;
+  }>({});
+
+  useEffect(() => {
+    const ids = userIds.filter((id) => !users[id]);
+    if (ids.length === 0) {
+      return;
+    }
+
+    api
+      .post<User[]>("room/user", {
+        json: {
+          ids,
+        },
+      })
+      .json()
+      .then((i) => {
+        const newUsers: { [userId: string]: User } = {};
+        i.forEach((u) => {
+          newUsers[u.id] = u;
+        });
+        setUsers((prev) => ({ ...prev, ...newUsers }));
+      });
+  }, [userIds, users]);
+
   return (
     <ul className={cn("space-y-1", className)}>
       {chats.map((c) => {
@@ -39,7 +73,13 @@ const ChatList = ({
             <div className="flex gap-2 ani-slide-top group">
               <div className="flex gap-1 max-w-[90%] break-all">
                 <Avatar>
-                  <AvatarFallback>{c.userId.slice(0, 2)}</AvatarFallback>
+                  <AvatarImage
+                    src={users[c.userId]?.image ?? undefined}
+                    alt={users[c.userId]?.name || "Avatar"}
+                  />
+                  <AvatarFallback>
+                    {users[c.userId]?.name.slice(0, 2) ?? c.userId.slice(0, 2)}
+                  </AvatarFallback>
                 </Avatar>
                 <div className="bg-secondary px-2 py-1 rounded-md">
                   {c.content}

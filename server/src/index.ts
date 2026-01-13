@@ -1,7 +1,7 @@
 import { zValidator } from "@hono/zod-validator";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { betterAuth } from "better-auth/minimal";
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, inArray } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
@@ -9,10 +9,12 @@ import { HTTPException } from "hono/http-exception";
 import {
   basePaginationSchema,
   createRoomSchema,
+  getUserInfoSchema,
   roomIdSchema,
 } from "web-chat-share";
 import { auth, authConfig, Session, User } from "./lib/auth";
 import * as schema from "./lib/schema/auth";
+import { user } from "./lib/schema/auth";
 import { roomTable } from "./lib/schema/d1";
 import { Room } from "./room";
 export { Room } from "./room";
@@ -133,6 +135,13 @@ app.delete("/room/:id", zValidator("param", roomIdSchema), async (c) => {
     .delete(roomTable)
     .where(and(eq(roomTable.id, id), eq(roomTable.userId, user.id)));
   return c.body(null, 204);
+});
+
+app.post("/room/user", zValidator("json", getUserInfoSchema), async (c) => {
+  const { ids } = c.req.valid("json");
+  const db = drizzle(c.env.web_chat);
+  const users = await db.select().from(user).where(inArray(user.id, ids));
+  return c.json(users);
 });
 
 export default app;

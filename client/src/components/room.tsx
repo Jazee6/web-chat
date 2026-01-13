@@ -32,6 +32,7 @@ const Room = ({ id, user }: { id: string; user: User }) => {
   const [isLoading, setIsLoading] = useState(true);
   const [roomStats, setRoomStats] = useState<RoomStats>();
   const [chats, setChats] = useState<ChatMessage[]>([]);
+  const [userIds, setUserIds] = useState<string[]>([]);
   const [hasMore, setHasMore] = useState(true);
 
   const chatListRef = useRef<HTMLDivElement>(null);
@@ -71,6 +72,7 @@ const Room = ({ id, user }: { id: string; user: User }) => {
             setRoomStats(m.data);
             break;
           case "initHistory":
+            setIsLoading(false);
             if (m.data.length === 0) {
               return;
             }
@@ -78,7 +80,7 @@ const Room = ({ id, user }: { id: string; user: User }) => {
               setHasMore(false);
             }
             setChats(m.data);
-            setIsLoading(false);
+            setUserIds(Array.from(new Set(m.data.map((c) => c.userId))));
             setTimeout(() => scrollToBottom("instant"));
             oldestChatTimeRef.current = m.data[0].createdAt;
             break;
@@ -95,10 +97,17 @@ const Room = ({ id, user }: { id: string; user: User }) => {
               isLoadingHistoryRef.current = true;
             }
             setChats((chats) => [...m.data, ...chats]);
+            setUserIds((prev) =>
+              Array.from(new Set([...prev, ...m.data.map((c) => c.userId)])),
+            );
             oldestChatTimeRef.current = m.data[0].createdAt;
             break;
           case "message": {
             setChats((chats) => [...chats, m.data]);
+            setUserIds((prev) => {
+              if (prev.includes(m.data.userId)) return prev;
+              return [...prev, m.data.userId];
+            });
             if (document.visibilityState !== "visible") {
               document.head
                 .querySelector("link[rel='icon']")
@@ -232,7 +241,7 @@ const Room = ({ id, user }: { id: string; user: User }) => {
             </div>
           )}
 
-          <ChatList chats={chats} userId={user.id} />
+          <ChatList chats={chats} userId={user.id} userIds={userIds} />
         </div>
       )}
 
@@ -257,6 +266,9 @@ const Room = ({ id, user }: { id: string; user: User }) => {
                       !event.nativeEvent.isComposing
                     ) {
                       event.preventDefault();
+                      if (isLoading) {
+                        return;
+                      }
                       form.handleSubmit(onSubmit)();
                     }
                   }}
