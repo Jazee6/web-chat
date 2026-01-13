@@ -1,4 +1,6 @@
 import { zValidator } from "@hono/zod-validator";
+import { drizzleAdapter } from "better-auth/adapters/drizzle";
+import { betterAuth } from "better-auth/minimal";
 import { and, desc, eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
 import { Hono } from "hono";
@@ -9,7 +11,8 @@ import {
   createRoomSchema,
   roomIdSchema,
 } from "web-chat-share";
-import { auth, Session, User } from "./lib/auth";
+import { auth, authConfig, Session, User } from "./lib/auth";
+import * as schema from "./lib/schema/auth";
 import { roomTable } from "./lib/schema/d1";
 import { Room } from "./room";
 export { Room } from "./room";
@@ -56,7 +59,14 @@ app.use("/room/*", async (c, next) => {
 });
 
 app.on(["POST", "GET"], "/api/auth/*", (c) => {
-  return auth.handler(c.req.raw);
+  const a = betterAuth({
+    ...authConfig,
+    database: drizzleAdapter(drizzle(c.env.web_chat), {
+      provider: "sqlite",
+      schema,
+    }),
+  });
+  return a.handler(c.req.raw);
 });
 
 app.post("/room", zValidator("json", createRoomSchema), async (c) => {

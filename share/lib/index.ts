@@ -25,6 +25,10 @@ export type ServerMessage =
       data: RoomStats;
     }
   | {
+      type: "initHistory";
+      data: ChatMessage[];
+    }
+  | {
       type: "history";
       data: ChatMessage[];
     }

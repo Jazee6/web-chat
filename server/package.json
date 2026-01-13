@@ -6,7 +6,8 @@
     "deploy": "wrangler deploy --minify",
     "cf-typegen": "wrangler types --env-interface CloudflareBindings",
     "db:push": "drizzle-kit push && drizzle-kit generate && bunx wrangler d1 migrations apply web-chat",
-    "db:generate": "drizzle-kit generate --config=./drizzle-room.config.ts"
+    "db:generate": "drizzle-kit generate --config=./drizzle-room.config.ts",
+    "db:generate:auth": "bunx @better-auth/cli@latest generate --output src/lib/schema/auth.ts --yes"
   },
   "dependencies": {
     "@hono/zod-validator": "^0.7.6",

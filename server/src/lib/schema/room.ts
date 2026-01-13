@@ -6,6 +6,7 @@ export const messageTable = sqliteTable("message", {
     .$defaultFn(() => crypto.randomUUID()),
   content: text().notNull(),
   userId: text().notNull(),
+  type: text({ enum: ["text"] }).notNull(),
   createdAt: integer({ mode: "timestamp" })
     .notNull()
     .$defaultFn(() => new Date()),

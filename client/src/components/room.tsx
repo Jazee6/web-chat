@@ -70,16 +70,24 @@ const Room = ({ id, user }: { id: string; user: User }) => {
           case "roomStats":
             setRoomStats(m.data);
             break;
-          case "history":
-            if (isLoading) {
-              setIsLoading(false);
-              setTimeout(() => scrollToBottom("instant"));
+          case "initHistory":
+            if (m.data.length === 0) {
+              return;
             }
             if (m.data.length < 25) {
               setHasMore(false);
             }
+            setChats(m.data);
+            setIsLoading(false);
+            setTimeout(() => scrollToBottom("instant"));
+            oldestChatTimeRef.current = m.data[0].createdAt;
+            break;
+          case "history":
             if (m.data.length === 0) {
               return;
+            }
+            if (m.data.length < 25) {
+              setHasMore(false);
             }
             if (chatListRef.current) {
               previousScrollHeightRef.current =
@@ -92,11 +100,23 @@ const Room = ({ id, user }: { id: string; user: User }) => {
           case "message": {
             setChats((chats) => [...chats, m.data]);
             if (document.visibilityState !== "visible") {
+              document.head
+                .querySelector("link[rel='icon']")
+                ?.setAttribute("href", "/message-circle-more.svg");
+
               const n = pushNotification("New message", {
                 body: m.data.content,
               });
               if (n) {
                 notificationListRef.current.push(n);
+              }
+            }
+            if (chatListRef.current) {
+              const { scrollTop, scrollHeight, clientHeight } =
+                chatListRef.current;
+              const isAtBottom = scrollTop + clientHeight >= scrollHeight - 50;
+              if (isAtBottom) {
+                scrollToBottom();
               }
             }
             break;
@@ -145,6 +165,10 @@ const Room = ({ id, user }: { id: string; user: User }) => {
       if (document.visibilityState === "visible") {
         notificationListRef.current.forEach((n) => n.close());
         notificationListRef.current = [];
+
+        document.head
+          .querySelector("link[rel='icon']")
+          ?.setAttribute("href", "/icon.svg");
       }
     };
 

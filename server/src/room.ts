@@ -2,13 +2,7 @@ import { DurableObject } from "cloudflare:workers";
 import { desc, lt } from "drizzle-orm";
 import { drizzle, DrizzleSqliteDODatabase } from "drizzle-orm/durable-sqlite";
 import { migrate } from "drizzle-orm/durable-sqlite/migrator";
-import {
-  ChatMessage,
-  ClientMessage,
-  gm,
-  Message,
-  RoomUser,
-} from "web-chat-share";
+import { ClientMessage, gm, Message, RoomUser } from "web-chat-share";
 import migrations from "../drizzle/room/migrations.js";
 import { messageTable } from "./lib/schema/room";
 import Env = Cloudflare.Env;
@@ -94,8 +88,10 @@ export class Room extends DurableObject {
           .limit(25);
         ws.send(
           gm({
-            type: "history",
-            data: history.reverse() as unknown as ChatMessage[],
+            type: "initHistory",
+            data: history
+              .reverse()
+              .map((i) => ({ ...i, createdAt: i.createdAt.toISOString() })),
           }),
         );
         break;
@@ -116,7 +112,10 @@ export class Room extends DurableObject {
         this.broadcast(
           {
             type: "message",
-            data: data as unknown as ChatMessage,
+            data: {
+              ...data,
+              createdAt: data.createdAt.toISOString(),
+            },
           },
           ws,
         );
@@ -133,7 +132,9 @@ export class Room extends DurableObject {
         ws.send(
           gm({
             type: "history",
-            data: moreHistory.reverse() as unknown as ChatMessage[],
+            data: moreHistory
+              .reverse()
+              .map((i) => ({ ...i, createdAt: i.createdAt.toISOString() })),
           }),
         );
         break;
