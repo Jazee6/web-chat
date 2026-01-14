@@ -10,6 +10,8 @@ import {
 } from "@/components/ui/dialog";
 import {
   Field,
+  FieldContent,
+  FieldDescription,
   FieldError,
   FieldGroup,
   FieldLabel,
@@ -17,6 +19,7 @@ import {
 } from "@/components/ui/field.tsx";
 import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner.tsx";
+import { Switch } from "@/components/ui/switch.tsx";
 import { api } from "@/lib/utils.ts";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useQueryClient } from "@tanstack/react-query";
@@ -35,6 +38,7 @@ export function RoomCreateDialog({
   onOpenChange: (open: boolean) => void;
 }) {
   const nameId = useId();
+  const typeId = useId();
   const formId = useId();
   const [isLoading, setIsLoading] = useState(false);
   const queryClient = useQueryClient();
@@ -44,6 +48,7 @@ export function RoomCreateDialog({
     resolver: zodResolver(createRoomSchema),
     defaultValues: {
       name: "",
+      type: "private",
     },
   });
 
@@ -80,6 +85,7 @@ export function RoomCreateDialog({
                       {...field}
                       id={nameId}
                       aria-invalid={fieldState.invalid}
+                      placeholder="Enter room name"
                     />
                     {fieldState.invalid && (
                       <FieldError errors={[fieldState.error]} />
@@ -87,11 +93,42 @@ export function RoomCreateDialog({
                   </Field>
                 )}
               />
+
+              <Controller
+                name="type"
+                control={form.control}
+                render={({ field, fieldState }) => (
+                  <Field
+                    orientation="horizontal"
+                    data-invalid={fieldState.invalid}
+                  >
+                    <FieldContent>
+                      <FieldLabel htmlFor={typeId}>Public Room</FieldLabel>
+                      <FieldDescription>
+                        Enable this to display the room in the public rooms
+                        list.
+                      </FieldDescription>
+                      {fieldState.invalid && (
+                        <FieldError errors={[fieldState.error]} />
+                      )}
+                    </FieldContent>
+                    <Switch
+                      id={typeId}
+                      name={field.name}
+                      checked={field.value === "public"}
+                      onCheckedChange={(checked) => {
+                        field.onChange(checked ? "public" : "private");
+                      }}
+                      aria-invalid={fieldState.invalid}
+                    />
+                  </Field>
+                )}
+              />
             </FieldGroup>
           </FieldSet>
         </form>
 
-        <DialogFooter>
+        <DialogFooter className="mt-4">
           <DialogClose asChild>
             <Button variant="outline">Cancel</Button>
           </DialogClose>

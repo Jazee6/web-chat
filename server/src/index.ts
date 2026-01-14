@@ -4,6 +4,7 @@ import { betterAuth } from "better-auth/minimal";
 import { and, desc, eq, inArray } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
 import { Hono } from "hono";
+import { cache } from "hono/cache";
 import { cors } from "hono/cors";
 import { HTTPException } from "hono/http-exception";
 import {
@@ -12,7 +13,7 @@ import {
   getUserInfoSchema,
   roomIdSchema,
 } from "web-chat-share";
-import { auth, authConfig, Session, User } from "./lib/auth";
+import { authConfig, Session, User } from "./lib/auth";
 import * as schema from "./lib/schema/auth";
 import { user } from "./lib/schema/auth";
 import { roomTable } from "./lib/schema/d1";
@@ -51,7 +52,14 @@ app.use(
 );
 
 app.use("/room/*", async (c, next) => {
-  const session = await auth.api.getSession({ headers: c.req.raw.headers });
+  const a = betterAuth({
+    ...authConfig,
+    database: drizzleAdapter(drizzle(c.env.web_chat), {
+      provider: "sqlite",
+      schema,
+    }),
+  });
+  const session = await a.api.getSession({ headers: c.req.raw.headers });
   if (!session) {
     throw new HTTPException(401, { message: "Unauthorized" });
   }
@@ -72,14 +80,18 @@ app.on(["POST", "GET"], "/api/auth/*", (c) => {
 });
 
 app.post("/room", zValidator("json", createRoomSchema), async (c) => {
-  const { name } = c.req.valid("json");
+  const { name, type } = c.req.valid("json");
   const user = c.get("user");
   const db = drizzle(c.env.web_chat);
+  const roomCount = await db.$count(roomTable, eq(roomTable.userId, user.id));
+  if (roomCount >= 10) {
+    throw new HTTPException(400, { message: "Room limit reached" });
+  }
   const id = c.env.ROOM.newUniqueId().toString();
   await db.insert(roomTable).values({
     id,
     name,
-    type: "private",
+    type,
     userId: user.id,
   });
   return c.json(
@@ -137,11 +149,19 @@ app.delete("/room/:id", zValidator("param", roomIdSchema), async (c) => {
   return c.body(null, 204);
 });
 
-app.post("/room/user", zValidator("json", getUserInfoSchema), async (c) => {
-  const { ids } = c.req.valid("json");
-  const db = drizzle(c.env.web_chat);
-  const users = await db.select().from(user).where(inArray(user.id, ids));
-  return c.json(users);
-});
+app.get(
+  "/room/user",
+  zValidator("query", getUserInfoSchema),
+  cache({
+    cacheName: "user-info",
+    cacheControl: "max-age=3600",
+  }),
+  async (c) => {
+    const { ids } = c.req.valid("query");
+    const db = drizzle(c.env.web_chat);
+    const users = await db.select().from(user).where(inArray(user.id, ids));
+    return c.json(users);
+  },
+);
 
 export default app;

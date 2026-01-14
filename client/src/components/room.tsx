@@ -1,32 +1,21 @@
 import ChatList from "@/components/chat-list.tsx";
-import Footer from "@/components/footer.tsx";
 import RoomStateDialog from "@/components/room-state-dialog.tsx";
-import {
-  InputGroup,
-  InputGroupAddon,
-  InputGroupButton,
-  InputGroupTextarea,
-} from "@/components/ui/input-group.tsx";
+
+import ChatInput from "@/components/chat-input.tsx";
 import { Spinner } from "@/components/ui/spinner.tsx";
 import { pushNotification } from "@/lib/utils.ts";
-import { zodResolver } from "@hookform/resolvers/zod";
 import { useWebSocket } from "ahooks";
 import type { User } from "better-auth";
-import { ArrowUpIcon } from "lucide-react";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { Controller, useForm } from "react-hook-form";
 import { toast } from "sonner";
 import {
   type ChatMessage,
   gm,
   type RoomStats,
+  sendMessageSchema,
   type ServerMessage,
 } from "web-chat-share";
 import { z } from "zod";
-
-const sendMessageSchema = z.object({
-  message: z.string().min(1),
-});
 
 const Room = ({ id, user }: { id: string; user: User }) => {
   const [isLoading, setIsLoading] = useState(true);
@@ -73,11 +62,11 @@ const Room = ({ id, user }: { id: string; user: User }) => {
             break;
           case "initHistory":
             setIsLoading(false);
-            if (m.data.length === 0) {
-              return;
-            }
             if (m.data.length < 25) {
               setHasMore(false);
+            }
+            if (m.data.length === 0) {
+              return;
             }
             setChats(m.data);
             setUserIds(Array.from(new Set(m.data.map((c) => c.userId))));
@@ -85,11 +74,11 @@ const Room = ({ id, user }: { id: string; user: User }) => {
             oldestChatTimeRef.current = m.data[0].createdAt;
             break;
           case "history":
-            if (m.data.length === 0) {
-              return;
-            }
             if (m.data.length < 25) {
               setHasMore(false);
+            }
+            if (m.data.length === 0) {
+              return;
             }
             if (chatListRef.current) {
               previousScrollHeightRef.current =
@@ -187,19 +176,7 @@ const Room = ({ id, user }: { id: string; user: User }) => {
     };
   }, []);
 
-  const form = useForm<z.infer<typeof sendMessageSchema>>({
-    resolver: zodResolver(sendMessageSchema),
-    defaultValues: {
-      message: "",
-    },
-  });
-
-  const onSubmit = async (data: z.infer<typeof sendMessageSchema>) => {
-    if ("Notification" in window && Notification.permission === "default") {
-      await Notification.requestPermission();
-    }
-
-    form.reset();
+  const onSend = async (data: z.infer<typeof sendMessageSchema>) => {
     const { message } = data;
     sendMessage(
       gm({
@@ -224,7 +201,7 @@ const Room = ({ id, user }: { id: string; user: User }) => {
       {roomStats && (
         <header className="h-16 absolute top-0 w-full z-10 bg-linear-to-b from-background to-transparent rounded-t-xl">
           <div className="max-w-3xl max-md:px-2 mx-auto h-full flex items-center">
-            <RoomStateDialog roomStats={roomStats} />
+            <RoomStateDialog className="ml-auto" roomStats={roomStats} />
           </div>
         </header>
       )}
@@ -245,54 +222,7 @@ const Room = ({ id, user }: { id: string; user: User }) => {
         </div>
       )}
 
-      <form
-        className="absolute bottom-0 w-full max-md:px-2 bg-linear-to-t from-background to-transparent rounded-b-xl"
-        onSubmit={(e) => form.handleSubmit(onSubmit)(e)}
-      >
-        <InputGroup className="max-w-3xl mx-auto max-h-64 dark:!bg-[#151515]">
-          <Controller
-            name="message"
-            control={form.control}
-            render={({ field }) => (
-              <>
-                <InputGroupTextarea
-                  className="scrollbar"
-                  placeholder="Text here..."
-                  autoFocus
-                  onKeyDown={(event) => {
-                    if (
-                      event.key === "Enter" &&
-                      !event.shiftKey &&
-                      !event.nativeEvent.isComposing
-                    ) {
-                      event.preventDefault();
-                      if (isLoading) {
-                        return;
-                      }
-                      form.handleSubmit(onSubmit)();
-                    }
-                  }}
-                  {...field}
-                />
-                <InputGroupAddon align="block-end">
-                  <InputGroupButton
-                    variant="default"
-                    className="rounded-full ml-auto"
-                    size="icon-xs"
-                    type="submit"
-                    disabled={isLoading}
-                  >
-                    {isLoading ? <Spinner /> : <ArrowUpIcon />}
-                    <span className="sr-only">Send</span>
-                  </InputGroupButton>
-                </InputGroupAddon>
-              </>
-            )}
-          />
-        </InputGroup>
-
-        <Footer classname="my-2" />
-      </form>
+      <ChatInput onSend={onSend} isLoading={isLoading} />
     </>
   );
 };

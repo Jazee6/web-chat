@@ -2,9 +2,10 @@ import { BetterAuthOptions } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { betterAuth } from "better-auth/minimal";
 import { genericOAuth } from "better-auth/plugins";
+import { env } from "cloudflare:workers";
 
 export const authConfig: BetterAuthOptions = {
-  database: drizzleAdapter({} as D1Database, {
+  database: drizzleAdapter(env.web_chat, {
     provider: "sqlite",
   }),
   plugins: [

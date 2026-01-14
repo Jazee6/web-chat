@@ -12,12 +12,17 @@ export const api = ky.extend({
   prefixUrl: import.meta.env.VITE_API_URL,
   hooks: {
     afterResponse: [
-      (_, __, response) => {
+      async (_, __, response) => {
         if (response.status === 401) {
           toast.error("Unauthorized");
           setTimeout(() => {
             location.href = "/login";
           }, 1000);
+          return;
+        }
+
+        if (!response.ok) {
+          toast.error(await response.text());
         }
       },
     ],

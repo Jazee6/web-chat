@@ -20,11 +20,24 @@ import { PhoneCall } from "lucide-react";
 import { Fragment } from "react";
 import type { RoomStats } from "web-chat-share";
 
-const RoomStateDialog = ({ roomStats }: { roomStats: RoomStats }) => {
+const RoomStateDialog = ({
+  roomStats,
+  className,
+}: {
+  roomStats: RoomStats;
+  className?: string;
+}) => {
+  const states = {
+    ...roomStats,
+    users: roomStats.users.filter(
+      (v, i, a) => a.findIndex((t) => t.id === v.id) === i,
+    ),
+  };
+
   return (
     <Dialog>
       <DialogTrigger asChild>
-        <Badge className="ml-auto">{roomStats?.users.length}</Badge>
+        <Badge className={className}>{states?.users.length}</Badge>
       </DialogTrigger>
       <DialogContent>
         <DialogHeader>
@@ -33,7 +46,7 @@ const RoomStateDialog = ({ roomStats }: { roomStats: RoomStats }) => {
         </DialogHeader>
 
         <ItemGroup>
-          {roomStats.users.map((u, index) => (
+          {states.users.map((u, index) => (
             <Fragment key={u.id}>
               <Item className="p-0">
                 {/*<ItemMedia>*/}
@@ -62,7 +75,7 @@ const RoomStateDialog = ({ roomStats }: { roomStats: RoomStats }) => {
                   </Button>
                 </ItemActions>
               </Item>
-              {index !== roomStats.users.length - 1 && <ItemSeparator />}
+              {index !== states.users.length - 1 && <ItemSeparator />}
             </Fragment>
           ))}
         </ItemGroup>

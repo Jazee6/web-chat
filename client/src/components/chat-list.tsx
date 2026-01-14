@@ -31,10 +31,10 @@ const ChatList = ({
     }
 
     api
-      .post<User[]>("room/user", {
-        json: {
-          ids,
-        },
+      .get<User[]>("room/user", {
+        searchParams: new URLSearchParams({
+          ids: ids.join(","),
+        }),
       })
       .json()
       .then((i) => {

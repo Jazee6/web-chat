@@ -7,6 +7,7 @@ export const basePaginationSchema = z.object({
 
 export const createRoomSchema = z.object({
   name: z.string().min(1),
+  type: z.enum(["private", "public"]),
 });
 
 export const roomIdSchema = z.object({
@@ -14,5 +15,12 @@ export const roomIdSchema = z.object({
 });
 
 export const getUserInfoSchema = z.object({
-  ids: z.array(z.string().min(1)).min(1).max(25),
+  ids: z.preprocess(
+    (v: string) => v.split(","),
+    z.array(z.string().min(1)).min(1).max(25),
+  ),
+});
+
+export const sendMessageSchema = z.object({
+  message: z.string().min(1),
 });
