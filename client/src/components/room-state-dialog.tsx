@@ -1,4 +1,3 @@
-import { Badge } from "@/components/ui/badge.tsx";
 import { Button } from "@/components/ui/button.tsx";
 import {
   Dialog,
@@ -16,6 +15,7 @@ import {
   ItemSeparator,
   ItemTitle,
 } from "@/components/ui/item.tsx";
+import { cn } from "@/lib/utils.ts";
 import { PhoneCall } from "lucide-react";
 import { Fragment } from "react";
 import type { RoomStats } from "web-chat-share";
@@ -23,9 +23,11 @@ import type { RoomStats } from "web-chat-share";
 const RoomStateDialog = ({
   roomStats,
   className,
+  disabled,
 }: {
   roomStats: RoomStats;
   className?: string;
+  disabled?: boolean;
 }) => {
   const states = {
     ...roomStats,
@@ -37,7 +39,13 @@ const RoomStateDialog = ({
   return (
     <Dialog>
       <DialogTrigger asChild>
-        <Badge className={className}>{states?.users.length}</Badge>
+        {/*<Badge className={className}>{states?.users.length}</Badge>*/}
+        <Button
+          className={cn(className, "rounded-full size-6")}
+          disabled={disabled}
+        >
+          {states.users.length}
+        </Button>
       </DialogTrigger>
       <DialogContent>
         <DialogHeader>

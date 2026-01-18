@@ -10,6 +10,7 @@ import { HTTPException } from "hono/http-exception";
 import {
   basePaginationSchema,
   createRoomSchema,
+  getRoomInfoSchema,
   getUserInfoSchema,
   roomIdSchema,
 } from "web-chat-share";
@@ -161,6 +162,25 @@ app.get(
     const db = drizzle(c.env.web_chat);
     const users = await db.select().from(user).where(inArray(user.id, ids));
     return c.json(users);
+  },
+);
+
+app.get(
+  "/room/info/:id",
+  zValidator("param", getRoomInfoSchema),
+  cache({
+    cacheName: "user-info",
+    cacheControl: "max-age=60",
+  }),
+  async (c) => {
+    const { id } = c.req.valid("param");
+    const db = drizzle(c.env.web_chat);
+    const info = await db
+      .select()
+      .from(roomTable)
+      .where(eq(roomTable.id, id))
+      .then((r) => r[0]);
+    return c.json(info);
   },
 );
 

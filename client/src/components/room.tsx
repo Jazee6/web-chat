@@ -2,10 +2,13 @@ import ChatList from "@/components/chat-list.tsx";
 import RoomStateDialog from "@/components/room-state-dialog.tsx";
 
 import ChatInput from "@/components/chat-input.tsx";
+import ShareButton from "@/components/share-button.tsx";
+import { Button } from "@/components/ui/button.tsx";
 import { Spinner } from "@/components/ui/spinner.tsx";
-import { pushNotification } from "@/lib/utils.ts";
+import { api, pushNotification } from "@/lib/utils.ts";
 import { useWebSocket } from "ahooks";
 import type { User } from "better-auth";
+import { PictureInPicture } from "lucide-react";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import {
@@ -17,12 +20,27 @@ import {
 } from "web-chat-share";
 import { z } from "zod";
 
-const Room = ({ id, user }: { id: string; user: User }) => {
+interface RoomInfo {
+  name: string;
+}
+
+const Room = ({
+  id,
+  user,
+  onTogglePip,
+  isPipActive,
+}: {
+  id: string;
+  user: User;
+  onTogglePip?: () => void;
+  isPipActive?: boolean;
+}) => {
   const [isLoading, setIsLoading] = useState(true);
   const [roomStats, setRoomStats] = useState<RoomStats>();
   const [chats, setChats] = useState<ChatMessage[]>([]);
   const [userIds, setUserIds] = useState<string[]>([]);
   const [hasMore, setHasMore] = useState(true);
+  const [roomInfo, setRoomInfo] = useState<RoomInfo>();
 
   const chatListRef = useRef<HTMLDivElement>(null);
   const notificationListRef = useRef<Notification[]>([]);
@@ -70,7 +88,6 @@ const Room = ({ id, user }: { id: string; user: User }) => {
             }
             setChats(m.data);
             setUserIds(Array.from(new Set(m.data.map((c) => c.userId))));
-            setTimeout(() => scrollToBottom("instant"));
             oldestChatTimeRef.current = m.data[0].createdAt;
             break;
           case "history":
@@ -123,6 +140,21 @@ const Room = ({ id, user }: { id: string; user: User }) => {
       },
     },
   );
+
+  useEffect(() => {
+    api
+      .get<RoomInfo>("room/info/" + id)
+      .json()
+      .then(setRoomInfo);
+  }, [id]);
+
+  useEffect(() => {
+    if (isLoading) {
+      return;
+    }
+
+    scrollToBottom("instant");
+  }, [isLoading]);
 
   useLayoutEffect(() => {
     if (isLoadingHistoryRef.current && chatListRef.current) {
@@ -193,15 +225,35 @@ const Room = ({ id, user }: { id: string; user: User }) => {
         createdAt: new Date().toISOString(),
       },
     ]);
-    scrollToBottom();
+
+    queueMicrotask(() => scrollToBottom());
   };
 
   return (
     <>
       {roomStats && (
-        <header className="h-16 absolute top-0 w-full z-10 bg-linear-to-b from-background to-transparent rounded-t-xl">
-          <div className="max-w-3xl max-md:px-2 mx-auto h-full flex items-center">
-            <RoomStateDialog className="ml-auto" roomStats={roomStats} />
+        <header className="h-16 absolute top-0 w-full z-10 bg-linear-to-b from-background to-transparent rounded-t-xl backdrop-blur-xl">
+          <div className="max-w-3xl max-md:px-2 mx-auto h-full flex items-center justify-between">
+            <div className="max-[1080px]:ml-12">{roomInfo?.name}</div>
+
+            <div className="flex items-center">
+              {"documentPictureInPicture" in window && (
+                <Button
+                  size="icon-sm"
+                  className="rounded-full"
+                  variant="ghost"
+                  onClick={onTogglePip}
+                >
+                  <PictureInPicture />
+                </Button>
+              )}
+              {"share" in navigator && !isPipActive && <ShareButton />}
+              <RoomStateDialog
+                roomStats={roomStats}
+                className="ml-1"
+                disabled={isPipActive}
+              />
+            </div>
           </div>
         </header>
       )}

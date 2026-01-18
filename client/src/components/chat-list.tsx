@@ -25,6 +25,13 @@ const ChatList = ({
   }>({});
 
   useEffect(() => {
+    const timer = setInterval(() => {
+      setUsers((prev) => ({ ...prev }));
+    }, 1000 * 60);
+    return () => clearInterval(timer);
+  }, []);
+
+  useEffect(() => {
     const ids = userIds.filter((id) => !users[id]);
     if (ids.length === 0) {
       return;

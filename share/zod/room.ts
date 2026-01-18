@@ -24,3 +24,7 @@ export const getUserInfoSchema = z.object({
 export const sendMessageSchema = z.object({
   message: z.string().min(1),
 });
+
+export const getRoomInfoSchema = z.object({
+  id: z.string().min(1),
+});

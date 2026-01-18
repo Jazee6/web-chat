@@ -40,7 +40,7 @@ const ChatInput = ({
       className="absolute bottom-0 w-full max-md:px-2 bg-linear-to-t from-background to-transparent rounded-b-xl"
       onSubmit={(e) => form.handleSubmit(onSubmit)(e)}
     >
-      <InputGroup className="max-w-3xl mx-auto max-h-64 dark:!bg-[#151515]">
+      <InputGroup className="max-w-3xl mx-auto max-h-64 dark:bg-[#151515]!">
         <Controller
           name="message"
           control={form.control}
