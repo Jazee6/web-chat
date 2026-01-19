@@ -15,8 +15,9 @@ import {
   roomIdSchema,
 } from "web-chat-share";
 import { authConfig, Session, User } from "./lib/auth";
-import * as schema from "./lib/schema/auth";
+import * as authSchema from "./lib/schema/auth";
 import { user } from "./lib/schema/auth";
+import * as d1Schema from "./lib/schema/d1";
 import { roomTable } from "./lib/schema/d1";
 import { Room } from "./room";
 export { Room } from "./room";
@@ -57,7 +58,7 @@ app.use("/room/*", async (c, next) => {
     ...authConfig,
     database: drizzleAdapter(drizzle(c.env.web_chat), {
       provider: "sqlite",
-      schema,
+      schema: authSchema,
     }),
   });
   const session = await a.api.getSession({ headers: c.req.raw.headers });
@@ -74,7 +75,7 @@ app.on(["POST", "GET"], "/api/auth/*", (c) => {
     ...authConfig,
     database: drizzleAdapter(drizzle(c.env.web_chat), {
       provider: "sqlite",
-      schema,
+      schema: authSchema,
     }),
   });
   return a.handler(c.req.raw);
@@ -106,14 +107,16 @@ app.post("/room", zValidator("json", createRoomSchema), async (c) => {
 app.get("/room", zValidator("query", basePaginationSchema), async (c) => {
   const { limit, offset } = c.req.valid("query");
   const user = c.get("user");
-  const db = drizzle(c.env.web_chat);
-  const rooms = await db
-    .select()
-    .from(roomTable)
-    .where(eq(roomTable.userId, user.id))
-    .orderBy(desc(roomTable.createdAt))
-    .limit(limit)
-    .offset(offset);
+  const db = drizzle(c.env.web_chat, { schema: d1Schema });
+  const rooms = await db.query.roomTable.findMany({
+    columns: {
+      userId: false,
+    },
+    where: eq(roomTable.userId, user.id),
+    orderBy: [desc(roomTable.createdAt)],
+    limit,
+    offset,
+  });
   return c.json(rooms);
 });
 
@@ -159,8 +162,15 @@ app.get(
   }),
   async (c) => {
     const { ids } = c.req.valid("query");
-    const db = drizzle(c.env.web_chat);
-    const users = await db.select().from(user).where(inArray(user.id, ids));
+    const db = drizzle(c.env.web_chat, { schema: authSchema });
+    const users = await db.query.user.findMany({
+      columns: {
+        id: true,
+        name: true,
+        image: true,
+      },
+      where: inArray(user.id, ids),
+    });
     return c.json(users);
   },
 );

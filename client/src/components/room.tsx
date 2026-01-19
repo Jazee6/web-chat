@@ -1,11 +1,15 @@
 import ChatList from "@/components/chat-list.tsx";
-import RoomStateDialog from "@/components/room-state-dialog.tsx";
+import RoomStateDialog, {
+  type RoomInfo,
+} from "@/components/room-state-dialog.tsx";
 
+import AddFavoritesButton from "@/components/add-favorites-button.tsx";
 import ChatInput from "@/components/chat-input.tsx";
 import ShareButton from "@/components/share-button.tsx";
 import { Button } from "@/components/ui/button.tsx";
 import { Spinner } from "@/components/ui/spinner.tsx";
 import { api, pushNotification } from "@/lib/utils.ts";
+import { useQuery } from "@tanstack/react-query";
 import { useWebSocket } from "ahooks";
 import type { User } from "better-auth";
 import { PictureInPicture } from "lucide-react";
@@ -19,10 +23,6 @@ import {
   type ServerMessage,
 } from "web-chat-share";
 import { z } from "zod";
-
-interface RoomInfo {
-  name: string;
-}
 
 const Room = ({
   id,
@@ -40,7 +40,7 @@ const Room = ({
   const [chats, setChats] = useState<ChatMessage[]>([]);
   const [userIds, setUserIds] = useState<string[]>([]);
   const [hasMore, setHasMore] = useState(true);
-  const [roomInfo, setRoomInfo] = useState<RoomInfo>();
+  const [roomStateDialogOpen, setRoomStateDialogOpen] = useState(false);
 
   const chatListRef = useRef<HTMLDivElement>(null);
   const notificationListRef = useRef<Notification[]>([]);
@@ -48,6 +48,11 @@ const Room = ({
   const oldestChatTimeRef = useRef<string>(null);
   const previousScrollHeightRef = useRef<number>(0);
   const isLoadingHistoryRef = useRef(false);
+
+  const { data: roomInfo } = useQuery({
+    queryKey: ["roomInfo", id],
+    queryFn: () => api.get<RoomInfo>("room/info/" + id).json(),
+  });
 
   const scrollToBottom = (behavior: ScrollBehavior = "smooth") => {
     if (chatListRef.current) {
@@ -76,7 +81,12 @@ const Room = ({
         const m = JSON.parse(message.data) as ServerMessage;
         switch (m.type) {
           case "roomStats":
-            setRoomStats(m.data);
+            setRoomStats({
+              ...m.data,
+              users: m.data.users.filter(
+                (v, i, a) => a.findIndex((t) => t.id === v.id) === i,
+              ),
+            });
             break;
           case "initHistory":
             setIsLoading(false);
@@ -140,13 +150,6 @@ const Room = ({
       },
     },
   );
-
-  useEffect(() => {
-    api
-      .get<RoomInfo>("room/info/" + id)
-      .json()
-      .then(setRoomInfo);
-  }, [id]);
 
   useEffect(() => {
     if (isLoading) {
@@ -237,6 +240,7 @@ const Room = ({
             <div className="max-[1080px]:ml-12">{roomInfo?.name}</div>
 
             <div className="flex items-center">
+              <AddFavoritesButton />
               {"documentPictureInPicture" in window && (
                 <Button
                   size="icon-sm"
@@ -247,11 +251,23 @@ const Room = ({
                   <PictureInPicture />
                 </Button>
               )}
-              {"share" in navigator && !isPipActive && <ShareButton />}
+              {"share" in navigator && !isPipActive && (
+                <ShareButton title={`${roomInfo?.name} - Web Chat`} />
+              )}
+
+              <Button
+                className={"rounded-full size-6 ml-1"}
+                disabled={isPipActive}
+                onClick={() => setRoomStateDialogOpen(true)}
+              >
+                {roomStats.users.length}
+              </Button>
+
               <RoomStateDialog
                 roomStats={roomStats}
-                className="ml-1"
-                disabled={isPipActive}
+                roomInfo={roomInfo}
+                open={roomStateDialogOpen}
+                onOpenChange={setRoomStateDialogOpen}
               />
             </div>
           </div>
