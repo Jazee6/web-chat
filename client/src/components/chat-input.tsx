@@ -6,6 +6,7 @@ import {
   InputGroupTextarea,
 } from "@/components/ui/input-group.tsx";
 import { Spinner } from "@/components/ui/spinner.tsx";
+import { cn } from "@/lib/utils.ts";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { ArrowUpIcon } from "lucide-react";
 import { Controller, useForm } from "react-hook-form";
@@ -15,9 +16,11 @@ import { z } from "zod";
 const ChatInput = ({
   onSend,
   isLoading,
+  className,
 }: {
   onSend: (data: z.infer<typeof sendMessageSchema>) => Promise<void>;
   isLoading: boolean;
+  className?: string;
 }) => {
   const form = useForm<z.infer<typeof sendMessageSchema>>({
     resolver: zodResolver(sendMessageSchema),
@@ -37,10 +40,13 @@ const ChatInput = ({
 
   return (
     <form
-      className="absolute bottom-0 w-full max-md:px-2 bg-linear-to-t from-background to-transparent rounded-b-xl"
+      className={cn(
+        "w-full max-md:px-2 bg-linear-to-t from-background to-transparent rounded-b-xl",
+        className,
+      )}
       onSubmit={(e) => form.handleSubmit(onSubmit)(e)}
     >
-      <InputGroup className="max-w-3xl mx-auto max-h-64 dark:bg-[#151515]!">
+      <InputGroup className="max-w-3xl mx-auto max-h-64">
         <Controller
           name="message"
           control={form.control}

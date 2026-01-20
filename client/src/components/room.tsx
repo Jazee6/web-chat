@@ -41,6 +41,9 @@ const Room = ({
   const [userIds, setUserIds] = useState<string[]>([]);
   const [hasMore, setHasMore] = useState(true);
   const [roomStateDialogOpen, setRoomStateDialogOpen] = useState(false);
+  const [users, setUsers] = useState<{
+    [userId: string]: User;
+  }>({});
 
   const chatListRef = useRef<HTMLDivElement>(null);
   const notificationListRef = useRef<Notification[]>([]);
@@ -48,11 +51,34 @@ const Room = ({
   const oldestChatTimeRef = useRef<string>(null);
   const previousScrollHeightRef = useRef<number>(0);
   const isLoadingHistoryRef = useRef(false);
+  const pingIntervalRef = useRef<number>(null);
 
   const { data: roomInfo } = useQuery({
     queryKey: ["roomInfo", id],
     queryFn: () => api.get<RoomInfo>("room/info/" + id).json(),
   });
+
+  useEffect(() => {
+    const ids = userIds.filter((id) => !users[id]);
+    if (ids.length === 0) {
+      return;
+    }
+
+    api
+      .get<User[]>("room/user", {
+        searchParams: new URLSearchParams({
+          ids: ids.join(","),
+        }),
+      })
+      .json()
+      .then((i) => {
+        const newUsers: { [userId: string]: User } = {};
+        i.forEach((u) => {
+          newUsers[u.id] = u;
+        });
+        setUsers((prev) => ({ ...prev, ...newUsers }));
+      });
+  }, [userIds, users]);
 
   const scrollToBottom = (behavior: ScrollBehavior = "smooth") => {
     if (chatListRef.current) {
@@ -72,10 +98,25 @@ const Room = ({
             type: "join",
           }),
         );
+        pingIntervalRef.current = setInterval(() => {
+          instance.send(
+            gm({
+              type: "ping",
+            }),
+          );
+        }, 1000 * 60);
       },
       onError: (_, instance) => {
         toast.error("WebSocket error occurred");
+        if (pingIntervalRef.current) {
+          clearInterval(pingIntervalRef.current);
+        }
         instance.close();
+      },
+      onClose: () => {
+        if (pingIntervalRef.current) {
+          clearInterval(pingIntervalRef.current);
+        }
       },
       onMessage: (message) => {
         const m = JSON.parse(message.data) as ServerMessage;
@@ -129,9 +170,13 @@ const Room = ({
                 .querySelector("link[rel='icon']")
                 ?.setAttribute("href", "/message-circle-more.svg");
 
-              const n = pushNotification("New message", {
-                body: m.data.content,
-              });
+              const n = pushNotification(
+                users[m.data.userId]?.name ?? "New Message",
+                {
+                  body: m.data.content,
+                  icon: users[m.data.userId]?.image ?? "/icon.svg",
+                },
+              );
               if (n) {
                 notificationListRef.current.push(n);
               }
@@ -234,8 +279,8 @@ const Room = ({
 
   return (
     <>
-      {roomStats && (
-        <header className="h-16 absolute top-0 w-full z-10 bg-linear-to-b from-background to-transparent rounded-t-xl backdrop-blur-xl">
+      <header className="h-16 absolute top-0 w-full z-10 bg-linear-to-b from-background to-transparent rounded-t-xl backdrop-blur-xl">
+        {roomStats && (
           <div className="max-w-3xl max-md:px-2 mx-auto h-full flex items-center justify-between">
             <div className="max-[1080px]:ml-12">{roomInfo?.name}</div>
 
@@ -271,26 +316,33 @@ const Room = ({
               />
             </div>
           </div>
-        </header>
-      )}
+        )}
+      </header>
 
-      {chats && (
-        <div
-          style={{ scrollbarGutter: "stable both-edges" }}
-          className="overflow-y-auto scrollbar pt-16 pb-60 h-[calc(100vh-1rem)]"
-          ref={chatListRef}
-        >
-          {hasMore && !isLoading && (
-            <div ref={loaderRef} className="flex justify-center py-4">
-              <Spinner />
-            </div>
-          )}
+      <div className="h-[calc(100vh-1rem)] flex flex-col">
+        {chats && (
+          <div
+            style={{ scrollbarGutter: "stable both-edges" }}
+            className="overflow-y-auto scrollbar pt-16 "
+            ref={chatListRef}
+          >
+            {hasMore && !isLoading && (
+              <div ref={loaderRef} className="flex justify-center py-4">
+                <Spinner />
+              </div>
+            )}
 
-          <ChatList chats={chats} userId={user.id} userIds={userIds} />
-        </div>
-      )}
+            <ChatList
+              className="pb-32"
+              chats={chats}
+              userId={user.id}
+              users={users}
+            />
+          </div>
+        )}
 
-      <ChatInput onSend={onSend} isLoading={isLoading} />
+        <ChatInput className="mt-auto" onSend={onSend} isLoading={isLoading} />
+      </div>
     </>
   );
 };
