@@ -1,0 +1,14 @@
+{
+  "name": "web-chat-share",
+  "module": "index.ts",
+  "type": "module",
+  "devDependencies": {
+    "@types/bun": "latest"
+  },
+  "peerDependencies": {
+    "typescript": "^5"
+  },
+  "dependencies": {
+    "zod": "^4.2.1"
+  }
+}

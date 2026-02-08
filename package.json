@@ -1,0 +1,14 @@
+{
+  "name": "web-chat",
+  "version": "0.1.0",
+  "private": true,
+  "workspaces": [
+    "./server",
+    "./client",
+    "./share"
+  ],
+  "devDependencies": {
+    "prettier": "3.7.4",
+    "prettier-plugin-organize-imports": "^4.3.0"
+  }
+}

@@ -1,0 +1,27 @@
+{
+  "name": "web-chat-server",
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy --minify",
+    "cf-typegen": "wrangler types --env-interface CloudflareBindings",
+    "db:push:d1": "drizzle-kit push && drizzle-kit generate && bunx wrangler d1 migrations apply web-chat",
+    "db:generate:do": "drizzle-kit generate --config=./drizzle-room.config.ts",
+    "db:generate:auth": "bunx @better-auth/cli@latest generate --output src/lib/schema/auth.ts --yes"
+  },
+  "dependencies": {
+    "@hono/zod-validator": "^0.7.6",
+    "better-auth": "^1.4.7",
+    "dotenv": "^17.2.3",
+    "drizzle-orm": "^0.45.1",
+    "hono": "^4.11.1",
+    "web-chat-share": "workspace:*",
+    "zod": "^4.2.1"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.3.5",
+    "drizzle-kit": "^0.31.8",
+    "tsx": "^4.21.0",
+    "wrangler": "^4.56.0"
+  }
+}
