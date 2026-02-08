@@ -63,12 +63,14 @@ const ChatInput = ({
                     !event.nativeEvent.isComposing
                   ) {
                     event.preventDefault();
-                    if (isLoading) {
+                    if (isLoading || field.value.trim().length === 0) {
                       return;
                     }
                     form.handleSubmit(onSubmit)();
                   }
                 }}
+                maxLength={2048}
+                minLength={1}
                 {...field}
               />
               <InputGroupAddon align="block-end">
@@ -77,7 +79,7 @@ const ChatInput = ({
                   className="rounded-full ml-auto"
                   size="icon-xs"
                   type="submit"
-                  disabled={isLoading}
+                  disabled={isLoading || field.value.trim().length === 0}
                 >
                   {isLoading ? <Spinner /> : <ArrowUpIcon />}
                   <span className="sr-only">Send</span>

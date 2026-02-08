@@ -299,10 +299,7 @@ const Room = ({
             <div className="max-[1080px]:ml-12">{roomInfo?.name}</div>
 
             <div className="flex items-center">
-              <AddFavoritesButton
-                id={id}
-                added={!!roomInfo?.isFavorite}
-              />
+              <AddFavoritesButton id={id} added={!!roomInfo?.isFavorite} />
               {"documentPictureInPicture" in window && (
                 <Button
                   size="icon-sm"
@@ -350,7 +347,7 @@ const Room = ({
             )}
 
             <ChatList
-              className="pb-32"
+              className="pb-32 max-md:px-2"
               chats={chats}
               userId={user.id}
               users={users}

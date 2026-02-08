@@ -22,7 +22,7 @@ export const getUserInfoSchema = z.object({
 });
 
 export const sendMessageSchema = z.object({
-  message: z.string().min(1),
+  message: z.string().trim().min(1).max(2048),
 });
 
 export const getRoomInfoSchema = z.object({

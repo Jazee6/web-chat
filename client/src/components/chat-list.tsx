@@ -28,6 +28,25 @@ const formatContent = (content: string) => {
   });
 };
 
+const isEmojiOnly = (content: string) => {
+  const trimmed = content.trim();
+  if (!trimmed) return false;
+  try {
+    const isEmojiRegex = new RegExp(
+      "^(\\p{Extended_Pictographic}|\\p{Emoji_Presentation})+$",
+      "u",
+    );
+    if (!isEmojiRegex.test(trimmed)) return false;
+  } catch {
+    return false;
+  }
+
+  if (Intl.Segmenter) {
+    return [...new Intl.Segmenter().segment(trimmed)].length <= 3;
+  }
+  return [...trimmed].length <= 3;
+};
+
 const ChatList = ({
   chats,
   className,
@@ -44,6 +63,7 @@ const ChatList = ({
   return (
     <ul className={cn("space-y-1", className)}>
       {chats.map((c) => {
+        const isEmoji = isEmojiOnly(c.content);
         if (c.userId === userId) {
           return (
             <li
@@ -55,7 +75,14 @@ const ChatList = ({
                   {dayjs(c.createdAt).fromNow()}
                 </div>
 
-                <div className="bg-secondary px-2 py-1 rounded-md break-all">
+                <div
+                  className={cn(
+                    "rounded-md break-all",
+                    isEmoji
+                      ? "bg-transparent text-5xl"
+                      : "bg-secondary px-2 py-1",
+                  )}
+                >
                   {formatContent(c.content)}
                 </div>
               </div>
@@ -67,7 +94,7 @@ const ChatList = ({
           <li key={c.id} className="max-w-3xl px-1 mx-auto w-full flex">
             <div className="flex gap-2 ani-slide-top group">
               <div className="flex gap-1 max-w-[90%] break-all">
-                <Avatar className="self-end sticky bottom-2">
+                <Avatar className="self-end sticky bottom-2 hover:brightness-75">
                   <AvatarImage
                     src={users[c.userId]?.image ?? undefined}
                     alt={users[c.userId]?.name || "Avatar"}
@@ -76,7 +103,14 @@ const ChatList = ({
                     {users[c.userId]?.name.slice(0, 2) ?? c.userId.slice(0, 2)}
                   </AvatarFallback>
                 </Avatar>
-                <div className="bg-secondary px-2 py-1 rounded-md">
+                <div
+                  className={cn(
+                    "rounded-md",
+                    isEmoji
+                      ? "bg-transparent text-5xl"
+                      : "bg-secondary px-2 py-1",
+                  )}
+                >
                   {formatContent(c.content)}
                 </div>
               </div>

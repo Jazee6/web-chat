@@ -53,6 +53,9 @@ export type ClientMessage =
       data: {
         before: string;
       };
+    }
+  | {
+      type: "typing";
     };
 
 export type Message = ServerMessage | ClientMessage;
