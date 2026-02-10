@@ -6,7 +6,7 @@ import {
 import type { User } from "@/lib/auth-client.ts";
 import { cn, formatChatListTime } from "@/lib/utils.ts";
 import dayjs from "dayjs";
-import { Fragment } from "react";
+import { Fragment, useMemo } from "react";
 import type { ChatMessage } from "web-chat-share";
 
 const formatContent = (content: string) => {
@@ -51,74 +51,103 @@ const ChatList = ({
     [userId: string]: User;
   };
 }) => {
+  const groups = useMemo(() => {
+    const res: {
+      id: string;
+      userId: string;
+      messages: ChatMessage[];
+      showTime: boolean;
+      time: string;
+    }[] = [];
+    let currentGroup: (typeof res)[0] | null = null;
+
+    chats.forEach((c, i) => {
+      const prevMessage = chats[i - 1];
+      const showTime =
+        !prevMessage ||
+        dayjs(c.createdAt).diff(dayjs(prevMessage.createdAt), "minute") > 5;
+
+      if (showTime || !currentGroup || currentGroup.userId !== c.userId) {
+        currentGroup = {
+          id: c.id,
+          userId: c.userId,
+          messages: [c],
+          showTime,
+          time: c.createdAt,
+        };
+        res.push(currentGroup);
+      } else {
+        currentGroup.messages.push(c);
+      }
+    });
+
+    return res;
+  }, [chats]);
+
   return (
-    <ul className={cn("space-y-1", className)}>
-      {chats.map((c, i) => {
-        const isEmoji = isEmojiOnly(c.content);
-        const prevMessage = chats[i - 1];
-        const showTime =
-          !prevMessage ||
-          dayjs(c.createdAt).diff(dayjs(prevMessage.createdAt), "minute") > 5;
+    <ul className={cn("space-y-4 pb-4", className)}>
+      {groups.map((group) => {
+        const isMe = group.userId === userId;
+        const user = users[group.userId];
 
         return (
-          <Fragment key={c.id}>
-            {showTime && (
+          <Fragment key={group.id}>
+            {group.showTime && (
               <li className="flex justify-center py-4 text-xs text-muted-foreground brightness-75 ani-slide-top">
-                {formatChatListTime(c.createdAt)}
+                {formatChatListTime(group.time)}
               </li>
             )}
 
-            {c.userId === userId ? (
-              <li className="max-w-3xl px-1 mx-auto w-full flex justify-end">
-                <div className="ani-slide-top max-w-[90%] flex gap-2 group">
-                  <div className="text-muted text-xs self-end opacity-0 group-hover:opacity-100 transition-opacity sticky bottom-2">
-                    {dayjs(c.createdAt).format("HH:mm")}
-                  </div>
+            <li
+              className={cn(
+                "max-w-3xl px-1 mx-auto w-full flex",
+                isMe ? "justify-end" : "",
+              )}
+            >
+              <div className="flex gap-1 max-w-[90%]">
+                {!isMe && (
+                  <Avatar className="self-end sticky bottom-1 hover:brightness-75 transition shrink-0">
+                    <AvatarImage
+                      src={user?.image ?? undefined}
+                      alt={user?.name || "Avatar"}
+                    />
+                    <AvatarFallback>
+                      {user?.name.slice(0, 2) ?? group.userId.slice(0, 2)}
+                    </AvatarFallback>
+                  </Avatar>
+                )}
 
-                  <div
-                    className={cn(
-                      "rounded-md break-all hover:brightness-75",
-                      isEmoji
-                        ? "bg-transparent text-5xl"
-                        : "bg-secondary px-2 py-1",
-                    )}
-                  >
-                    {formatContent(c.content)}
-                  </div>
-                </div>
-              </li>
-            ) : (
-              <li className="max-w-3xl px-1 mx-auto w-full flex">
-                <div className="flex gap-2 ani-slide-top group">
-                  <div className="flex gap-1 max-w-[90%] ">
-                    <Avatar className="self-end sticky bottom-2 hover:brightness-75">
-                      <AvatarImage
-                        src={users[c.userId]?.image ?? undefined}
-                        alt={users[c.userId]?.name || "Avatar"}
-                      />
-                      <AvatarFallback>
-                        {users[c.userId]?.name.slice(0, 2) ??
-                          c.userId.slice(0, 2)}
-                      </AvatarFallback>
-                    </Avatar>
-                    <div
-                      className={cn(
-                        "rounded-md break-all hover:brightness-75",
-                        isEmoji
-                          ? "bg-transparent text-5xl"
-                          : "bg-secondary px-2 py-1",
-                      )}
-                    >
-                      {formatContent(c.content)}
-                    </div>
-                  </div>
+                <div className="flex flex-col gap-1">
+                  {group.messages.map((c) => {
+                    const isEmoji = isEmojiOnly(c.content);
+                    return (
+                      <div
+                        key={c.id}
+                        className={cn(
+                          "flex gap-1 ani-slide-top",
+                          isMe ? "flex-row-reverse" : "",
+                        )}
+                      >
+                        <div
+                          className={cn(
+                            "rounded-md wrap-anywhere whitespace-pre-wrap hover:brightness-75 transition peer",
+                            isEmoji
+                              ? "bg-transparent text-5xl"
+                              : "bg-secondary px-2 py-1",
+                          )}
+                        >
+                          {formatContent(c.content)}
+                        </div>
 
-                  <div className="text-muted text-xs self-end opacity-0 group-hover:opacity-100 transition-opacity sticky bottom-2">
-                    {dayjs(c.createdAt).format("HH:mm")}
-                  </div>
+                        <div className="text-muted text-xs self-end opacity-0 peer-hover:opacity-100 transition-opacity">
+                          {dayjs(c.createdAt).format("HH:mm")}
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
-              </li>
-            )}
+              </div>
+            </li>
           </Fragment>
         );
       })}
