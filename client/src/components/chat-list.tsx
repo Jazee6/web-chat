@@ -4,8 +4,9 @@ import {
   AvatarImage,
 } from "@/components/ui/avatar.tsx";
 import type { User } from "@/lib/auth-client.ts";
-import { cn } from "@/lib/utils.ts";
+import { cn, formatChatListTime } from "@/lib/utils.ts";
 import dayjs from "dayjs";
+import { Fragment } from "react";
 import type { ChatMessage } from "web-chat-share";
 
 const formatContent = (content: string) => {
@@ -29,22 +30,12 @@ const formatContent = (content: string) => {
 };
 
 const isEmojiOnly = (content: string) => {
-  const trimmed = content.trim();
-  if (!trimmed) return false;
   try {
-    const isEmojiRegex = new RegExp(
-      "^(\\p{Extended_Pictographic}|\\p{Emoji_Presentation})+$",
-      "u",
-    );
-    if (!isEmojiRegex.test(trimmed)) return false;
+    const isEmojiRegex = /^\p{RGI_Emoji}{1,3}$/v;
+    return isEmojiRegex.test(content);
   } catch {
     return false;
   }
-
-  if (Intl.Segmenter) {
-    return [...new Intl.Segmenter().segment(trimmed)].length <= 3;
-  }
-  return [...trimmed].length <= 3;
 };
 
 const ChatList = ({
@@ -62,64 +53,73 @@ const ChatList = ({
 }) => {
   return (
     <ul className={cn("space-y-1", className)}>
-      {chats.map((c) => {
+      {chats.map((c, i) => {
         const isEmoji = isEmojiOnly(c.content);
-        if (c.userId === userId) {
-          return (
-            <li
-              key={c.id}
-              className="max-w-3xl px-1 mx-auto w-full flex justify-end"
-            >
-              <div className="ani-slide-top max-w-[90%] flex gap-2 group">
-                <div className="text-muted text-xs self-end opacity-0 group-hover:opacity-100 transition-opacity sticky bottom-2">
-                  {dayjs(c.createdAt).fromNow()}
-                </div>
-
-                <div
-                  className={cn(
-                    "rounded-md break-all",
-                    isEmoji
-                      ? "bg-transparent text-5xl"
-                      : "bg-secondary px-2 py-1",
-                  )}
-                >
-                  {formatContent(c.content)}
-                </div>
-              </div>
-            </li>
-          );
-        }
+        const prevMessage = chats[i - 1];
+        const showTime =
+          !prevMessage ||
+          dayjs(c.createdAt).diff(dayjs(prevMessage.createdAt), "minute") > 5;
 
         return (
-          <li key={c.id} className="max-w-3xl px-1 mx-auto w-full flex">
-            <div className="flex gap-2 ani-slide-top group">
-              <div className="flex gap-1 max-w-[90%] break-all">
-                <Avatar className="self-end sticky bottom-2 hover:brightness-75">
-                  <AvatarImage
-                    src={users[c.userId]?.image ?? undefined}
-                    alt={users[c.userId]?.name || "Avatar"}
-                  />
-                  <AvatarFallback>
-                    {users[c.userId]?.name.slice(0, 2) ?? c.userId.slice(0, 2)}
-                  </AvatarFallback>
-                </Avatar>
-                <div
-                  className={cn(
-                    "rounded-md",
-                    isEmoji
-                      ? "bg-transparent text-5xl"
-                      : "bg-secondary px-2 py-1",
-                  )}
-                >
-                  {formatContent(c.content)}
-                </div>
-              </div>
+          <Fragment key={c.id}>
+            {showTime && (
+              <li className="flex justify-center py-4 text-xs text-muted-foreground brightness-75 ani-slide-top">
+                {formatChatListTime(c.createdAt)}
+              </li>
+            )}
 
-              <div className="text-muted text-xs self-end opacity-0 group-hover:opacity-100 transition-opacity sticky bottom-2">
-                {dayjs(c.createdAt).fromNow()}
-              </div>
-            </div>
-          </li>
+            {c.userId === userId ? (
+              <li className="max-w-3xl px-1 mx-auto w-full flex justify-end">
+                <div className="ani-slide-top max-w-[90%] flex gap-2 group">
+                  <div className="text-muted text-xs self-end opacity-0 group-hover:opacity-100 transition-opacity sticky bottom-2">
+                    {dayjs(c.createdAt).format("HH:mm")}
+                  </div>
+
+                  <div
+                    className={cn(
+                      "rounded-md break-all hover:brightness-75",
+                      isEmoji
+                        ? "bg-transparent text-5xl"
+                        : "bg-secondary px-2 py-1",
+                    )}
+                  >
+                    {formatContent(c.content)}
+                  </div>
+                </div>
+              </li>
+            ) : (
+              <li className="max-w-3xl px-1 mx-auto w-full flex">
+                <div className="flex gap-2 ani-slide-top group">
+                  <div className="flex gap-1 max-w-[90%] ">
+                    <Avatar className="self-end sticky bottom-2 hover:brightness-75">
+                      <AvatarImage
+                        src={users[c.userId]?.image ?? undefined}
+                        alt={users[c.userId]?.name || "Avatar"}
+                      />
+                      <AvatarFallback>
+                        {users[c.userId]?.name.slice(0, 2) ??
+                          c.userId.slice(0, 2)}
+                      </AvatarFallback>
+                    </Avatar>
+                    <div
+                      className={cn(
+                        "rounded-md break-all hover:brightness-75",
+                        isEmoji
+                          ? "bg-transparent text-5xl"
+                          : "bg-secondary px-2 py-1",
+                      )}
+                    >
+                      {formatContent(c.content)}
+                    </div>
+                  </div>
+
+                  <div className="text-muted text-xs self-end opacity-0 group-hover:opacity-100 transition-opacity sticky bottom-2">
+                    {dayjs(c.createdAt).format("HH:mm")}
+                  </div>
+                </div>
+              </li>
+            )}
+          </Fragment>
         );
       })}
     </ul>

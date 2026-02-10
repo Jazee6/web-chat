@@ -10,6 +10,9 @@ export const authClient = createAuthClient({
     },
   },
   plugins: [genericOAuthClient()],
+  sessionOptions: {
+    refetchOnWindowFocus: false,
+  },
 });
 
 export type User = typeof authClient.$Infer.Session.user;
