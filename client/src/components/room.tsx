@@ -8,7 +8,7 @@ import ChatInput from "@/components/chat-input.tsx";
 import ShareButton from "@/components/share-button.tsx";
 import { Button } from "@/components/ui/button.tsx";
 import { Spinner } from "@/components/ui/spinner.tsx";
-import { api, appName, pushNotification } from "@/lib/utils.ts";
+import { api, appName, cn, pushNotification } from "@/lib/utils.ts";
 import { useQuery } from "@tanstack/react-query";
 import { useWebSocket } from "ahooks";
 import type { User } from "better-auth";
@@ -271,6 +271,10 @@ const Room = ({
   }, []);
 
   const onSend = async (data: z.infer<typeof sendMessageSchema>) => {
+    if ("Notification" in window && Notification.permission === "default") {
+      await Notification.requestPermission();
+    }
+
     const { message } = data;
     sendMessage(
       gm({
@@ -347,7 +351,7 @@ const Room = ({
             )}
 
             <ChatList
-              className="pb-32 max-md:px-2"
+              className={cn("pb-32", isPipActive ? "" : "max-md:px-2")}
               chats={chats}
               userId={user.id}
               users={users}

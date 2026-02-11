@@ -30,10 +30,6 @@ const ChatInput = ({
   });
 
   const onSubmit = async (data: z.infer<typeof sendMessageSchema>) => {
-    if ("Notification" in window && Notification.permission === "default") {
-      await Notification.requestPermission();
-    }
-
     form.reset();
     await onSend(data);
   };

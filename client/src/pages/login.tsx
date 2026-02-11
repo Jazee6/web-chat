@@ -20,10 +20,10 @@ const Login = () => {
 
   return (
     <main className="flex flex-col items-center justify-center h-screen relative">
-      <div className="flex space-x-8">
+      <div className="flex gap-8">
         <h1 className="font-mono text-4xl font-semibold">Web Chat</h1>
 
-        <Separator orientation="vertical" />
+        <Separator className="w-px" orientation="vertical" />
 
         <Button onClick={onSignIn} disabled={isLoading}>
           {isLoading && <Spinner />}

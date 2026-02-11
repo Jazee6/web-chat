@@ -129,9 +129,7 @@ export function RoomCreateDialog({
         </form>
 
         <DialogFooter className="mt-4">
-          <DialogClose asChild>
-            <Button variant="outline">Cancel</Button>
-          </DialogClose>
+          <DialogClose render={<Button variant="outline">Cancel</Button>} />
           <Button type="submit" form={formId} disabled={isLoading}>
             {isLoading && <Spinner />}
             Create

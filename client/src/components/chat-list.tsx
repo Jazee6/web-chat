@@ -100,7 +100,7 @@ const ChatList = ({
 
             <li
               className={cn(
-                "max-w-3xl px-1 mx-auto w-full flex",
+                "max-w-3xl px-1 mx-auto w-full flex ani-slide-top",
                 isMe ? "justify-end" : "",
               )}
             >
@@ -124,7 +124,7 @@ const ChatList = ({
                       <div
                         key={c.id}
                         className={cn(
-                          "flex gap-1 ani-slide-top",
+                          "flex gap-1",
                           isMe ? "flex-row-reverse" : "",
                         )}
                       >

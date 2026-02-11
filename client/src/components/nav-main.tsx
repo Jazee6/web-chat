@@ -38,23 +38,23 @@ export function NavMain({
       <SidebarMenu>
         {items.map((item) => (
           <SidebarMenuItem key={item.url}>
-            <SidebarMenuButton
-              asChild
-              tooltip={item.title}
-              isActive={location.pathname === item.url}
-            >
-              <NavLink to={item.url}>
-                <span>{item.title}</span>
-              </NavLink>
-            </SidebarMenuButton>
-
+            <NavLink to={item.url}>
+              <SidebarMenuButton
+                tooltip={item.title}
+                isActive={location.pathname === item.url}
+              >
+                {item.title}
+              </SidebarMenuButton>
+            </NavLink>
             {location.pathname === item.url && (
               <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <SidebarMenuAction>
-                    <MoreHorizontal />
-                  </SidebarMenuAction>
-                </DropdownMenuTrigger>
+                <DropdownMenuTrigger
+                  render={
+                    <SidebarMenuAction>
+                      <MoreHorizontal />
+                    </SidebarMenuAction>
+                  }
+                />
                 <DropdownMenuContent side="right" align="start">
                   <DropdownMenuItem
                     onClick={() => {

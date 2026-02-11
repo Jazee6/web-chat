@@ -56,6 +56,8 @@ export class Room extends DurableObject {
     server.serializeAttachment({ id: userId });
     this.sessions.set(server, { id: userId });
 
+    // await this.storage.setAlarm(Date.now() + 1000 * 60 * 60 * 24 * 30);
+
     return new Response(null, {
       status: 101,
       webSocket: client,
@@ -165,5 +167,9 @@ export class Room extends DurableObject {
 
   async clearStorage() {
     await this.ctx.storage.deleteAll();
+  }
+
+  alarm() {
+    console.log("Alarm triggered, clearing storage");
   }
 }
