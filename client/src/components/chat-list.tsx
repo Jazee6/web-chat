@@ -100,13 +100,13 @@ const ChatList = ({
 
             <li
               className={cn(
-                "max-w-3xl px-1 mx-auto w-full flex ani-slide-top",
+                "max-w-3xl px-1 mx-auto w-full flex",
                 isMe ? "justify-end" : "",
               )}
             >
               <div className="flex gap-1 max-w-[90%]">
                 {!isMe && (
-                  <Avatar className="self-end sticky bottom-1 hover:brightness-75 transition shrink-0">
+                  <Avatar className="self-end sticky bottom-1 hover:brightness-75 transition shrink-0 ani-slide-top">
                     <AvatarImage
                       src={user?.image ?? undefined}
                       alt={user?.name || "Avatar"}
@@ -124,7 +124,7 @@ const ChatList = ({
                       <div
                         key={c.id}
                         className={cn(
-                          "flex gap-1",
+                          "flex gap-1 ani-slide-top",
                           isMe ? "flex-row-reverse" : "",
                         )}
                       >
