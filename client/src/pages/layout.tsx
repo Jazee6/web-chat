@@ -29,7 +29,7 @@ const Layout = () => {
           <SidebarTrigger className="-ml-1 z-20" />
         </div>
 
-        <div className="h-full scrollbar-thumb-border scrollbar-track-transparent">
+        <div className="h-full">
           <Outlet />
         </div>
       </SidebarInset>

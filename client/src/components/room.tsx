@@ -8,9 +8,11 @@ import ChatInput from "@/components/chat-input.tsx";
 import ShareButton from "@/components/share-button.tsx";
 import { Button } from "@/components/ui/button.tsx";
 import { Spinner } from "@/components/ui/spinner.tsx";
+import useIdleDetector from "@/hooks/use-idle-detector.ts";
 import { api, appName, cn, pushNotification } from "@/lib/utils.ts";
+import type { Setting } from "@/pages/settings.tsx";
 import { useQuery } from "@tanstack/react-query";
-import { useWebSocket } from "ahooks";
+import { useLocalStorageState, useWebSocket } from "ahooks";
 import type { User } from "better-auth";
 import { PictureInPicture } from "lucide-react";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
@@ -44,6 +46,8 @@ const Room = ({
   const [users, setUsers] = useState<{
     [userId: string]: User;
   }>({});
+  const [settings] = useLocalStorageState<Setting>("wc_settings");
+  const { start, userState, screenState } = useIdleDetector();
 
   const chatListRef = useRef<HTMLDivElement>(null);
   const notificationListRef = useRef<Notification[]>([]);
@@ -96,7 +100,7 @@ const Room = ({
     }
   };
 
-  const { sendMessage } = useWebSocket(
+  const { sendMessage, readyState } = useWebSocket(
     `${import.meta.env.VITE_API_URL}/room/${id}/ws`,
     {
       onOpen: (_, instance) => {
@@ -209,6 +213,28 @@ const Room = ({
       },
     },
   );
+
+  useEffect(() => {
+    if (settings.showStatus) {
+      start();
+    }
+  }, [settings.showStatus, start]);
+
+  useEffect(() => {
+    if (!settings.showStatus || readyState !== WebSocket.OPEN) {
+      return;
+    }
+
+    sendMessage(
+      gm({
+        type: "userStatus",
+        data: {
+          user: userState,
+          screen: screenState,
+        },
+      }),
+    );
+  }, [screenState, sendMessage, settings.showStatus, userState, readyState]);
 
   useEffect(() => {
     if (isLoading) {

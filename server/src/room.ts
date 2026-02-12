@@ -140,6 +140,21 @@ export class Room extends DurableObject {
           }),
         );
         break;
+      case "userStatus":
+        this.sessions.set(ws, {
+          ...this.sessions.get(ws)!,
+          ...clientMessage.data,
+        });
+        this.broadcast(
+          {
+            type: "roomStats",
+            data: {
+              users: Array.from(this.sessions.values()),
+            },
+          },
+          ws,
+        );
+        break;
     }
   }
 

@@ -1,5 +1,12 @@
+interface UserStatus {
+  user?: "active" | "idle";
+  screen?: "locked" | "unlocked";
+  typing?: boolean;
+}
+
 export interface RoomUser {
   id: string;
+  status?: UserStatus;
 }
 
 export interface RoomStats {
@@ -55,7 +62,8 @@ export type ClientMessage =
       };
     }
   | {
-      type: "typing";
+      type: "userStatus";
+      data: UserStatus;
     };
 
 export type Message = ServerMessage | ClientMessage;

@@ -22,7 +22,7 @@ import {
 } from "@/components/ui/item.tsx";
 import { Skeleton } from "@/components/ui/skeleton.tsx";
 import type { User } from "@/lib/auth-client.ts";
-import { api } from "@/lib/utils.ts";
+import { api, cn } from "@/lib/utils.ts";
 import { PhoneCall } from "lucide-react";
 import { Fragment, useEffect, useState } from "react";
 import type { RoomStats } from "web-chat-share";
@@ -96,16 +96,24 @@ const RoomStateDialog = ({
             <Skeleton className="h-16" />
           </div>
         ) : (
-          <ItemGroup className="-mt-2">
-            {states.users.map(({ id }, index) => (
+          <ItemGroup className="gap-0 -mt-2">
+            {states.users.map(({ id, status }, index) => (
               <Fragment key={id}>
-                <Item className="px-0 py-2">
+                <Item className="p-0">
                   <ItemMedia>
-                    <Avatar>
+                    <Avatar className="relative">
                       <AvatarImage src={users[id]?.image ?? ""} />
                       <AvatarFallback>
                         {users[id]?.name?.slice(0, 2)}
                       </AvatarFallback>
+
+                      <div
+                        className={cn(
+                          "bg-green-500 absolute bottom-0 right-0 size-2 rounded-full",
+                          status?.user === "idle" ? "bg-amber-500" : "",
+                          status?.screen === "locked" ? "bg-neutral-500" : "",
+                        )}
+                      />
                     </Avatar>
                   </ItemMedia>
                   <ItemContent>
@@ -123,7 +131,9 @@ const RoomStateDialog = ({
                     </Button>
                   </ItemActions>
                 </Item>
-                {index !== states.users.length - 1 && <ItemSeparator />}
+                {index !== states.users.length - 1 && (
+                  <ItemSeparator className="h-px" />
+                )}
               </Fragment>
             ))}
           </ItemGroup>

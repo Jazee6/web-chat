@@ -13,7 +13,13 @@ import {
   useSidebar,
 } from "@/components/ui/sidebar";
 import { authClient } from "@/lib/auth-client.ts";
-import { ChevronsUpDown, IdCard, LogOut } from "lucide-react";
+import {
+  ChevronsUpDown,
+  Cog,
+  ExternalLink,
+  IdCard,
+  LogOut,
+} from "lucide-react";
 import { Link } from "react-router";
 
 export function NavUser({
@@ -61,12 +67,21 @@ export function NavUser({
             align="end"
             sideOffset={4}
           >
-            <Link to="https://account.jaze.top/profile" target="_blank">
-              <DropdownMenuItem>
-                <IdCard />
-                Account Settings
-              </DropdownMenuItem>
-            </Link>
+            <DropdownMenuItem render={<Link to="/settings" />}>
+              <Cog />
+              Settings
+            </DropdownMenuItem>
+
+            <DropdownMenuItem
+              render={
+                <Link to="https://account.jaze.top/profile" target="_blank" />
+              }
+            >
+              <IdCard />
+              Account Settings
+              <ExternalLink className="ml-auto" />
+            </DropdownMenuItem>
+
             <DropdownMenuSeparator />
             <DropdownMenuItem onClick={onLogOut}>
               <LogOut />
