@@ -21,7 +21,7 @@ const Settings = () => {
   };
 
   return (
-    <div className="max-w-3xl w-full mx-auto pt-16">
+    <div className="max-w-3xl w-full mx-auto pt-16 px-4">
       <FieldSet>
         <FieldLegend>Settings</FieldLegend>
         <FieldDescription></FieldDescription>

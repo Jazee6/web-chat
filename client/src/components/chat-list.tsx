@@ -111,7 +111,7 @@ const ChatList = ({
 
             <li
               className={cn(
-                "max-w-3xl px-1 mx-auto w-full flex",
+                "max-w-3xl mx-auto w-full flex",
                 isMe ? "justify-end" : "",
               )}
             >
