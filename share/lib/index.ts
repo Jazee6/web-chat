@@ -25,9 +25,6 @@ export type ServerMessage =
       type: "pong";
     }
   | {
-      type: "received";
-    }
-  | {
       type: "roomStats";
       data: RoomStats;
     }

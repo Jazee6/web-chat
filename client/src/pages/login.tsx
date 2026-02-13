@@ -4,16 +4,22 @@ import { Separator } from "@/components/ui/separator.tsx";
 import { Spinner } from "@/components/ui/spinner.tsx";
 import { authClient } from "@/lib/auth-client.ts";
 import { useState } from "react";
+import { useSearchParams } from "react-router";
 
 const Login = () => {
   const [isLoading, setIsLoading] = useState(false);
+  const [searchParams] = useSearchParams();
+
+  const redirectURL = searchParams.get("redirect");
 
   const onSignIn = () => {
     setIsLoading(true);
     authClient.signIn
       .oauth2({
         providerId: "easy-auth",
-        callbackURL: `${window.location.origin}`,
+        callbackURL: redirectURL
+          ? decodeURIComponent(redirectURL)
+          : location.origin,
       })
       .finally(() => setIsLoading(false));
   };

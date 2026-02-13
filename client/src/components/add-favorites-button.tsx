@@ -6,7 +6,15 @@ import { Heart, HeartPlus } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 
-const AddFavoritesButton = ({ id, added }: { id: string; added: boolean }) => {
+const AddFavoritesButton = ({
+  id,
+  added,
+  disabled,
+}: {
+  id: string;
+  added: boolean;
+  disabled?: boolean;
+}) => {
   const [isLoading, setIsLoading] = useState(false);
   const queryClient = useQueryClient();
 
@@ -44,7 +52,7 @@ const AddFavoritesButton = ({ id, added }: { id: string; added: boolean }) => {
       className="rounded-full"
       variant="ghost"
       onClick={onFavorite}
-      disabled={isLoading}
+      disabled={isLoading || disabled}
     >
       {isLoading ? (
         <Spinner />

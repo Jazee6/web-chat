@@ -219,6 +219,7 @@ app.get("/room/:id/info", zValidator("param", getRoomInfoSchema), async (c) => {
         id: roomTable.id,
         name: roomTable.name,
         type: roomTable.type,
+        userId: roomTable.userId,
         createdAt: roomTable.createdAt,
       },
       favorite: favoriteRoomTable.id,

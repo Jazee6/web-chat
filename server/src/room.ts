@@ -21,7 +21,7 @@ export class Room extends DurableObject {
     this.db = drizzle(this.storage, { logger: false });
 
     this.ctx.getWebSockets().forEach((ws) => {
-      let attachment = ws.deserializeAttachment();
+      let attachment = ws.deserializeAttachment() as WsSession;
       if (attachment) {
         this.sessions.set(ws, attachment);
       }
@@ -121,7 +121,6 @@ export class Room extends DurableObject {
           },
           ws,
         );
-        ws.send(gm({ type: "received" }));
         break;
       case "loadHistory":
         const before = clientMessage.data.before;
@@ -141,19 +140,19 @@ export class Room extends DurableObject {
         );
         break;
       case "userStatus":
-        this.sessions.set(ws, {
+        const s = {
           ...this.sessions.get(ws)!,
-          ...clientMessage.data,
-        });
-        this.broadcast(
-          {
-            type: "roomStats",
-            data: {
-              users: Array.from(this.sessions.values()),
-            },
+          status: clientMessage.data,
+        };
+        ws.serializeAttachment(s);
+        this.sessions.set(ws, s);
+
+        this.broadcast({
+          type: "roomStats",
+          data: {
+            users: Array.from(this.sessions.values()),
           },
-          ws,
-        );
+        });
         break;
     }
   }

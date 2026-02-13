@@ -16,7 +16,7 @@ const Layout = () => {
     if (isPending) return;
 
     if (!data?.user) {
-      nav("/login");
+      nav("/login?redirect=" + encodeURIComponent(location.href));
     }
   }, [data?.user, isPending, nav]);
 

@@ -10,7 +10,7 @@ import { useParams } from "react-router";
 
 const Index = () => {
   const { id } = useParams() as { id?: string };
-  const { data, isPending } = useSession();
+  const { data: session, isPending } = useSession();
   const [roomCreateDialogOpen, setRoomCreateDialogOpen] = useState(false);
   const { openPip, isActive, pipWindow, closePip } = useDocPip();
 
@@ -37,7 +37,7 @@ const Index = () => {
     }
   };
 
-  if (isPending || !data?.user) {
+  if (isPending || !session?.user) {
     return (
       <div className="flex justify-center items-center h-full gap-2">
         <Spinner />
@@ -50,7 +50,7 @@ const Index = () => {
     createPortal(
       <Room
         id={id}
-        user={data.user}
+        user={session.user}
         key={id}
         onTogglePip={onTogglePip}
         isPipActive
@@ -58,7 +58,7 @@ const Index = () => {
       pipWindow.document.body,
     )
   ) : (
-    <Room id={id} user={data.user} key={id} onTogglePip={onTogglePip} />
+    <Room id={id} user={session.user} key={id} onTogglePip={onTogglePip} />
   );
 };
 

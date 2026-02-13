@@ -7,7 +7,7 @@ import type { User } from "@/lib/auth-client.ts";
 import { cn, formatChatListTime } from "@/lib/utils.ts";
 import dayjs from "dayjs";
 import { Fragment, useMemo } from "react";
-import type { ChatMessage } from "web-chat-share";
+import type { ChatMessage, RoomStats } from "web-chat-share";
 
 const formatContent = (content: string) => {
   const urlRegex = /(https?:\/\/\S+)/g;
@@ -43,6 +43,7 @@ const ChatList = ({
   className,
   userId,
   users,
+  roomStats,
 }: {
   chats: ChatMessage[];
   className?: string;
@@ -50,6 +51,7 @@ const ChatList = ({
   users: {
     [userId: string]: User;
   };
+  roomStats?: RoomStats;
 }) => {
   const groups = useMemo(() => {
     const res: {
@@ -84,11 +86,20 @@ const ChatList = ({
     return res;
   }, [chats]);
 
+  const roomUserMap = useMemo(() => {
+    const map: { [userId: string]: RoomStats["users"][0] } = {};
+    roomStats?.users.forEach((u) => {
+      map[u.id] = u;
+    });
+    return map;
+  }, [roomStats?.users]);
+
   return (
     <ul className={cn("space-y-4 pb-4", className)}>
       {groups.map((group) => {
         const isMe = group.userId === userId;
         const user = users[group.userId];
+        const roomUser = roomUserMap[group.userId];
 
         return (
           <Fragment key={group.id}>
@@ -114,6 +125,19 @@ const ChatList = ({
                     <AvatarFallback>
                       {user?.name.slice(0, 2) ?? group.userId.slice(0, 2)}
                     </AvatarFallback>
+
+                    <div
+                      className={cn(
+                        "absolute bottom-0 right-0 size-2 rounded-full",
+                        roomUser ? "bg-green-500" : "",
+                        roomUser?.status?.user === "idle"
+                          ? "bg-yellow-500"
+                          : "",
+                        roomUser?.status?.screen === "locked"
+                          ? "bg-neutral-500"
+                          : "",
+                      )}
+                    />
                   </Avatar>
                 )}
 

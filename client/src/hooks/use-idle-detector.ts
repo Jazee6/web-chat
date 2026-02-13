@@ -55,9 +55,6 @@ const useIdleDetector = (threshold: number = 60000) => {
         threshold,
         signal: controller.signal,
       });
-
-      // setUserState(detector.userState);
-      // setScreenState(detector.screenState);
     } catch (err) {
       console.error("Error starting IdleDetector:", err);
     }

@@ -30,6 +30,7 @@ import type { RoomStats } from "web-chat-share";
 export interface RoomInfo {
   name: string;
   isFavorite: number;
+  userId: string;
 }
 
 const RoomStateDialog = ({
@@ -110,7 +111,7 @@ const RoomStateDialog = ({
                       <div
                         className={cn(
                           "bg-green-500 absolute bottom-0 right-0 size-2 rounded-full",
-                          status?.user === "idle" ? "bg-amber-500" : "",
+                          status?.user === "idle" ? "bg-yellow-500" : "",
                           status?.screen === "locked" ? "bg-neutral-500" : "",
                         )}
                       />

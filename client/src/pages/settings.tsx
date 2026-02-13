@@ -7,19 +7,11 @@ import {
   FieldSet,
 } from "@/components/ui/field";
 import { Switch } from "@/components/ui/switch.tsx";
-import { useLocalStorageState } from "ahooks";
+import useSettings from "@/hooks/use-settings.ts";
 import { toast } from "sonner";
 
-export interface Setting {
-  showStatus: boolean;
-}
-
 const Settings = () => {
-  const [settings, setSettings] = useLocalStorageState<Setting>("wc_settings", {
-    defaultValue: {
-      showStatus: false,
-    },
-  });
+  const [settings, setSettings] = useSettings();
 
   const setNewSettings = (newSettings: Partial<typeof settings>) => {
     setSettings({
@@ -44,7 +36,7 @@ const Settings = () => {
 
             <Switch
               id="status"
-              checked={settings.showStatus}
+              checked={settings?.showStatus}
               disabled={!("IdleDetector" in window)}
               onCheckedChange={async (checked) => {
                 if (checked) {

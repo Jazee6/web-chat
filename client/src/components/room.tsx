@@ -1,18 +1,17 @@
+import AddFavoritesButton from "@/components/add-favorites-button.tsx";
+import ChatInput from "@/components/chat-input.tsx";
 import ChatList from "@/components/chat-list.tsx";
 import RoomStateDialog, {
   type RoomInfo,
 } from "@/components/room-state-dialog.tsx";
-
-import AddFavoritesButton from "@/components/add-favorites-button.tsx";
-import ChatInput from "@/components/chat-input.tsx";
 import ShareButton from "@/components/share-button.tsx";
 import { Button } from "@/components/ui/button.tsx";
 import { Spinner } from "@/components/ui/spinner.tsx";
 import useIdleDetector from "@/hooks/use-idle-detector.ts";
+import useSettings from "@/hooks/use-settings.ts";
 import { api, appName, cn, pushNotification } from "@/lib/utils.ts";
-import type { Setting } from "@/pages/settings.tsx";
 import { useQuery } from "@tanstack/react-query";
-import { useLocalStorageState, useWebSocket } from "ahooks";
+import { useWebSocket } from "ahooks";
 import type { User } from "better-auth";
 import { PictureInPicture } from "lucide-react";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
@@ -46,7 +45,7 @@ const Room = ({
   const [users, setUsers] = useState<{
     [userId: string]: User;
   }>({});
-  const [settings] = useLocalStorageState<Setting>("wc_settings");
+  const [settings] = useSettings();
   const { start, userState, screenState } = useIdleDetector();
 
   const chatListRef = useRef<HTMLDivElement>(null);
@@ -215,7 +214,7 @@ const Room = ({
   );
 
   useEffect(() => {
-    if (settings.showStatus) {
+    if (settings?.showStatus) {
       start();
     }
   }, [settings.showStatus, start]);
@@ -329,7 +328,11 @@ const Room = ({
             <div className="max-[1080px]:ml-12">{roomInfo?.name}</div>
 
             <div className="flex items-center">
-              <AddFavoritesButton id={id} added={!!roomInfo?.isFavorite} />
+              <AddFavoritesButton
+                id={id}
+                added={!!roomInfo?.isFavorite}
+                disabled={roomInfo?.userId === user.id}
+              />
               {"documentPictureInPicture" in window && (
                 <Button
                   size="icon-sm"
@@ -381,6 +384,7 @@ const Room = ({
               chats={chats}
               userId={user.id}
               users={users}
+              roomStats={roomStats}
             />
           </div>
         )}

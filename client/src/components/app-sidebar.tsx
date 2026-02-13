@@ -47,6 +47,7 @@ export function AppSidebar({ ...props }: ComponentProps<typeof Sidebar>) {
     },
     initialPageParam: 0,
     getNextPageParam: (_, __, lastPageParam) => lastPageParam + 20,
+    enabled: !!data,
   });
 
   const { data: favoriteRooms, isFetching: isFavoriteRoomsFetching } =
@@ -64,6 +65,7 @@ export function AppSidebar({ ...props }: ComponentProps<typeof Sidebar>) {
       },
       initialPageParam: 0,
       getNextPageParam: (_, __, lastPageParam) => lastPageParam + 20,
+      enabled: !!data,
     });
 
   const roomsData = rooms?.pages.flat() ?? [];
