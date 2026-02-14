@@ -24,7 +24,7 @@ import { Skeleton } from "@/components/ui/skeleton.tsx";
 import type { User } from "@/lib/auth-client.ts";
 import { api, cn } from "@/lib/utils.ts";
 import { PhoneCall } from "lucide-react";
-import { Fragment, useEffect, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import type { RoomStats } from "web-chat-share";
 
 export interface RoomInfo {
@@ -48,13 +48,16 @@ const RoomStateDialog = ({
     [userId: string]: User;
   }>({});
 
-  const states = {
-    ...roomStats,
-    users: roomStats.users.filter(
-      (v, i, a) => a.findIndex((t) => t.id === v.id) === i,
-    ),
-  };
-  const userIds = states.users.map((u) => u.id);
+  const uniqueUsers = useMemo(() => {
+    const seen = new Set();
+    return roomStats.users.filter((user) => {
+      if (seen.has(user.id)) return false;
+      seen.add(user.id);
+      return true;
+    });
+  }, [roomStats.users]);
+
+  const userIds = useMemo(() => uniqueUsers.map((u) => u.id), [uniqueUsers]);
 
   useEffect(() => {
     if (!open) {
@@ -87,10 +90,10 @@ const RoomStateDialog = ({
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Room {roomInfo?.name}</DialogTitle>
-          <DialogDescription></DialogDescription>
+          <DialogDescription className="hidden" />
         </DialogHeader>
 
-        {Object.getOwnPropertyNames(users).length === 0 ? (
+        {uniqueUsers.length > 0 && Object.keys(users).length === 0 ? (
           <div className="space-y-2">
             <Skeleton className="h-16" />
             <Skeleton className="h-16" />
@@ -98,7 +101,7 @@ const RoomStateDialog = ({
           </div>
         ) : (
           <ItemGroup className="gap-0 -mt-2">
-            {states.users.map(({ id, status }, index) => (
+            {uniqueUsers.map(({ id, status }, index) => (
               <Fragment key={id}>
                 <Item className="p-0">
                   <ItemMedia>
@@ -118,7 +121,9 @@ const RoomStateDialog = ({
                     </Avatar>
                   </ItemMedia>
                   <ItemContent>
-                    <ItemTitle>{users[id]?.name}</ItemTitle>
+                    <ItemTitle>
+                      {users[id]?.name ?? <Skeleton className="h-4 w-24" />}
+                    </ItemTitle>
                     {/*<ItemDescription></ItemDescription>*/}
                   </ItemContent>
                   <ItemActions>
@@ -132,7 +137,7 @@ const RoomStateDialog = ({
                     </Button>
                   </ItemActions>
                 </Item>
-                {index !== states.users.length - 1 && (
+                {index !== uniqueUsers.length - 1 && (
                   <ItemSeparator className="h-px" />
                 )}
               </Fragment>

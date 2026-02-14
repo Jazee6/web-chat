@@ -22,6 +22,16 @@ import { favoriteRoomTable, roomTable } from "./lib/schema/d1";
 import { Room } from "./room";
 export { Room } from "./room";
 
+const createAuth = (db: D1Database) => {
+  return betterAuth({
+    ...authConfig,
+    database: drizzleAdapter(drizzle(db), {
+      provider: "sqlite",
+      schema: authSchema,
+    }),
+  });
+};
+
 const app = new Hono<{
   Variables: {
     user: User;
@@ -54,13 +64,7 @@ app.use(
 );
 
 app.use("/room/*", async (c, next) => {
-  const a = betterAuth({
-    ...authConfig,
-    database: drizzleAdapter(drizzle(c.env.web_chat), {
-      provider: "sqlite",
-      schema: authSchema,
-    }),
-  });
+  const a = createAuth(c.env.web_chat);
   const session = await a.api.getSession({ headers: c.req.raw.headers });
   if (!session) {
     throw new HTTPException(401, { message: "Unauthorized" });
@@ -71,13 +75,7 @@ app.use("/room/*", async (c, next) => {
 });
 
 app.on(["POST", "GET"], "/api/auth/*", (c) => {
-  const a = betterAuth({
-    ...authConfig,
-    database: drizzleAdapter(drizzle(c.env.web_chat), {
-      provider: "sqlite",
-      schema: authSchema,
-    }),
-  });
+  const a = createAuth(c.env.web_chat);
   return a.handler(c.req.raw);
 });
 

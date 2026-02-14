@@ -1,6 +1,5 @@
 import type { AlertDialogOptions } from "@/components/alert-dialog.tsx";
 import { clsx, type ClassValue } from "clsx";
-import dayjs from "dayjs";
 import ky from "ky";
 import { toast } from "sonner";
 import { twMerge } from "tailwind-merge";
@@ -58,25 +57,41 @@ export const pushNotification = (
 export const formatChatListTime = (dateStr: string) => {
   if (!dateStr) return "";
 
-  const target = dayjs(dateStr);
-  const now = dayjs();
+  const target = new Date(dateStr);
+  const now = new Date();
 
-  if (target.isSame(now, "day")) {
-    return target.format("HH:mm");
+  const isSameDay = (d1: Date, d2: Date) =>
+    d1.getFullYear() === d2.getFullYear() &&
+    d1.getMonth() === d2.getMonth() &&
+    d1.getDate() === d2.getDate();
+
+  const isSameYear = (d1: Date, d2: Date) =>
+    d1.getFullYear() === d2.getFullYear();
+
+  const pad = (n: number) => n.toString().padStart(2, "0");
+  const formatHHmm = (d: Date) => `${pad(d.getHours())}:${pad(d.getMinutes())}`;
+
+  if (isSameDay(target, now)) {
+    return formatHHmm(target);
   }
 
-  if (target.isSame(now.subtract(1, "day"), "day")) {
-    return "Yesterday " + target.format("HH:mm");
+  const yesterday = new Date(now);
+  yesterday.setDate(now.getDate() - 1);
+  if (isSameDay(target, yesterday)) {
+    return "Yesterday " + formatHHmm(target);
   }
 
-  const diffDays = now.diff(target, "day");
-  if (diffDays < 7 && target.isAfter(now.subtract(7, "day"))) {
-    return target.format("dddd HH:mm");
+  const oneWeekAgo = new Date(now);
+  oneWeekAgo.setDate(now.getDate() - 7);
+
+  if (target > oneWeekAgo) {
+    const dayName = target.toLocaleDateString("en-US", { weekday: "long" });
+    return `${dayName} ${formatHHmm(target)}`;
   }
 
-  if (target.isSame(now, "year")) {
-    return target.format("MM-DD HH:mm");
+  if (isSameYear(target, now)) {
+    return `${pad(target.getMonth() + 1)}-${pad(target.getDate())} ${formatHHmm(target)}`;
   }
 
-  return target.format("YYYY-MM-DD HH:mm");
+  return `${target.getFullYear()}-${pad(target.getMonth() + 1)}-${pad(target.getDate())} ${formatHHmm(target)}`;
 };

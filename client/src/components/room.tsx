@@ -14,7 +14,13 @@ import { useQuery } from "@tanstack/react-query";
 import { useWebSocket } from "ahooks";
 import type { User } from "better-auth";
 import { PictureInPicture } from "lucide-react";
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from "react";
 import { toast } from "sonner";
 import {
   type ChatMessage,
@@ -39,7 +45,6 @@ const Room = ({
   const [isLoading, setIsLoading] = useState(true);
   const [roomStats, setRoomStats] = useState<RoomStats>();
   const [chats, setChats] = useState<ChatMessage[]>([]);
-  const [userIds, setUserIds] = useState<string[]>([]);
   const [hasMore, setHasMore] = useState(true);
   const [roomStateDialogOpen, setRoomStateDialogOpen] = useState(false);
   const [users, setUsers] = useState<{
@@ -54,7 +59,14 @@ const Room = ({
   const oldestChatTimeRef = useRef<string>(null);
   const previousScrollHeightRef = useRef<number>(0);
   const isLoadingHistoryRef = useRef(false);
-  const pingIntervalRef = useRef<number>(null);
+  const pingIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const shouldScrollToBottomRef = useRef(false);
+  const fetchingIdsRef = useRef<Set<string>>(new Set());
+  const usersRef = useRef(users);
+
+  useLayoutEffect(() => {
+    usersRef.current = users;
+  });
 
   const { data: roomInfo } = useQuery({
     queryKey: ["roomInfo", id],
@@ -68,27 +80,30 @@ const Room = ({
         }),
   });
 
-  useEffect(() => {
-    const ids = userIds.filter((id) => !users[id]);
-    if (ids.length === 0) {
-      return;
-    }
+  const fetchMissingUsers = useCallback((ids: string[]) => {
+    const missingIds = ids.filter(
+      (id) => !usersRef.current[id] && !fetchingIdsRef.current.has(id),
+    );
+    if (missingIds.length === 0) return;
+
+    missingIds.forEach((id) => fetchingIdsRef.current.add(id));
 
     api
       .get<User[]>("room/user", {
         searchParams: new URLSearchParams({
-          ids: ids.join(","),
+          ids: missingIds.join(","),
         }),
       })
       .json()
-      .then((i) => {
-        const newUsers: { [userId: string]: User } = {};
-        i.forEach((u) => {
-          newUsers[u.id] = u;
-        });
-        setUsers((prev) => ({ ...prev, ...newUsers }));
+      .then((newUsersList) => {
+        const newUsersMap: Record<string, User> = {};
+        newUsersList.forEach((u) => (newUsersMap[u.id] = u));
+        setUsers((prev) => ({ ...prev, ...newUsersMap }));
+      })
+      .finally(() => {
+        missingIds.forEach((id) => fetchingIdsRef.current.delete(id));
       });
-  }, [userIds, users]);
+  }, []);
 
   const scrollToBottom = (behavior: ScrollBehavior = "smooth") => {
     if (chatListRef.current) {
@@ -114,7 +129,7 @@ const Room = ({
               type: "ping",
             }),
           );
-        }, 1000 * 60);
+        }, 1000 * 45);
       },
       onError: (_, instance) => {
         toast.error("WebSocket error occurred");
@@ -131,7 +146,7 @@ const Room = ({
       onMessage: (message) => {
         const m = JSON.parse(message.data) as ServerMessage;
         switch (m.type) {
-          case "roomStats":
+          case "roomStats": {
             setRoomStats({
               ...m.data,
               users: m.data.users.filter(
@@ -139,6 +154,7 @@ const Room = ({
               ),
             });
             break;
+          }
           case "initHistory":
             setIsLoading(false);
             if (m.data.length < 25) {
@@ -148,8 +164,8 @@ const Room = ({
               return;
             }
             setChats(m.data);
-            setUserIds(Array.from(new Set(m.data.map((c) => c.userId))));
             oldestChatTimeRef.current = m.data[0].createdAt;
+            fetchMissingUsers(m.data.map((c) => c.userId));
             break;
           case "history":
             if (m.data.length < 25) {
@@ -164,48 +180,36 @@ const Room = ({
               isLoadingHistoryRef.current = true;
             }
             setChats((chats) => [...m.data, ...chats]);
-            setUserIds((prev) =>
-              Array.from(new Set([...prev, ...m.data.map((c) => c.userId)])),
-            );
             oldestChatTimeRef.current = m.data[0].createdAt;
+            fetchMissingUsers(m.data.map((c) => c.userId));
             break;
           case "message": {
+            if (chatListRef.current) {
+              const { scrollTop, scrollHeight, clientHeight } =
+                chatListRef.current;
+              shouldScrollToBottomRef.current =
+                scrollTop + clientHeight >= scrollHeight - 50;
+            } else {
+              shouldScrollToBottomRef.current = true;
+            }
+
             setChats((chats) => [...chats, m.data]);
-            setUserIds((prev) => {
-              if (prev.includes(m.data.userId)) return prev;
-              return [...prev, m.data.userId];
-            });
+            fetchMissingUsers([m.data.userId]);
+
             if (document.visibilityState !== "visible") {
+              const u = usersRef.current[m.data.userId];
               document.head
                 .querySelector("link[rel='icon']")
                 ?.setAttribute("href", "/message-circle-more.svg");
 
-              const n = pushNotification(
-                users[m.data.userId]?.name ?? "New Message",
-                {
-                  body: m.data.content,
-                  icon: users[m.data.userId]?.image ?? "/icon.svg",
-                },
-              );
+              const n = pushNotification(u?.name ?? "New Message", {
+                body: m.data.content,
+                icon: u?.image ?? "/icon.svg",
+              });
               if (n) {
                 notificationListRef.current.push(n);
               }
             }
-            setTimeout(() => {
-              if (chatListRef.current) {
-                const { scrollTop, scrollHeight, clientHeight } =
-                  chatListRef.current;
-                const isAtBottom =
-                  scrollTop + clientHeight >= scrollHeight - 50;
-                if (isAtBottom) {
-                  scrollToBottom();
-                }
-              }
-            }, 10);
-            break;
-          }
-          case "pong": {
-            setUsers((u) => ({ ...u }));
             break;
           }
         }
@@ -249,6 +253,9 @@ const Room = ({
       const diff = newScrollHeight - previousScrollHeightRef.current;
       chatListRef.current.scrollTop += diff;
       isLoadingHistoryRef.current = false;
+    } else if (shouldScrollToBottomRef.current) {
+      scrollToBottom();
+      shouldScrollToBottomRef.current = false;
     }
   }, [chats]);
 
@@ -307,6 +314,7 @@ const Room = ({
         data: message,
       }),
     );
+    shouldScrollToBottomRef.current = true;
     setChats((p) => [
       ...p,
       {
@@ -316,8 +324,6 @@ const Room = ({
         createdAt: new Date().toISOString(),
       },
     ]);
-
-    queueMicrotask(() => scrollToBottom());
   };
 
   return (

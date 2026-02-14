@@ -3,6 +3,7 @@ import { desc, lt } from "drizzle-orm";
 import { drizzle, DrizzleSqliteDODatabase } from "drizzle-orm/durable-sqlite";
 import { migrate } from "drizzle-orm/durable-sqlite/migrator";
 import { ClientMessage, gm, Message, RoomUser } from "web-chat-share";
+// @ts-ignore
 import migrations from "../drizzle/room/migrations.js";
 import { messageTable } from "./lib/schema/room";
 import Env = Cloudflare.Env;
@@ -65,24 +66,33 @@ export class Room extends DurableObject {
   }
 
   broadcast(message: Message, excludeWs?: WebSocket) {
-    this.sessions.forEach((attachment, ws) => {
+    this.sessions.forEach((_, ws) => {
       if (ws !== excludeWs) {
         ws.send(gm(message));
       }
     });
   }
 
+  broadcastRoomStats() {
+    this.broadcast({
+      type: "roomStats",
+      data: {
+        users: Array.from(this.sessions.values()),
+      },
+    });
+  }
+
   async webSocketMessage(ws: WebSocket, message: string) {
-    const clientMessage = JSON.parse(message) as ClientMessage;
+    let clientMessage: ClientMessage;
+    try {
+      clientMessage = JSON.parse(message) as ClientMessage;
+    } catch {
+      return;
+    }
 
     switch (clientMessage.type) {
       case "join":
-        this.broadcast({
-          type: "roomStats",
-          data: {
-            users: Array.from(this.sessions.values()),
-          },
-        });
+        this.broadcastRoomStats();
         const history = await this.db
           .select()
           .from(messageTable)
@@ -124,10 +134,14 @@ export class Room extends DurableObject {
         break;
       case "loadHistory":
         const before = clientMessage.data.before;
+        const beforeDate = new Date(before);
+        if (isNaN(beforeDate.getTime())) {
+          return;
+        }
         const moreHistory = await this.db
           .select()
           .from(messageTable)
-          .where(lt(messageTable.createdAt, new Date(before)))
+          .where(lt(messageTable.createdAt, beforeDate))
           .orderBy(desc(messageTable.createdAt))
           .limit(25);
         ws.send(
@@ -140,43 +154,36 @@ export class Room extends DurableObject {
         );
         break;
       case "userStatus":
+        const currentSession = this.sessions.get(ws);
+        if (!currentSession) {
+          ws.close();
+          return;
+        }
         const s = {
-          ...this.sessions.get(ws)!,
+          ...currentSession,
           status: clientMessage.data,
         };
         ws.serializeAttachment(s);
         this.sessions.set(ws, s);
 
-        this.broadcast({
-          type: "roomStats",
-          data: {
-            users: Array.from(this.sessions.values()),
-          },
-        });
+        this.broadcastRoomStats();
         break;
     }
   }
 
   async webSocketClose(ws: WebSocket, code: number, reason: string) {
-    this.sessions.delete(ws);
-    this.broadcast({
-      type: "roomStats",
-      data: {
-        users: Array.from(this.sessions.values()),
-      },
-    });
+    this.handleDisconnect(ws);
     ws.close(code, reason);
   }
 
   async webSocketError(ws: WebSocket) {
-    this.sessions.delete(ws);
-    this.broadcast({
-      type: "roomStats",
-      data: {
-        users: Array.from(this.sessions.values()),
-      },
-    });
+    this.handleDisconnect(ws);
     ws.close();
+  }
+
+  handleDisconnect(ws: WebSocket) {
+    this.sessions.delete(ws);
+    this.broadcastRoomStats();
   }
 
   async clearStorage() {
