@@ -22,9 +22,13 @@ export const getUserInfoSchema = z.object({
 });
 
 export const sendMessageSchema = z.object({
-  message: z.string().trim().min(1).max(2048),
+  message: z.string().trim().max(2048),
 });
 
 export const getRoomInfoSchema = z.object({
   id: z.string().min(1),
+});
+
+export const getPresignedUrlSchema = z.object({
+  count: z.coerce.number().min(1).max(5),
 });

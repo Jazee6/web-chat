@@ -16,8 +16,16 @@ export interface RoomStats {
 export interface ChatMessage {
   id: string;
   userId: string;
+  type: "text" | "image";
   content: string;
   createdAt: string;
+}
+
+export interface UIChatMessage extends ChatMessage {
+  localFiles?: {
+    file: File;
+    isUploading: boolean;
+  }[];
 }
 
 export type ServerMessage =
@@ -50,7 +58,10 @@ export type ClientMessage =
     }
   | {
       type: "send";
-      data: string;
+      data: {
+        type: "text" | "image";
+        content: string;
+      };
     }
   | {
       type: "loadHistory";

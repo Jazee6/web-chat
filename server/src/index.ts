@@ -7,14 +7,17 @@ import { Hono } from "hono";
 import { cache } from "hono/cache";
 import { cors } from "hono/cors";
 import { HTTPException } from "hono/http-exception";
+import { v7 } from "uuid";
 import {
   basePaginationSchema,
   createRoomSchema,
+  getPresignedUrlSchema,
   getRoomInfoSchema,
   getUserInfoSchema,
   roomIdSchema,
 } from "web-chat-share";
 import { authConfig, Session, User } from "./lib/auth";
+import { s3 } from "./lib/s3";
 import * as authSchema from "./lib/schema/auth";
 import { user } from "./lib/schema/auth";
 import * as d1Schema from "./lib/schema/d1";
@@ -179,10 +182,16 @@ app.delete("/room/:id", zValidator("param", roomIdSchema), async (c) => {
   const db = drizzle(c.env.web_chat);
   const room_id = c.env.ROOM.idFromString(id);
   const stub = c.env.ROOM.get(room_id);
-  await stub.clearStorage();
-  await db
+  const deletedRoom = await db
     .delete(roomTable)
-    .where(and(eq(roomTable.id, id), eq(roomTable.userId, user.id)));
+    .where(and(eq(roomTable.id, id), eq(roomTable.userId, user.id)))
+    .returning({ id: roomTable.id });
+
+  if (deletedRoom.length > 0) {
+    await stub.clearStorage();
+    await db.delete(favoriteRoomTable).where(eq(favoriteRoomTable.roomId, id));
+  }
+
   return c.body(null, 204);
 });
 
@@ -275,6 +284,31 @@ app.delete(
         ),
       );
     return c.body(null, 204);
+  },
+);
+
+app.get(
+  "/room/upload/presigned/:count",
+  zValidator("param", getPresignedUrlSchema),
+  async (c) => {
+    const { count } = c.req.valid("param");
+
+    const res = Array.from({ length: count }).map(async () => {
+      const key = v7();
+      const s3_url = new URL(
+        `https://${process.env.CLOUDFLARE_ACCOUNT_ID}.r2.cloudflarestorage.com/web-chat/images/${key}`,
+      );
+      s3_url.searchParams.set("X-Amz-Expires", "60");
+      const signed = await s3.sign(new Request(s3_url, { method: "PUT" }), {
+        aws: { signQuery: true },
+      });
+      return {
+        url: signed.url,
+        key,
+      };
+    });
+
+    return c.json(await Promise.all(res));
   },
 );
 

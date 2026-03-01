@@ -9,10 +9,16 @@ import { Button } from "@/components/ui/button.tsx";
 import { Spinner } from "@/components/ui/spinner.tsx";
 import useIdleDetector from "@/hooks/use-idle-detector.ts";
 import useSettings from "@/hooks/use-settings.ts";
-import { api, appName, pushNotification } from "@/lib/utils.ts";
+import {
+  api,
+  appName,
+  getNotificationBody,
+  pushNotification,
+} from "@/lib/utils.ts";
 import { useQuery } from "@tanstack/react-query";
 import { useWebSocket } from "ahooks";
 import type { User } from "better-auth";
+import ky from "ky";
 import { PictureInPicture } from "lucide-react";
 import {
   useCallback,
@@ -23,11 +29,11 @@ import {
 } from "react";
 import { toast } from "sonner";
 import {
-  type ChatMessage,
   gm,
   type RoomStats,
   sendMessageSchema,
   type ServerMessage,
+  type UIChatMessage,
 } from "web-chat-share";
 import { z } from "zod";
 
@@ -44,7 +50,7 @@ const Room = ({
 }) => {
   const [isLoading, setIsLoading] = useState(true);
   const [roomStats, setRoomStats] = useState<RoomStats>();
-  const [chats, setChats] = useState<ChatMessage[]>([]);
+  const [chats, setChats] = useState<UIChatMessage[]>([]);
   const [hasMore, setHasMore] = useState(true);
   const [roomStateDialogOpen, setRoomStateDialogOpen] = useState(false);
   const [users, setUsers] = useState<{
@@ -81,7 +87,7 @@ const Room = ({
   });
 
   const fetchMissingUsers = useCallback((ids: string[]) => {
-    const missingIds = ids.filter(
+    const missingIds = Array.from(new Set(ids)).filter(
       (id) => !usersRef.current[id] && !fetchingIdsRef.current.has(id),
     );
     if (missingIds.length === 0) return;
@@ -114,7 +120,7 @@ const Room = ({
     }
   };
 
-  const { sendMessage, readyState } = useWebSocket(
+  const { sendMessage, readyState, connect } = useWebSocket(
     `${import.meta.env.VITE_API_URL}/room/${id}/ws`,
     {
       onOpen: (_, instance) => {
@@ -203,7 +209,7 @@ const Room = ({
                 ?.setAttribute("href", "/message-circle-more.svg");
 
               const n = pushNotification(u?.name ?? "New Message", {
-                body: m.data.content,
+                body: getNotificationBody(m.data),
                 icon: u?.image ?? "/icon.svg",
               });
               if (n) {
@@ -293,6 +299,10 @@ const Room = ({
         document.head
           .querySelector("link[rel='icon']")
           ?.setAttribute("href", "/icon.svg");
+
+        if (readyState !== WebSocket.OPEN) {
+          connect();
+        }
       }
     };
 
@@ -300,30 +310,125 @@ const Room = ({
     return () => {
       document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
-  }, []);
+  }, [connect, readyState]);
 
-  const onSend = async (data: z.infer<typeof sendMessageSchema>) => {
+  const onSend = async (
+    data: z.infer<typeof sendMessageSchema> & {
+      images: File[];
+    },
+  ) => {
     if ("Notification" in window && Notification.permission === "default") {
       await Notification.requestPermission();
     }
 
-    const { message } = data;
-    sendMessage(
-      gm({
-        type: "send",
-        data: message,
-      }),
-    );
-    shouldScrollToBottomRef.current = true;
-    setChats((p) => [
-      ...p,
-      {
-        id: crypto.randomUUID(),
-        userId: user.id,
-        content: message,
-        createdAt: new Date().toISOString(),
-      },
-    ]);
+    const { message, images } = data;
+    let hasSetMessage = false;
+
+    if (images.length > 0) {
+      const u = await api
+        .get<
+          {
+            url: string;
+            key: string;
+          }[]
+        >(`room/upload/presigned/${images.length}`)
+        .json();
+
+      const content = JSON.stringify(u.map((u) => u.key));
+      shouldScrollToBottomRef.current = true;
+      const id = crypto.randomUUID();
+      setChats((p) => {
+        const n = [
+          ...p,
+          {
+            id,
+            userId: user.id,
+            type: "image" as const,
+            content,
+            localFiles: images.map((i) => ({
+              file: i,
+              isUploading: true,
+            })),
+            createdAt: new Date().toISOString(),
+          },
+        ];
+
+        if (message) {
+          hasSetMessage = true;
+          n.push({
+            id: crypto.randomUUID(),
+            userId: user.id,
+            type: "text",
+            content: message,
+            createdAt: new Date().toISOString(),
+          });
+        }
+
+        return n;
+      });
+
+      await Promise.all(
+        u.map(async (u, i) => {
+          await ky.put(u.url, {
+            body: images[i],
+          });
+          setChats((p) =>
+            p.map((c) => {
+              if (c.id === id) {
+                return {
+                  ...c,
+                  localFiles: c.localFiles?.map((f, index) => {
+                    if (index === i) {
+                      return {
+                        ...f,
+                        isUploading: false,
+                      };
+                    }
+                    return f;
+                  }),
+                };
+              }
+              return c;
+            }),
+          );
+        }),
+      );
+
+      sendMessage(
+        gm({
+          type: "send",
+          data: {
+            type: "image",
+            content,
+          },
+        }),
+      );
+    }
+
+    if (message) {
+      sendMessage(
+        gm({
+          type: "send",
+          data: {
+            type: "text",
+            content: message,
+          },
+        }),
+      );
+      if (!hasSetMessage) {
+        shouldScrollToBottomRef.current = true;
+        setChats((p) => [
+          ...p,
+          {
+            id: crypto.randomUUID(),
+            userId: user.id,
+            type: "text",
+            content: message,
+            createdAt: new Date().toISOString(),
+          },
+        ]);
+      }
+    }
   };
 
   return (
@@ -376,7 +481,7 @@ const Room = ({
         {chats && (
           <div
             style={{ scrollbarGutter: "stable both-edges" }}
-            className="overflow-y-auto scrollbar pt-16 "
+            className="overflow-y-auto scrollbar pt-16 max-md:px-2"
             ref={chatListRef}
           >
             {hasMore && !isLoading && (

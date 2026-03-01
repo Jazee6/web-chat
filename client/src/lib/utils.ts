@@ -3,6 +3,7 @@ import { clsx, type ClassValue } from "clsx";
 import ky from "ky";
 import { toast } from "sonner";
 import { twMerge } from "tailwind-merge";
+import type { ChatMessage } from "web-chat-share";
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
@@ -55,43 +56,71 @@ export const pushNotification = (
 };
 
 export const formatChatListTime = (dateStr: string) => {
-  if (!dateStr) return "";
-
-  const target = new Date(dateStr);
+  const date = new Date(dateStr);
   const now = new Date();
+  const diff = now.getTime() - date.getTime();
+  const diffDays = Math.floor(diff / (1000 * 60 * 60 * 24));
 
-  const isSameDay = (d1: Date, d2: Date) =>
-    d1.getFullYear() === d2.getFullYear() &&
-    d1.getMonth() === d2.getMonth() &&
-    d1.getDate() === d2.getDate();
-
-  const isSameYear = (d1: Date, d2: Date) =>
-    d1.getFullYear() === d2.getFullYear();
-
-  const pad = (n: number) => n.toString().padStart(2, "0");
-  const formatHHmm = (d: Date) => `${pad(d.getHours())}:${pad(d.getMinutes())}`;
-
-  if (isSameDay(target, now)) {
-    return formatHHmm(target);
+  if (diffDays === 0) {
+    return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
   }
 
-  const yesterday = new Date(now);
-  yesterday.setDate(now.getDate() - 1);
-  if (isSameDay(target, yesterday)) {
-    return "Yesterday " + formatHHmm(target);
+  if (diffDays === 1) {
+    return (
+      "Yesterday " +
+      date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+    );
   }
 
-  const oneWeekAgo = new Date(now);
-  oneWeekAgo.setDate(now.getDate() - 7);
+  return (
+    date.toLocaleDateString() +
+    " " +
+    date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+  );
+};
 
-  if (target > oneWeekAgo) {
-    const dayName = target.toLocaleDateString("en-US", { weekday: "long" });
-    return `${dayName} ${formatHHmm(target)}`;
+export const getNotificationBody = (data: ChatMessage) => {
+  switch (data.type) {
+    case "text":
+      return data.content;
+    case "image": {
+      const length = (JSON.parse(data.content) as string[]).length;
+      return "🖼️(" + length + ")";
+    }
+    default:
+      return data.content;
   }
+};
 
-  if (isSameYear(target, now)) {
-    return `${pad(target.getMonth() + 1)}-${pad(target.getDate())} ${formatHHmm(target)}`;
-  }
-
-  return `${target.getFullYear()}-${pad(target.getMonth() + 1)}-${pad(target.getDate())} ${formatHHmm(target)}`;
+export const convertImageToWebP = async (image: File): Promise<File> => {
+  return new Promise<File>((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => {
+      const canvas = document.createElement("canvas");
+      canvas.width = img.width;
+      canvas.height = img.height;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) {
+        reject(new Error("Could not get canvas context"));
+        return;
+      }
+      ctx.drawImage(img, 0, 0);
+      canvas.toBlob(
+        (blob) => {
+          if (blob) {
+            resolve(
+              new File([blob], image.name.replace(/\.[^/.]+$/, "") + ".webp", {
+                type: "image/webp",
+              }),
+            );
+          } else {
+            reject(new Error("Canvas toBlob returned null"));
+          }
+        },
+        "image/webp",
+        0.9,
+      );
+    };
+    img.src = URL.createObjectURL(image);
+  });
 };

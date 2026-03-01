@@ -7,10 +7,10 @@ export const messageTable = sqliteTable("message", {
     .$defaultFn(() => v7()),
   content: text().notNull(),
   userId: text().notNull(),
-  type: text({ enum: ["text"] })
+  type: text({ enum: ["text", "image"] })
     .notNull()
     .default("text"),
-  createdAt: integer({ mode: "timestamp" })
+  createdAt: integer({ mode: "timestamp_ms" })
     .notNull()
     .$defaultFn(() => new Date()),
 });

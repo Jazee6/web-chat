@@ -3,10 +3,33 @@ import {
   AvatarFallback,
   AvatarImage,
 } from "@/components/ui/avatar.tsx";
+import { Skeleton } from "@/components/ui/skeleton.tsx";
+import { Spinner } from "@/components/ui/spinner.tsx";
 import type { User } from "@/lib/auth-client.ts";
 import { cn, formatChatListTime } from "@/lib/utils.ts";
-import { Fragment, memo, useMemo } from "react";
-import type { ChatMessage, RoomStats } from "web-chat-share";
+import { Fragment, memo, useMemo, useState } from "react";
+import type { RoomStats, UIChatMessage } from "web-chat-share";
+
+const ChatImage = ({ src, alt }: { src: string; alt: string }) => {
+  const [loaded, setLoaded] = useState(false);
+
+  return (
+    <>
+      {!loaded && <Skeleton className="h-36 rounded aspect-video" />}
+      <img
+        src={src}
+        alt={alt}
+        className={cn(
+          "h-36 rounded cursor-zoom-in object-cover",
+          !loaded && "size-0",
+        )}
+        onLoad={() => setLoaded(true)}
+        onError={() => setLoaded(true)}
+        loading="lazy"
+      />
+    </>
+  );
+};
 
 const urlRegex = /(https?:\/\/\S+)/g;
 
@@ -49,7 +72,7 @@ const ChatList = memo(
     users,
     roomStats,
   }: {
-    chats: ChatMessage[];
+    chats: UIChatMessage[];
     className?: string;
     userId: string;
     users: Record<string, User>;
@@ -59,7 +82,7 @@ const ChatList = memo(
       const res: {
         id: string;
         userId: string;
-        messages: ChatMessage[];
+        messages: UIChatMessage[];
         showTime: boolean;
         time: string;
       }[] = [];
@@ -147,7 +170,6 @@ const ChatList = memo(
 
                   <div className="flex flex-col gap-1">
                     {group.messages.map((c) => {
-                      const isEmoji = isEmojiOnly(c.content);
                       return (
                         <div
                           key={c.id}
@@ -156,16 +178,50 @@ const ChatList = memo(
                             isMe ? "flex-row-reverse" : "",
                           )}
                         >
-                          <div
-                            className={cn(
-                              "rounded-md wrap-anywhere whitespace-pre-wrap hover:brightness-75 transition peer",
-                              isEmoji
-                                ? "bg-transparent text-5xl"
-                                : "bg-secondary px-2 py-1",
-                            )}
-                          >
-                            {formatContent(c.content)}
-                          </div>
+                          {c.type === "text" && (
+                            <div
+                              className={cn(
+                                "rounded-md wrap-anywhere whitespace-pre-wrap hover:brightness-75 transition peer",
+                                isEmojiOnly(c.content)
+                                  ? "bg-transparent text-5xl"
+                                  : "bg-secondary px-2 py-1",
+                              )}
+                            >
+                              {formatContent(c.content)}
+                            </div>
+                          )}
+
+                          {c.type === "image" && (
+                            <div className="flex overflow-x-auto scrollbar gap-1">
+                              {c.localFiles?.length
+                                ? c.localFiles.map(
+                                    ({ file, isUploading }, index) => (
+                                      <div className="relative">
+                                        <ChatImage
+                                          key={`${file.name}_${index}`}
+                                          src={URL.createObjectURL(file)}
+                                          alt={file.name}
+                                        />
+
+                                        {isUploading && (
+                                          <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
+                                            <Spinner />
+                                          </div>
+                                        )}
+                                      </div>
+                                    ),
+                                  )
+                                : (JSON.parse(c.content) as string[]).map(
+                                    (i, index) => (
+                                      <ChatImage
+                                        key={i}
+                                        src={`${import.meta.env.VITE_FILE_URL}/images/${i}`}
+                                        alt={`image_${index}`}
+                                      />
+                                    ),
+                                  )}
+                            </div>
+                          )}
 
                           <div className="text-muted text-xs self-end opacity-0 peer-hover:opacity-100 transition-opacity">
                             {new Date(c.createdAt)

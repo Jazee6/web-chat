@@ -113,10 +113,12 @@ export class Room extends DurableObject {
           ws.close();
           return;
         }
+        const { type, content } = clientMessage.data;
         const data = await this.db
           .insert(messageTable)
           .values({
-            content: clientMessage.data,
+            type,
+            content,
             userId: meta.id,
           })
           .returning()
