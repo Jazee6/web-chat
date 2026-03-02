@@ -32,3 +32,7 @@ export const getRoomInfoSchema = z.object({
 export const getPresignedUrlSchema = z.object({
   count: z.coerce.number().min(1).max(5),
 });
+
+export const getImageSchema = z.object({
+  key: z.uuidv7(),
+});

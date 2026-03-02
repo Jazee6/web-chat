@@ -56,27 +56,45 @@ export const pushNotification = (
 };
 
 export const formatChatListTime = (dateStr: string) => {
-  const date = new Date(dateStr);
+  if (!dateStr) return "";
+
+  const target = new Date(dateStr);
   const now = new Date();
-  const diff = now.getTime() - date.getTime();
-  const diffDays = Math.floor(diff / (1000 * 60 * 60 * 24));
 
-  if (diffDays === 0) {
-    return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  const isSameDay = (d1: Date, d2: Date) =>
+    d1.getFullYear() === d2.getFullYear() &&
+    d1.getMonth() === d2.getMonth() &&
+    d1.getDate() === d2.getDate();
+
+  const isSameYear = (d1: Date, d2: Date) =>
+    d1.getFullYear() === d2.getFullYear();
+
+  const pad = (n: number) => n.toString().padStart(2, "0");
+  const formatHHmm = (d: Date) => `${pad(d.getHours())}:${pad(d.getMinutes())}`;
+
+  if (isSameDay(target, now)) {
+    return formatHHmm(target);
   }
 
-  if (diffDays === 1) {
-    return (
-      "Yesterday " +
-      date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
-    );
+  const yesterday = new Date(now);
+  yesterday.setDate(now.getDate() - 1);
+  if (isSameDay(target, yesterday)) {
+    return "Yesterday " + formatHHmm(target);
   }
 
-  return (
-    date.toLocaleDateString() +
-    " " +
-    date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
-  );
+  const oneWeekAgo = new Date(now);
+  oneWeekAgo.setDate(now.getDate() - 7);
+
+  if (target > oneWeekAgo) {
+    const dayName = target.toLocaleDateString("en-US", { weekday: "long" });
+    return `${dayName} ${formatHHmm(target)}`;
+  }
+
+  if (isSameYear(target, now)) {
+    return `${pad(target.getMonth() + 1)}-${pad(target.getDate())} ${formatHHmm(target)}`;
+  }
+
+  return `${target.getFullYear()}-${pad(target.getMonth() + 1)}-${pad(target.getDate())} ${formatHHmm(target)}`;
 };
 
 export const getNotificationBody = (data: ChatMessage) => {

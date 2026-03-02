@@ -8,6 +8,8 @@ import { Spinner } from "@/components/ui/spinner.tsx";
 import type { User } from "@/lib/auth-client.ts";
 import { cn, formatChatListTime } from "@/lib/utils.ts";
 import { Fragment, memo, useMemo, useState } from "react";
+import Zoom from "react-medium-image-zoom";
+import "react-medium-image-zoom/dist/styles.css";
 import type { RoomStats, UIChatMessage } from "web-chat-share";
 
 const ChatImage = ({ src, alt }: { src: string; alt: string }) => {
@@ -16,17 +18,19 @@ const ChatImage = ({ src, alt }: { src: string; alt: string }) => {
   return (
     <>
       {!loaded && <Skeleton className="h-36 rounded aspect-video" />}
-      <img
-        src={src}
-        alt={alt}
-        className={cn(
-          "h-36 rounded cursor-zoom-in object-cover",
-          !loaded && "size-0",
-        )}
-        onLoad={() => setLoaded(true)}
-        onError={() => setLoaded(true)}
-        loading="lazy"
-      />
+      <Zoom classDialog='[&_[data-rmiz-modal-overlay="visible"]]:bg-background/80! [&_[data-rmiz-modal-overlay="visible"]]:backdrop-blur-md'>
+        <img
+          src={src}
+          alt={alt}
+          className={cn(
+            "h-36 rounded cursor-zoom-in object-cover hover:brightness-75",
+            !loaded && "size-0",
+          )}
+          onLoad={() => setLoaded(true)}
+          onError={() => setLoaded(true)}
+          loading="lazy"
+        />
+      </Zoom>
     </>
   );
 };
@@ -122,7 +126,7 @@ const ChatList = memo(
     }, [roomStats?.users]);
 
     return (
-      <ul className={cn("space-y-4 pb-4", className)}>
+      <ul className={cn("space-y-2", className)}>
         {groups.map((group) => {
           const isMe = group.userId === userId;
           const user = users[group.userId];
@@ -215,7 +219,7 @@ const ChatList = memo(
                                     (i, index) => (
                                       <ChatImage
                                         key={i}
-                                        src={`${import.meta.env.VITE_FILE_URL}/images/${i}`}
+                                        src={`${import.meta.env.VITE_API_URL}/room/images/${i}`}
                                         alt={`image_${index}`}
                                       />
                                     ),

@@ -11,6 +11,7 @@ import { v7 } from "uuid";
 import {
   basePaginationSchema,
   createRoomSchema,
+  getImageSchema,
   getPresignedUrlSchema,
   getRoomInfoSchema,
   getUserInfoSchema,
@@ -43,6 +44,7 @@ const app = new Hono<{
   Bindings: {
     web_chat: D1Database;
     ROOM: DurableObjectNamespace<Room>;
+    FILE: R2Bucket;
   };
 }>();
 
@@ -309,6 +311,23 @@ app.get(
     });
 
     return c.json(await Promise.all(res));
+  },
+);
+
+app.get(
+  "/room/images/:key",
+  zValidator("param", getImageSchema),
+  cache({
+    cacheName: "image",
+    cacheControl: "public, max-age=31536000, immutable",
+  }),
+  async (c) => {
+    const { key } = c.req.valid("param");
+    const object = await c.env.FILE.get(`images/${key}`);
+    if (!object) {
+      throw new HTTPException(404, { message: "Image not found" });
+    }
+    return new Response(object.body);
   },
 );
 
