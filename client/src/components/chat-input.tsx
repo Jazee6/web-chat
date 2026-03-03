@@ -6,7 +6,7 @@ import {
   InputGroupTextarea,
 } from "@/components/ui/input-group.tsx";
 import { Spinner } from "@/components/ui/spinner.tsx";
-import { cn, convertImageToWebP } from "@/lib/utils.ts";
+import { cn } from "@/lib/utils.ts";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { ArrowUpIcon, ImagePlus, X } from "lucide-react";
 import { type ChangeEvent, type ClipboardEvent, useRef, useState } from "react";
@@ -44,12 +44,9 @@ const ChatInput = ({
     form.reset();
     setImages([]);
 
-    const convertedImages = await Promise.all(
-      images.map((image) => convertImageToWebP(image)),
-    );
     await onSend({
       message: data.message,
-      images: convertedImages,
+      images: images,
     });
 
     setIsSending(false);

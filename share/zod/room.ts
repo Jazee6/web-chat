@@ -30,9 +30,9 @@ export const getRoomInfoSchema = z.object({
 });
 
 export const getPresignedUrlSchema = z.object({
-  count: z.coerce.number().min(1).max(5),
+  sha256List: z.array(z.hash("sha256")).min(1).max(5),
 });
 
 export const getImageSchema = z.object({
-  key: z.uuidv7(),
+  key: z.hash("sha256"),
 });

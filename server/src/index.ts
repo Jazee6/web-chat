@@ -7,7 +7,6 @@ import { Hono } from "hono";
 import { cache } from "hono/cache";
 import { cors } from "hono/cors";
 import { HTTPException } from "hono/http-exception";
-import { v7 } from "uuid";
 import {
   basePaginationSchema,
   createRoomSchema,
@@ -289,28 +288,37 @@ app.delete(
   },
 );
 
-app.get(
-  "/room/upload/presigned/:count",
-  zValidator("param", getPresignedUrlSchema),
+app.post(
+  "/room/upload/presigned",
+  zValidator("json", getPresignedUrlSchema),
   async (c) => {
-    const { count } = c.req.valid("param");
+    const { sha256List } = c.req.valid("json");
 
-    const res = Array.from({ length: count }).map(async () => {
-      const key = v7();
-      const s3_url = new URL(
-        `https://${process.env.CLOUDFLARE_ACCOUNT_ID}.r2.cloudflarestorage.com/web-chat/images/${key}`,
-      );
-      s3_url.searchParams.set("X-Amz-Expires", "60");
-      const signed = await s3.sign(new Request(s3_url, { method: "PUT" }), {
-        aws: { signQuery: true },
-      });
-      return {
-        url: signed.url,
-        key,
-      };
-    });
+    const res = await Promise.all(
+      sha256List.map(async (hash) => {
+        const key = `images/${hash}`;
+        const object = await c.env.FILE.head(key);
+        if (object) {
+          return {
+            url: null,
+            key: hash,
+          };
+        }
+        const s3_url = new URL(
+          `https://${process.env.CLOUDFLARE_ACCOUNT_ID}.r2.cloudflarestorage.com/web-chat/${key}`,
+        );
+        s3_url.searchParams.set("X-Amz-Expires", "60");
+        const signed = await s3.sign(new Request(s3_url, { method: "PUT" }), {
+          aws: { signQuery: true },
+        });
+        return {
+          url: signed.url,
+          key: hash,
+        };
+      }),
+    );
 
-    return c.json(await Promise.all(res));
+    return c.json(res);
   },
 );
 

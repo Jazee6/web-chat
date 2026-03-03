@@ -12,6 +12,8 @@ import useSettings from "@/hooks/use-settings.ts";
 import {
   api,
   appName,
+  calculateSHA256,
+  convertImageToWebP,
   getNotificationBody,
   pushNotification,
 } from "@/lib/utils.ts";
@@ -321,30 +323,20 @@ const Room = ({
       await Notification.requestPermission();
     }
 
-    const { message, images } = data;
+    const { message, images: rawImages } = data;
     let hasSetMessage = false;
 
-    if (images.length > 0) {
-      const u = await api
-        .get<
-          {
-            url: string;
-            key: string;
-          }[]
-        >(`room/upload/presigned/${images.length}`)
-        .json();
-
-      const content = JSON.stringify(u.map((u) => u.key));
-      shouldScrollToBottomRef.current = true;
-      const id = crypto.randomUUID();
+    if (rawImages.length > 0) {
+      const messageId = crypto.randomUUID();
       setChats((p) => {
+        shouldScrollToBottomRef.current = true;
         const n = [
           ...p,
           {
-            id,
+            id: messageId,
             userId: user.id,
             type: "image" as const,
-            content,
+            content: "",
             localFiles: images.map((i) => ({
               file: i,
               isUploading: true,
@@ -367,14 +359,33 @@ const Room = ({
         return n;
       });
 
+      const images = await Promise.all(
+        rawImages.map((i) => convertImageToWebP(i)),
+      );
+      const sha256List = await Promise.all(images.map(calculateSHA256));
+      const imageContent = JSON.stringify(sha256List);
+
+      const u = await api
+        .post<
+          {
+            url: string | null;
+            key: string;
+          }[]
+        >("room/upload/presigned", {
+          json: { sha256List },
+        })
+        .json();
+
       await Promise.all(
         u.map(async (u, i) => {
-          await ky.put(u.url, {
-            body: images[i],
-          });
+          if (u.url) {
+            await ky.put(u.url, {
+              body: images[i],
+            });
+          }
           setChats((p) =>
             p.map((c) => {
-              if (c.id === id) {
+              if (c.id === messageId) {
                 return {
                   ...c,
                   localFiles: c.localFiles?.map((f, index) => {
@@ -399,7 +410,7 @@ const Room = ({
           type: "send",
           data: {
             type: "image",
-            content,
+            content: imageContent,
           },
         }),
       );

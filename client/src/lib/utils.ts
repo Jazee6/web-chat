@@ -1,5 +1,5 @@
 import type { AlertDialogOptions } from "@/components/alert-dialog.tsx";
-import { clsx, type ClassValue } from "clsx";
+import { type ClassValue, clsx } from "clsx";
 import ky from "ky";
 import { toast } from "sonner";
 import { twMerge } from "tailwind-merge";
@@ -141,4 +141,11 @@ export const convertImageToWebP = async (image: File): Promise<File> => {
     };
     img.src = URL.createObjectURL(image);
   });
+};
+
+export const calculateSHA256 = async (file: File) => {
+  const buffer = await file.arrayBuffer();
+  const hashBuffer = await crypto.subtle.digest("SHA-256", buffer);
+  const hashArray = Array.from(new Uint8Array(hashBuffer));
+  return hashArray.map((b) => b.toString(16).padStart(2, "0")).join("");
 };

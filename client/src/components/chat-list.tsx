@@ -18,7 +18,11 @@ const ChatImage = ({ src, alt }: { src: string; alt: string }) => {
   return (
     <>
       {!loaded && <Skeleton className="h-36 rounded aspect-video" />}
-      <Zoom classDialog='[&_[data-rmiz-modal-overlay="visible"]]:bg-background/80! [&_[data-rmiz-modal-overlay="visible"]]:backdrop-blur-md'>
+      <Zoom
+        classDialog='[&_[data-rmiz-modal-overlay="visible"]]:bg-background/80!
+      [&_[data-rmiz-modal-overlay="visible"]]:backdrop-blur-md
+      [&_[data-rmiz-modal-img]]:rounded'
+      >
         <img
           src={src}
           alt={alt}
