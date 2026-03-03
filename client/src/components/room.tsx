@@ -417,15 +417,6 @@ const Room = ({
     }
 
     if (message) {
-      sendMessage(
-        gm({
-          type: "send",
-          data: {
-            type: "text",
-            content: message,
-          },
-        }),
-      );
       if (!hasSetMessage) {
         shouldScrollToBottomRef.current = true;
         setChats((p) => [
@@ -439,6 +430,16 @@ const Room = ({
           },
         ]);
       }
+
+      sendMessage(
+        gm({
+          type: "send",
+          data: {
+            type: "text",
+            content: message,
+          },
+        }),
+      );
     }
   };
 
