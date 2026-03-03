@@ -337,7 +337,7 @@ const Room = ({
             userId: user.id,
             type: "image" as const,
             content: "",
-            localFiles: images.map((i) => ({
+            localFiles: rawImages.map((i) => ({
               file: i,
               isUploading: true,
             })),

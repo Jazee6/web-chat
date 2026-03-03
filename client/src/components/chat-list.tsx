@@ -17,7 +17,7 @@ const ChatImage = ({ src, alt }: { src: string; alt: string }) => {
 
   return (
     <>
-      {!loaded && <Skeleton className="h-36 rounded aspect-video" />}
+      {!loaded && <Skeleton className="h-36 rounded aspect-square" />}
       <Zoom
         classDialog='[&_[data-rmiz-modal-overlay="visible"]]:bg-background/80!
       [&_[data-rmiz-modal-overlay="visible"]]:backdrop-blur-md
@@ -28,7 +28,7 @@ const ChatImage = ({ src, alt }: { src: string; alt: string }) => {
           alt={alt}
           className={cn(
             "h-36 rounded cursor-zoom-in object-cover hover:brightness-75",
-            !loaded && "size-0",
+            !loaded && "size-0 absolute",
           )}
           onLoad={() => setLoaded(true)}
           onError={() => setLoaded(true)}
@@ -200,7 +200,7 @@ const ChatList = memo(
                           )}
 
                           {c.type === "image" && (
-                            <div className="flex overflow-x-auto scrollbar gap-1">
+                            <div className="flex overflow-x-auto scrollbar gap-1 peer">
                               {c.localFiles?.length
                                 ? c.localFiles.map(
                                     ({ file, isUploading }, index) => (

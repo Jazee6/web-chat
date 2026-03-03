@@ -40,7 +40,7 @@
   ],
   "r2_buckets": [
     {
-      "binding": "FILES",
+      "binding": "FILE",
       "bucket_name": "web-chat"
     }
   ],
