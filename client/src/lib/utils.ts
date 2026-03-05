@@ -151,3 +151,14 @@ export const calculateSHA256 = async (file: File) => {
     .replace(/\//g, "_")
     .replace(/=+$/, "");
 };
+
+export const createPeerConnection = () => {
+  return new RTCPeerConnection({
+    iceServers: [
+      {
+        urls: "stun:stun.cloudflare.com:3478",
+      },
+    ],
+    bundlePolicy: "max-bundle",
+  });
+};

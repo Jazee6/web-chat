@@ -3,7 +3,6 @@ import {
   AvatarFallback,
   AvatarImage,
 } from "@/components/ui/avatar.tsx";
-import { Button } from "@/components/ui/button.tsx";
 import {
   Dialog,
   DialogContent,
@@ -23,7 +22,6 @@ import {
 import { Skeleton } from "@/components/ui/skeleton.tsx";
 import type { User } from "@/lib/auth-client.ts";
 import { api, cn } from "@/lib/utils.ts";
-import { PhoneCall } from "lucide-react";
 import { Fragment, useEffect, useMemo, useState } from "react";
 import type { RoomStats } from "web-chat-share";
 
@@ -126,16 +124,7 @@ const RoomStateDialog = ({
                     </ItemTitle>
                     {/*<ItemDescription></ItemDescription>*/}
                   </ItemContent>
-                  <ItemActions>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="rounded-full"
-                      disabled
-                    >
-                      <PhoneCall />
-                    </Button>
-                  </ItemActions>
+                  <ItemActions></ItemActions>
                 </Item>
                 {index !== uniqueUsers.length - 1 && (
                   <ItemSeparator className="h-px" />

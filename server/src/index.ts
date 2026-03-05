@@ -16,13 +16,14 @@ import {
   getUserInfoSchema,
   roomIdSchema,
 } from "web-chat-share";
-import { authConfig, Session, User } from "./lib/auth";
+import { authConfig } from "./lib/auth";
 import { s3 } from "./lib/s3";
 import * as authSchema from "./lib/schema/auth";
 import { user } from "./lib/schema/auth";
 import * as d1Schema from "./lib/schema/d1";
 import { favoriteRoomTable, roomTable } from "./lib/schema/d1";
-import { Room } from "./room";
+import { HONOInstance } from "./lib/types";
+import realtime from "./realtime";
 export { Room } from "./room";
 
 const createAuth = (db: D1Database) => {
@@ -35,17 +36,7 @@ const createAuth = (db: D1Database) => {
   });
 };
 
-const app = new Hono<{
-  Variables: {
-    user: User;
-    session: Session;
-  };
-  Bindings: {
-    web_chat: D1Database;
-    ROOM: DurableObjectNamespace<Room>;
-    FILE: R2Bucket;
-  };
-}>();
+const app = new Hono<HONOInstance>();
 
 app.onError((err) => {
   if (err instanceof HTTPException) {
@@ -338,5 +329,7 @@ app.get(
     return new Response(object.body);
   },
 );
+
+app.route("/room", realtime);
 
 export default app;

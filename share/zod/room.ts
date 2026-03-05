@@ -39,3 +39,41 @@ export const getPresignedUrlSchema = z.object({
 export const getImageSchema = z.object({
   key: z.hash("sha256", { enc: "base64url" }),
 });
+
+export const sessionIdSchema = z.object({
+  sessionId: z.string().min(1),
+});
+
+export const tracksSchema = z.object({
+  sessionDescription: z
+    .object({
+      sdp: z.string(),
+      type: z.enum(["offer", "answer"]),
+    })
+    .optional(),
+  tracks: z.array(
+    z.object({
+      location: z.enum(["local", "remote"]),
+      mid: z.string(),
+      trackName: z.string(),
+    }),
+  ),
+});
+
+export const renegotiateSchema = z.object({
+  sessionDescription: z.object({
+    sdp: z.string(),
+  }),
+});
+
+export const closeTracksSchema = z.object({
+  tracks: z.array(
+    z.object({
+      mid: z.string(),
+    }),
+  ),
+  sessionDescription: z.object({
+    sdp: z.string(),
+  }),
+  force: z.boolean(),
+});

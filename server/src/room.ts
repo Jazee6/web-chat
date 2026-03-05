@@ -96,7 +96,7 @@ export class Room extends DurableObject {
         const history = await this.db
           .select()
           .from(messageTable)
-          .orderBy(desc(messageTable.createdAt))
+          .orderBy(desc(messageTable.createdAt), desc(messageTable.id))
           .limit(25);
         ws.send(
           gm({
@@ -144,7 +144,7 @@ export class Room extends DurableObject {
           .select()
           .from(messageTable)
           .where(lt(messageTable.createdAt, beforeDate))
-          .orderBy(desc(messageTable.createdAt))
+          .orderBy(desc(messageTable.createdAt), desc(messageTable.id))
           .limit(25);
         ws.send(
           gm({

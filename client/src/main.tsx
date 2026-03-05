@@ -24,7 +24,7 @@ createRoot(document.getElementById("root")!).render(
       </TooltipProvider>
     </QueryClientProvider>
 
-    <Toaster position="top-center" richColors />
+    <Toaster position="top-center" richColors theme="dark" />
     <AlertDialog />
   </StrictMode>,
 );
