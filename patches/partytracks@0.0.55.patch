@@ -1,0 +1,27 @@
+diff --git a/Users/jazee/Documents/Code/web-chat/node_modules/partytracks/.bun-tag-96afec647d7873eb b/.bun-tag-96afec647d7873eb
+new file mode 100644
+index 0000000000000000000000000000000000000000..e69de29bb2d1d6434b8b29ae775ad8c2e48c5391
+diff --git a/dist/client/index.js b/dist/client/index.js
+index c04ce65fefb246e82780a3275257794e8249e636..1fcb2742b01a458a72f8bf5ea118dec10a5cd244 100644
+--- a/dist/client/index.js
++++ b/dist/client/index.js
+@@ -153,7 +153,8 @@ function fromFetch(input, initWithSelector = {}) {
+ 		}
+ 		const perSubscriberInit = {
+ 			...init,
+-			signal
++			signal,
++			credentials: 'include'
+ 		};
+ 		const handleError = (err) => {
+ 			abortable = false;
+@@ -246,7 +247,8 @@ var PartyTracks = class {
+ 		const response = await fetch(path, {
+ 			...requestInit,
+ 			headers,
+-			redirect: "manual"
++			redirect: "manual",
++			credentials: "include"
+ 		});
+ 		if (response.status === 0) {
+ 			alert("Access session is expired, reloading page.");

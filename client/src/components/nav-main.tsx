@@ -21,12 +21,14 @@ import { toast } from "sonner";
 export function NavMain({
   label,
   items,
+  type,
 }: {
   label?: string;
   items: {
     title: string;
     url: string;
   }[];
+  type?: "favorite";
 }) {
   const location = useLocation();
   const queryClient = useQueryClient();
@@ -46,7 +48,7 @@ export function NavMain({
                 {item.title}
               </SidebarMenuButton>
             </NavLink>
-            {location.pathname === item.url && (
+            {location.pathname === item.url && type !== "favorite" && (
               <DropdownMenu>
                 <DropdownMenuTrigger
                   render={

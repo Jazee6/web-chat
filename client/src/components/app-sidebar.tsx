@@ -107,6 +107,7 @@ export function AppSidebar({ ...props }: ComponentProps<typeof Sidebar>) {
                 title: i.name,
                 url: `/room/${i.roomId}`,
               }))}
+              type="favorite"
             />
           )
         )}

@@ -6,6 +6,7 @@ import { drizzle } from "drizzle-orm/d1";
 import { Hono } from "hono";
 import { cache } from "hono/cache";
 import { cors } from "hono/cors";
+import { showRoutes } from "hono/dev";
 import { HTTPException } from "hono/http-exception";
 import {
   basePaginationSchema,
@@ -16,6 +17,7 @@ import {
   getUserInfoSchema,
   roomIdSchema,
 } from "web-chat-share";
+import realtime from "./api/realtime";
 import { authConfig } from "./lib/auth";
 import { s3 } from "./lib/s3";
 import * as authSchema from "./lib/schema/auth";
@@ -23,8 +25,7 @@ import { user } from "./lib/schema/auth";
 import * as d1Schema from "./lib/schema/d1";
 import { favoriteRoomTable, roomTable } from "./lib/schema/d1";
 import { HONOInstance } from "./lib/types";
-import realtime from "./realtime";
-export { Room } from "./room";
+export { Room } from "./do/room";
 
 const createAuth = (db: D1Database) => {
   return betterAuth({
@@ -51,7 +52,7 @@ app.use(
   cors({
     origin: process.env.SITE_URL,
     allowHeaders: ["Content-Type", "Authorization"],
-    allowMethods: ["POST", "GET", "OPTIONS", "DELETE"],
+    allowMethods: ["POST", "GET", "OPTIONS", "DELETE", "PUT", "PATCH"],
     exposeHeaders: ["Content-Length"],
     maxAge: 600,
     credentials: true,
@@ -331,5 +332,7 @@ app.get(
 );
 
 app.route("/room", realtime);
+
+showRoutes(app);
 
 export default app;

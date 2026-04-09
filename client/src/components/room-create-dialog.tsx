@@ -120,6 +120,7 @@ export function RoomCreateDialog({
                         field.onChange(checked ? "public" : "private");
                       }}
                       aria-invalid={fieldState.invalid}
+                      disabled
                     />
                   </Field>
                 )}

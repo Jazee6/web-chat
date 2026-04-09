@@ -1,43 +1,20 @@
 import AddFavoritesButton from "@/components/add-favorites-button.tsx";
+import { AudioStream } from "@/components/audio-stream.tsx";
 import ChatInput from "@/components/chat-input.tsx";
 import ChatList from "@/components/chat-list.tsx";
-import RoomStateDialog, {
-  type RoomInfo,
-} from "@/components/room-state-dialog.tsx";
+import RealtimeProvider from "@/components/realtime-context.tsx";
+import RealtimeLand from "@/components/realtime-land.tsx";
+import RealtimeWindow from "@/components/realtime-window.tsx";
+import RoomStateDialog from "@/components/room-state-dialog.tsx";
 import ShareButton from "@/components/share-button.tsx";
 import { Button } from "@/components/ui/button.tsx";
 import { Spinner } from "@/components/ui/spinner.tsx";
-import useIdleDetector from "@/hooks/use-idle-detector.ts";
-import useSettings from "@/hooks/use-settings.ts";
-import {
-  api,
-  appName,
-  calculateSHA256,
-  convertImageToWebP,
-  getNotificationBody,
-  pushNotification,
-} from "@/lib/utils.ts";
-import { useQuery } from "@tanstack/react-query";
-import { useWebSocket } from "ahooks";
+import { useRoom } from "@/hooks/use-room.ts";
+import { RoomContext } from "@/lib/context.ts";
+import { appName } from "@/lib/utils.ts";
 import type { User } from "better-auth";
-import ky from "ky";
 import { PictureInPicture } from "lucide-react";
-import {
-  useCallback,
-  useEffect,
-  useLayoutEffect,
-  useRef,
-  useState,
-} from "react";
-import { toast } from "sonner";
-import {
-  gm,
-  type RoomStats,
-  sendMessageSchema,
-  type ServerMessage,
-  type UIChatMessage,
-} from "web-chat-share";
-import { z } from "zod";
+import { useRef, useState } from "react";
 
 const Room = ({
   id,
@@ -50,405 +27,51 @@ const Room = ({
   onTogglePip?: () => void;
   isPipActive?: boolean;
 }) => {
-  const [isLoading, setIsLoading] = useState(true);
-  const [roomStats, setRoomStats] = useState<RoomStats>();
-  const [chats, setChats] = useState<UIChatMessage[]>([]);
-  const [hasMore, setHasMore] = useState(true);
   const [roomStateDialogOpen, setRoomStateDialogOpen] = useState(false);
-  const [users, setUsers] = useState<{
-    [userId: string]: User;
-  }>({});
-  const [settings] = useSettings();
-  const { start, userState, screenState } = useIdleDetector();
+  const [realtimeWindowOpen, setRealtimeWindowOpen] = useState(false);
 
   const chatListRef = useRef<HTMLDivElement>(null);
-  const notificationListRef = useRef<Notification[]>([]);
   const loaderRef = useRef<HTMLDivElement>(null);
-  const oldestChatTimeRef = useRef<string>(null);
-  const previousScrollHeightRef = useRef<number>(0);
-  const isLoadingHistoryRef = useRef(false);
-  const pingIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const shouldScrollToBottomRef = useRef(false);
-  const fetchingIdsRef = useRef<Set<string>>(new Set());
-  const usersRef = useRef(users);
 
-  useLayoutEffect(() => {
-    usersRef.current = users;
+  const {
+    ws,
+    isLoading,
+    hasMore,
+    chats,
+    users,
+    roomStats,
+    roomInfo,
+    roomRealtime,
+    realtimeStatus,
+    onSend,
+  } = useRoom({
+    id,
+    user,
+    chatListRef,
+    loaderRef,
   });
 
-  const { data: roomInfo } = useQuery({
-    queryKey: ["roomInfo", id],
-    queryFn: () =>
-      api
-        .get<RoomInfo>(`room/${id}/info`)
-        .json()
-        .then((i) => {
-          document.title = `${i.name} - ${appName}`;
-          return i;
-        }),
-  });
-
-  const fetchMissingUsers = useCallback((ids: string[]) => {
-    const missingIds = Array.from(new Set(ids)).filter(
-      (id) => !usersRef.current[id] && !fetchingIdsRef.current.has(id),
-    );
-    if (missingIds.length === 0) return;
-
-    missingIds.forEach((id) => fetchingIdsRef.current.add(id));
-
-    api
-      .get<User[]>("room/user", {
-        searchParams: new URLSearchParams({
-          ids: missingIds.join(","),
-        }),
-      })
-      .json()
-      .then((newUsersList) => {
-        const newUsersMap: Record<string, User> = {};
-        newUsersList.forEach((u) => (newUsersMap[u.id] = u));
-        setUsers((prev) => ({ ...prev, ...newUsersMap }));
-      })
-      .finally(() => {
-        missingIds.forEach((id) => fetchingIdsRef.current.delete(id));
-      });
-  }, []);
-
-  const scrollToBottom = (behavior: ScrollBehavior = "smooth") => {
-    if (chatListRef.current) {
-      chatListRef.current.scrollTo({
-        top: chatListRef.current.scrollHeight,
-        behavior,
-      });
-    }
+  const onCall = () => {
+    setRealtimeWindowOpen(true);
   };
 
-  const { sendMessage, readyState, connect } = useWebSocket(
-    `${import.meta.env.VITE_API_URL}/room/${id}/ws`,
-    {
-      onOpen: (_, instance) => {
-        instance.send(
-          gm({
-            type: "join",
-          }),
-        );
-        pingIntervalRef.current = setInterval(() => {
-          instance.send(
-            gm({
-              type: "ping",
-            }),
-          );
-        }, 1000 * 45);
-      },
-      onError: (_, instance) => {
-        toast.error("WebSocket error occurred");
-        if (pingIntervalRef.current) {
-          clearInterval(pingIntervalRef.current);
-        }
-        instance.close();
-      },
-      onClose: () => {
-        if (pingIntervalRef.current) {
-          clearInterval(pingIntervalRef.current);
-        }
-      },
-      onMessage: (message) => {
-        const m = JSON.parse(message.data) as ServerMessage;
-        switch (m.type) {
-          case "roomStats": {
-            setRoomStats({
-              ...m.data,
-              users: m.data.users.filter(
-                (v, i, a) => a.findIndex((t) => t.id === v.id) === i,
-              ),
-            });
-            break;
-          }
-          case "initHistory":
-            setIsLoading(false);
-            if (m.data.length < 25) {
-              setHasMore(false);
-            }
-            if (m.data.length === 0) {
-              return;
-            }
-            setChats(m.data);
-            oldestChatTimeRef.current = m.data[0].createdAt;
-            fetchMissingUsers(m.data.map((c) => c.userId));
-            break;
-          case "history":
-            if (m.data.length < 25) {
-              setHasMore(false);
-            }
-            if (m.data.length === 0) {
-              return;
-            }
-            if (chatListRef.current) {
-              previousScrollHeightRef.current =
-                chatListRef.current.scrollHeight;
-              isLoadingHistoryRef.current = true;
-            }
-            setChats((chats) => [...m.data, ...chats]);
-            oldestChatTimeRef.current = m.data[0].createdAt;
-            fetchMissingUsers(m.data.map((c) => c.userId));
-            break;
-          case "message": {
-            if (chatListRef.current) {
-              const { scrollTop, scrollHeight, clientHeight } =
-                chatListRef.current;
-              shouldScrollToBottomRef.current =
-                scrollTop + clientHeight >= scrollHeight - 50;
-            } else {
-              shouldScrollToBottomRef.current = true;
-            }
-
-            setChats((chats) => [...chats, m.data]);
-            fetchMissingUsers([m.data.userId]);
-
-            if (document.visibilityState !== "visible") {
-              const u = usersRef.current[m.data.userId];
-              document.head
-                .querySelector("link[rel='icon']")
-                ?.setAttribute("href", "/message-circle-more.svg");
-
-              const n = pushNotification(u?.name ?? "New Message", {
-                body: getNotificationBody(m.data),
-                icon: u?.image ?? "/icon.svg",
-              });
-              if (n) {
-                notificationListRef.current.push(n);
-              }
-            }
-            break;
-          }
-        }
-      },
-    },
-  );
-
-  useEffect(() => {
-    if (settings?.showStatus) {
-      start();
-    }
-  }, [settings.showStatus, start]);
-
-  useEffect(() => {
-    if (!settings.showStatus || readyState !== WebSocket.OPEN) {
-      return;
-    }
-
-    sendMessage(
-      gm({
-        type: "userStatus",
-        data: {
-          user: userState,
-          screen: screenState,
-        },
-      }),
-    );
-  }, [screenState, sendMessage, settings.showStatus, userState, readyState]);
-
-  useEffect(() => {
-    if (isLoading) {
-      return;
-    }
-
-    scrollToBottom("instant");
-  }, [isLoading]);
-
-  useLayoutEffect(() => {
-    if (isLoadingHistoryRef.current && chatListRef.current) {
-      const newScrollHeight = chatListRef.current.scrollHeight;
-      const diff = newScrollHeight - previousScrollHeightRef.current;
-      chatListRef.current.scrollTop += diff;
-      isLoadingHistoryRef.current = false;
-    } else if (shouldScrollToBottomRef.current) {
-      scrollToBottom();
-      shouldScrollToBottomRef.current = false;
-    }
-  }, [chats]);
-
-  useEffect(() => {
-    if (!loaderRef.current || isLoading) return;
-
-    const observer = new IntersectionObserver((entries) => {
-      entries.forEach((entry) => {
-        if (entry.isIntersecting && oldestChatTimeRef.current) {
-          sendMessage(
-            gm({
-              type: "loadHistory",
-              data: {
-                before: oldestChatTimeRef.current,
-              },
-            }),
-          );
-        }
-      });
-    });
-
-    observer.observe(loaderRef.current);
-
-    return () => {
-      observer.disconnect();
-    };
-  }, [sendMessage, isLoading]);
-
-  useEffect(() => {
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === "visible") {
-        notificationListRef.current.forEach((n) => n.close());
-        notificationListRef.current = [];
-
-        document.head
-          .querySelector("link[rel='icon']")
-          ?.setAttribute("href", "/icon.svg");
-
-        if (readyState !== WebSocket.OPEN) {
-          connect();
-        }
-      }
-    };
-
-    document.addEventListener("visibilitychange", handleVisibilityChange);
-    return () => {
-      document.removeEventListener("visibilitychange", handleVisibilityChange);
-    };
-  }, [connect, readyState]);
-
-  const onSend = async (
-    data: z.infer<typeof sendMessageSchema> & {
-      images: File[];
-    },
-  ) => {
-    if ("Notification" in window && Notification.permission === "default") {
-      await Notification.requestPermission();
-    }
-
-    const { message, images: rawImages } = data;
-    let hasSetMessage = false;
-
-    if (rawImages.length > 0) {
-      const messageId = crypto.randomUUID();
-      setChats((p) => {
-        shouldScrollToBottomRef.current = true;
-        const n = [
-          ...p,
-          {
-            id: messageId,
-            userId: user.id,
-            type: "image" as const,
-            content: "",
-            localFiles: rawImages.map((i) => ({
-              file: i,
-              isUploading: true,
-            })),
-            createdAt: new Date().toISOString(),
-          },
-        ];
-
-        if (message) {
-          hasSetMessage = true;
-          n.push({
-            id: crypto.randomUUID(),
-            userId: user.id,
-            type: "text",
-            content: message,
-            createdAt: new Date().toISOString(),
-          });
-        }
-
-        return n;
-      });
-
-      const images = await Promise.all(
-        rawImages.map((i) => convertImageToWebP(i)),
-      );
-      const sha256List = await Promise.all(images.map(calculateSHA256));
-      const imageContent = JSON.stringify(sha256List);
-
-      const u = await api
-        .post<
-          {
-            url: string | null;
-            key: string;
-          }[]
-        >("room/upload/presigned", {
-          json: { sha256List },
-        })
-        .json();
-
-      await Promise.all(
-        u.map(async (u, i) => {
-          if (u.url) {
-            await ky.put(u.url, {
-              body: images[i],
-            });
-          }
-          setChats((p) =>
-            p.map((c) => {
-              if (c.id === messageId) {
-                return {
-                  ...c,
-                  localFiles: c.localFiles?.map((f, index) => {
-                    if (index === i) {
-                      return {
-                        ...f,
-                        isUploading: false,
-                      };
-                    }
-                    return f;
-                  }),
-                };
-              }
-              return c;
-            }),
-          );
-        }),
-      );
-
-      sendMessage(
-        gm({
-          type: "send",
-          data: {
-            type: "image",
-            content: imageContent,
-          },
-        }),
-      );
-    }
-
-    if (message) {
-      if (!hasSetMessage) {
-        shouldScrollToBottomRef.current = true;
-        setChats((p) => [
-          ...p,
-          {
-            id: crypto.randomUUID(),
-            userId: user.id,
-            type: "text",
-            content: message,
-            createdAt: new Date().toISOString(),
-          },
-        ]);
-      }
-
-      sendMessage(
-        gm({
-          type: "send",
-          data: {
-            type: "text",
-            content: message,
-          },
-        }),
-      );
-    }
-  };
+  const tracksToPull = realtimeStatus
+    .filter((status) => status.sessionId && status.audio?.id)
+    .map((status) => ({
+      sessionId: status.sessionId!,
+      trackName: status.audio!.id,
+    }));
 
   return (
     <>
       <header className="h-16 absolute top-0 w-full z-10 bg-linear-to-b from-background to-transparent rounded-t-xl backdrop-blur-xl">
         {roomStats && (
-          <div className="max-w-3xl max-md:px-2 mx-auto h-full flex items-center justify-between">
+          <div className="max-w-3xl max-md:px-2 mx-auto h-full flex items-center justify-between relative">
             <div className="max-[1080px]:ml-12">{roomInfo?.name}</div>
+
+            <div className="absolute left-1/2 -translate-x-1/2">
+              <RealtimeLand data={roomRealtime} onClick={onCall} />
+            </div>
 
             <div className="flex items-center">
               <AddFavoritesButton
@@ -471,7 +94,7 @@ const Room = ({
               )}
 
               <Button
-                className={"rounded-full size-6 ml-1"}
+                className="rounded-full size-6 ml-1"
                 disabled={isPipActive}
                 onClick={() => setRoomStateDialogOpen(true)}
               >
@@ -512,7 +135,30 @@ const Room = ({
           </div>
         )}
 
-        <ChatInput className="mt-auto" onSend={onSend} isLoading={isLoading} />
+        <ChatInput
+          className="mt-auto"
+          onSend={onSend}
+          isLoading={isLoading}
+          onCall={onCall}
+        />
+
+        {/*<ViewTransition>*/}
+        {realtimeWindowOpen && (
+          <RoomContext
+            value={{
+              ws,
+            }}
+          >
+            <RealtimeProvider>
+              <RealtimeWindow
+                open={realtimeWindowOpen}
+                onOpenChange={setRealtimeWindowOpen}
+              />
+
+              <AudioStream tracksToPull={tracksToPull} />
+            </RealtimeProvider>
+          </RoomContext>
+        )}
       </div>
     </>
   );

@@ -1,5 +1,6 @@
 import {
   Avatar,
+  AvatarBadge,
   AvatarFallback,
   AvatarImage,
 } from "@/components/ui/avatar.tsx";
@@ -20,9 +21,9 @@ import {
   ItemTitle,
 } from "@/components/ui/item.tsx";
 import { Skeleton } from "@/components/ui/skeleton.tsx";
-import type { User } from "@/lib/auth-client.ts";
-import { api, cn } from "@/lib/utils.ts";
-import { Fragment, useEffect, useMemo, useState } from "react";
+import { useUserInfo } from "@/hooks/use-user-info.ts";
+import { cn } from "@/lib/utils.ts";
+import { Fragment, useEffect, useMemo } from "react";
 import type { RoomStats } from "web-chat-share";
 
 export interface RoomInfo {
@@ -42,9 +43,7 @@ const RoomStateDialog = ({
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) => {
-  const [users, setUsers] = useState<{
-    [userId: string]: User;
-  }>({});
+  const { users, fetchMissingUsers } = useUserInfo();
 
   const uniqueUsers = useMemo(() => {
     const seen = new Set();
@@ -58,30 +57,10 @@ const RoomStateDialog = ({
   const userIds = useMemo(() => uniqueUsers.map((u) => u.id), [uniqueUsers]);
 
   useEffect(() => {
-    if (!open) {
-      return;
-    }
+    if (!open) return;
 
-    const ids = userIds.filter((id) => !users[id]);
-    if (ids.length === 0) {
-      return;
-    }
-
-    api
-      .get<User[]>("room/user", {
-        searchParams: new URLSearchParams({
-          ids: ids.join(","),
-        }),
-      })
-      .json()
-      .then((i) => {
-        const newUsers: { [userId: string]: User } = {};
-        i.forEach((u) => {
-          newUsers[u.id] = u;
-        });
-        setUsers((prev) => ({ ...prev, ...newUsers }));
-      });
-  }, [open, userIds, users]);
+    fetchMissingUsers(userIds);
+  }, [open, userIds, fetchMissingUsers]);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -103,15 +82,15 @@ const RoomStateDialog = ({
               <Fragment key={id}>
                 <Item className="p-0">
                   <ItemMedia>
-                    <Avatar className="relative">
+                    <Avatar>
                       <AvatarImage src={users[id]?.image ?? ""} />
                       <AvatarFallback>
                         {users[id]?.name?.slice(0, 2)}
                       </AvatarFallback>
 
-                      <div
+                      <AvatarBadge
                         className={cn(
-                          "bg-green-500 absolute bottom-0 right-0 size-2 rounded-full",
+                          "size-1.5! bg-green-500",
                           status?.user === "idle" ? "bg-yellow-500" : "",
                           status?.screen === "locked" ? "bg-neutral-500" : "",
                         )}

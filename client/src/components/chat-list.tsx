@@ -1,5 +1,6 @@
 import {
   Avatar,
+  AvatarBadge,
   AvatarFallback,
   AvatarImage,
 } from "@/components/ui/avatar.tsx";
@@ -161,18 +162,20 @@ const ChatList = memo(
                         {user?.name.slice(0, 2) ?? group.userId.slice(0, 2)}
                       </AvatarFallback>
 
-                      <div
-                        className={cn(
-                          "absolute bottom-0 right-0 size-2 rounded-full",
-                          roomUser ? "bg-green-500" : "",
-                          roomUser?.status?.user === "idle"
-                            ? "bg-yellow-500"
-                            : "",
-                          roomUser?.status?.screen === "locked"
-                            ? "bg-neutral-500"
-                            : "",
-                        )}
-                      />
+                      {roomUser && (
+                        <AvatarBadge
+                          className={cn(
+                            "size-1.5!",
+                            roomUser ? "bg-green-500" : "",
+                            roomUser?.status?.user === "idle"
+                              ? "bg-yellow-500"
+                              : "",
+                            roomUser?.status?.screen === "locked"
+                              ? "bg-neutral-500"
+                              : "",
+                          )}
+                        />
+                      )}
                     </Avatar>
                   )}
 

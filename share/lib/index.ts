@@ -28,6 +28,22 @@ export interface UIChatMessage extends ChatMessage {
   }[];
 }
 
+export interface RealtimeStatus {
+  sessionId?: string;
+  audio?: {
+    id: string;
+    enabled?: boolean;
+  };
+}
+
+export interface ServerRealtimeStatus extends RealtimeStatus {
+  userId: string;
+}
+
+export interface RoomRealtime {
+  total: number;
+}
+
 export type ServerMessage =
   | {
       type: "pong";
@@ -47,6 +63,30 @@ export type ServerMessage =
   | {
       type: "message";
       data: ChatMessage;
+    }
+  | {
+      type: "realtimeStatus";
+      data: ServerRealtimeStatus[];
+    }
+  | {
+      type: "realtimeUpdate";
+      data: ServerRealtimeStatus;
+    }
+  | {
+      type: "realtimeJoin";
+      data: {
+        userId: string;
+      };
+    }
+  | {
+      type: "realtimeLeave";
+      data: {
+        userId: string;
+      };
+    }
+  | {
+      type: "roomRealtime";
+      data: RoomRealtime;
     };
 
 export type ClientMessage =
@@ -72,6 +112,16 @@ export type ClientMessage =
   | {
       type: "userStatus";
       data: UserStatus;
+    }
+  | {
+      type: "realtimeJoin";
+    }
+  | {
+      type: "realtimeUpdate";
+      data: RealtimeStatus;
+    }
+  | {
+      type: "realtimeLeave";
     };
 
 export type Message = ServerMessage | ClientMessage;

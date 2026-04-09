@@ -8,7 +8,7 @@ import {
 import { Spinner } from "@/components/ui/spinner.tsx";
 import { cn } from "@/lib/utils.ts";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { ArrowUpIcon, ImagePlus, X } from "lucide-react";
+import { ArrowUpIcon, ImagePlus, PhoneCall, X } from "lucide-react";
 import { type ChangeEvent, type ClipboardEvent, useRef, useState } from "react";
 import { Controller, useForm } from "react-hook-form";
 import { toast } from "sonner";
@@ -17,6 +17,7 @@ import { z } from "zod";
 
 const ChatInput = ({
   onSend,
+  onCall,
   isLoading,
   className,
 }: {
@@ -25,6 +26,7 @@ const ChatInput = ({
       images: File[];
     },
   ) => Promise<void>;
+  onCall?: () => void;
   isLoading: boolean;
   className?: string;
 }) => {
@@ -187,6 +189,14 @@ const ChatInput = ({
                   <ImagePlus />
                   <span className="sr-only">Image</span>
                 </InputGroupButton>
+
+                {onCall && (
+                  <InputGroupButton size="icon-xs" onClick={onCall}>
+                    <PhoneCall />
+                    <span className="sr-only">Call</span>
+                  </InputGroupButton>
+                )}
+
                 <InputGroupButton
                   className="ml-auto rounded-full"
                   variant="default"
