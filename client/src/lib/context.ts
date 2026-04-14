@@ -1,10 +1,9 @@
 import type { UserMedia } from "@/hooks/use-user-media.ts";
-import type ReconnectingWebSocket from "partysocket/ws";
 import type { PartyTracks } from "partytracks/client";
 import { createContext, useContext } from "react";
 
 interface RoomContextType {
-  ws?: ReconnectingWebSocket;
+  ws?: WebSocket;
 }
 
 export const RoomContext = createContext<RoomContextType | undefined>(

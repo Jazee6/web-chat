@@ -20,7 +20,6 @@
     "clsx": "^2.1.1",
     "ky": "^2.0.0",
     "lucide-react": "^1.8.0",
-    "partysocket": "^1.1.16",
     "partytracks": "^0.0.55",
     "react": "^19.2.5",
     "react-dom": "^19.2.5",
