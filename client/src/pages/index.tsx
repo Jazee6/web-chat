@@ -2,7 +2,8 @@ import { RoomCreateDialog } from "@/components/room-create-dialog.tsx";
 import Room from "@/components/room.tsx";
 import { Button } from "@/components/ui/button.tsx";
 import { Spinner } from "@/components/ui/spinner.tsx";
-import { useDocPip } from "@/components/use-doc-pip.ts";
+import { UserInfoProvider } from "@/components/user-info.tsx";
+import { useDocPip } from "@/hooks/use-doc-pip.ts";
 import { useSession } from "@/lib/auth-client.ts";
 import { useState } from "react";
 import { createPortal } from "react-dom";
@@ -46,19 +47,23 @@ const Index = () => {
     );
   }
 
-  return isActive && pipWindow ? (
-    createPortal(
-      <Room
-        id={id}
-        user={session.user}
-        key={id}
-        onTogglePip={onTogglePip}
-        isPipActive
-      />,
-      pipWindow.document.body,
-    )
-  ) : (
-    <Room id={id} user={session.user} key={id} onTogglePip={onTogglePip} />
+  return (
+    <UserInfoProvider>
+      {isActive && pipWindow ? (
+        createPortal(
+          <Room
+            id={id}
+            user={session.user}
+            key={id}
+            onTogglePip={onTogglePip}
+            isPipActive
+          />,
+          pipWindow.document.body,
+        )
+      ) : (
+        <Room id={id} user={session.user} key={id} onTogglePip={onTogglePip} />
+      )}
+    </UserInfoProvider>
   );
 };
 

@@ -70,48 +70,40 @@ const RoomStateDialog = ({
           <DialogDescription className="hidden" />
         </DialogHeader>
 
-        {uniqueUsers.length > 0 && Object.keys(users).length === 0 ? (
-          <div className="space-y-2">
-            <Skeleton className="h-16" />
-            <Skeleton className="h-16" />
-            <Skeleton className="h-16" />
-          </div>
-        ) : (
-          <ItemGroup className="gap-0 -mt-2">
-            {uniqueUsers.map(({ id, status }, index) => (
-              <Fragment key={id}>
-                <Item className="p-0">
-                  <ItemMedia>
-                    <Avatar>
-                      <AvatarImage src={users[id]?.image ?? ""} />
-                      <AvatarFallback>
-                        {users[id]?.name?.slice(0, 2)}
-                      </AvatarFallback>
+        <ItemGroup className="gap-0 -mt-2">
+          {uniqueUsers.map(({ id, status }, index) => (
+            <Fragment key={id}>
+              <Item className="p-0">
+                <ItemMedia>
+                  <Avatar>
+                    <AvatarImage src={users[id]?.image ?? ""} />
+                    <AvatarFallback>
+                      {users[id]?.name?.slice(0, 2)}
+                    </AvatarFallback>
 
-                      <AvatarBadge
-                        className={cn(
-                          "size-1.5! bg-green-500",
-                          status?.user === "idle" ? "bg-yellow-500" : "",
-                          status?.screen === "locked" ? "bg-neutral-500" : "",
-                        )}
-                      />
-                    </Avatar>
-                  </ItemMedia>
-                  <ItemContent>
-                    <ItemTitle>
-                      {users[id]?.name ?? <Skeleton className="h-4 w-24" />}
-                    </ItemTitle>
-                    {/*<ItemDescription></ItemDescription>*/}
-                  </ItemContent>
-                  <ItemActions></ItemActions>
-                </Item>
-                {index !== uniqueUsers.length - 1 && (
-                  <ItemSeparator className="h-px" />
-                )}
-              </Fragment>
-            ))}
-          </ItemGroup>
-        )}
+                    <AvatarBadge
+                      className={cn(
+                        "size-1.5! bg-green-500",
+                        status?.user === "idle" ? "bg-yellow-500" : "",
+                        status?.screen === "locked" ? "bg-neutral-500" : "",
+                      )}
+                    />
+                  </Avatar>
+                </ItemMedia>
+                <ItemContent>
+                  <ItemTitle>
+                    {users[id]?.name ?? <Skeleton className="h-4 w-24" />}
+                  </ItemTitle>
+                  {/*<ItemDescription></ItemDescription>*/}
+                </ItemContent>
+                <ItemActions></ItemActions>
+              </Item>
+              {index !== uniqueUsers.length - 1 && (
+                <ItemSeparator className="h-px" />
+              )}
+            </Fragment>
+          ))}
+        </ItemGroup>
       </DialogContent>
     </Dialog>
   );

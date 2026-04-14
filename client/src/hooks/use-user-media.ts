@@ -14,7 +14,14 @@ export const errorMessageMap = {
 
 type UserMediaError = keyof typeof errorMessageMap;
 
-export const mic = getMic({ broadcasting: true });
+export const mic = getMic({
+  broadcasting: true,
+  constraints: {
+    echoCancellation: true,
+    noiseSuppression: true,
+    autoGainControl: true,
+  },
+});
 export const camera = getCamera();
 export const screenShare = getScreenshare({ audio: false });
 

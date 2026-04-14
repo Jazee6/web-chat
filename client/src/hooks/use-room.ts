@@ -11,9 +11,9 @@ import {
   pushNotification,
 } from "@/lib/utils.ts";
 import { useQuery } from "@tanstack/react-query";
-import { useWebSocket } from "ahooks";
 import type { User } from "better-auth";
 import ky from "ky";
+import { useWebSocket } from "partysocket/react";
 import {
   type RefObject,
   useEffect,
@@ -86,134 +86,121 @@ export function useRoom({
     },
   );
 
-  const {
-    sendMessage,
-    readyState,
-    connect,
-    webSocketIns: ws,
-  } = useWebSocket(`${import.meta.env.VITE_API_URL}/room/${id}/ws`, {
-    onOpen: (_, instance) => {
-      instance.send(
-        gm({
-          type: "join",
-        }),
-      );
-      pingIntervalRef.current = setInterval(() => {
-        instance.send(
+  const ws = useWebSocket(
+    `${import.meta.env.VITE_API_URL}/room/${id}/ws`,
+    undefined,
+    {
+      maxRetries: 10,
+      onOpen: () => {
+        ws.send(
           gm({
-            type: "ping",
+            type: "join",
           }),
         );
-      }, 1000 * 45);
-    },
-    onError: (_, instance) => {
-      if (pingIntervalRef.current) {
-        clearInterval(pingIntervalRef.current);
-      }
-      instance.close();
-    },
-    onClose: () => {
-      if (pingIntervalRef.current) {
-        clearInterval(pingIntervalRef.current);
-      }
-    },
-    onMessage: (message) => {
-      const m = JSON.parse(message.data) as ServerMessage;
-      switch (m.type) {
-        case "roomStats": {
-          setRoomStats({
-            ...m.data,
-            users: m.data.users.filter(
-              (v, i, a) => a.findIndex((t) => t.id === v.id) === i,
-            ),
-          });
-          break;
-        }
-        case "initHistory": {
-          setIsLoading(false);
-          if (m.data.length < 25) {
-            setHasMore(false);
-          }
-          if (m.data.length === 0) {
-            return;
-          }
-          setChats(m.data);
-          oldestChatTimeRef.current = m.data[0].createdAt;
-          fetchMissingUsers(m.data.map((c) => c.userId));
-          break;
-        }
-        case "history": {
-          if (m.data.length < 25) {
-            setHasMore(false);
-          }
-          if (m.data.length === 0) {
-            return;
-          }
-          if (chatListRef.current) {
-            previousScrollHeightRef.current = chatListRef.current.scrollHeight;
-            isLoadingHistoryRef.current = true;
-          }
-          setChats((chats) => [...m.data, ...chats]);
-          oldestChatTimeRef.current = m.data[0].createdAt;
-          fetchMissingUsers(m.data.map((c) => c.userId));
-          break;
-        }
-        case "message": {
-          if (chatListRef.current) {
-            const { scrollTop, scrollHeight, clientHeight } =
-              chatListRef.current;
-            shouldScrollToBottomRef.current =
-              scrollTop + clientHeight >= scrollHeight - 50;
-          } else {
-            shouldScrollToBottomRef.current = true;
-          }
-
-          setChats((chats) => [...chats, m.data]);
-          fetchMissingUsers([m.data.userId]);
-
-          if (document.visibilityState !== "visible") {
-            const u = users[m.data.userId];
-            document.head
-              .querySelector("link[rel='icon']")
-              ?.setAttribute("href", "/message-circle-more.svg");
-
-            const n = pushNotification(u?.name ?? "New Message", {
-              body: getNotificationBody(m.data),
-              icon: u?.image ?? "/icon.svg",
-            });
-            if (n) {
-              notificationListRef.current.push(n);
-            }
-          }
-          break;
-        }
-        case "roomRealtime": {
-          setRoomRealtime(m.data);
-          break;
-        }
-        case "realtimeStatus": {
-          setRealtimeStatus(m.data);
-          break;
-        }
-        case "realtimeUpdate": {
-          setRealtimeStatus((p) =>
-            p.map((u) =>
-              u.userId === m.data.userId ? { ...u, ...m.data } : u,
-            ),
+        pingIntervalRef.current = setInterval(() => {
+          ws.send(
+            gm({
+              type: "ping",
+            }),
           );
-          break;
+        }, 1000 * 45);
+      },
+      onError: () => {
+        if (pingIntervalRef.current) {
+          clearInterval(pingIntervalRef.current);
         }
-        case "realtimeJoin": {
-          setRealtimeStatus((p) => [...p, m.data]);
-          break;
+        ws.close();
+      },
+      onClose: () => {
+        if (pingIntervalRef.current) {
+          clearInterval(pingIntervalRef.current);
         }
-        case "realtimeLeave": {
-          setRealtimeStatus((p) => p.filter((u) => u.userId !== m.data.userId));
-          break;
+      },
+      onMessage: (event) => {
+        const m = JSON.parse(event.data) as ServerMessage;
+        switch (m.type) {
+          case "roomStats": {
+            setRoomStats({
+              ...m.data,
+              users: m.data.users.filter(
+                (v, i, a) => a.findIndex((t) => t.id === v.id) === i,
+              ),
+            });
+            break;
+          }
+          case "initHistory": {
+            setIsLoading(false);
+            if (m.data.length < 25) {
+              setHasMore(false);
+            }
+            if (m.data.length === 0) {
+              return;
+            }
+            setChats(m.data);
+            oldestChatTimeRef.current = m.data[0].createdAt;
+            fetchMissingUsers(m.data.map((c) => c.userId));
+            break;
+          }
+          case "history": {
+            if (m.data.length < 25) {
+              setHasMore(false);
+            }
+            if (m.data.length === 0) {
+              return;
+            }
+            if (chatListRef.current) {
+              previousScrollHeightRef.current =
+                chatListRef.current.scrollHeight;
+              isLoadingHistoryRef.current = true;
+            }
+            setChats((chats) => [...m.data, ...chats]);
+            oldestChatTimeRef.current = m.data[0].createdAt;
+            fetchMissingUsers(m.data.map((c) => c.userId));
+            break;
+          }
+          case "message": {
+            if (chatListRef.current) {
+              const { scrollTop, scrollHeight, clientHeight } =
+                chatListRef.current;
+              shouldScrollToBottomRef.current =
+                scrollTop + clientHeight >= scrollHeight - 50;
+            } else {
+              shouldScrollToBottomRef.current = true;
+            }
+
+            setChats((chats) => [...chats, m.data]);
+            fetchMissingUsers([m.data.userId]);
+
+            if (document.visibilityState !== "visible") {
+              const u = users[m.data.userId];
+              document.head
+                .querySelector("link[rel='icon']")
+                ?.setAttribute("href", "/message-circle-more.svg");
+
+              const n = pushNotification(u?.name ?? "New Message", {
+                body: getNotificationBody(m.data),
+                icon: u?.image ?? "/icon.svg",
+              });
+              if (n) {
+                notificationListRef.current.push(n);
+              }
+            }
+            break;
+          }
+          case "roomRealtime": {
+            setRoomRealtime(m.data);
+            break;
+          }
+          case "realtimeStatus": {
+            setRealtimeStatus(m.data);
+            break;
+          }
         }
-      }
+      },
     },
-  });
+  );
+
+  const { readyState, send, reconnect } = ws;
 
   useEffect(() => {
     if (settings?.showStatus) {
@@ -226,7 +213,7 @@ export function useRoom({
       return;
     }
 
-    sendMessage(
+    send(
       gm({
         type: "userStatus",
         data: {
@@ -235,7 +222,7 @@ export function useRoom({
         },
       }),
     );
-  }, [screenState, sendMessage, settings.showStatus, userState, readyState]);
+  }, [screenState, send, settings.showStatus, userState, readyState]);
 
   useEffect(() => {
     if (isLoading) {
@@ -263,7 +250,7 @@ export function useRoom({
     const observer = new IntersectionObserver((entries) => {
       entries.forEach((entry) => {
         if (entry.isIntersecting && oldestChatTimeRef.current) {
-          sendMessage(
+          send(
             gm({
               type: "loadHistory",
               data: {
@@ -280,7 +267,7 @@ export function useRoom({
     return () => {
       observer.disconnect();
     };
-  }, [sendMessage, isLoading, loaderRef]);
+  }, [send, isLoading, loaderRef]);
 
   useEffect(() => {
     const handleVisibilityChange = () => {
@@ -293,7 +280,7 @@ export function useRoom({
           ?.setAttribute("href", "/icon.svg");
 
         if (readyState !== WebSocket.OPEN) {
-          connect();
+          reconnect();
         }
       }
     };
@@ -302,7 +289,7 @@ export function useRoom({
     return () => {
       document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
-  }, [connect, readyState]);
+  }, [reconnect, readyState]);
 
   const onSend = async (
     data: z.infer<typeof sendMessageSchema> & {
@@ -395,7 +382,7 @@ export function useRoom({
         }),
       );
 
-      sendMessage(
+      send(
         gm({
           type: "send",
           data: {
@@ -421,7 +408,7 @@ export function useRoom({
         ]);
       }
 
-      sendMessage(
+      send(
         gm({
           type: "send",
           data: {

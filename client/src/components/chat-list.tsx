@@ -207,7 +207,7 @@ const ChatList = memo(
                               {c.localFiles?.length
                                 ? c.localFiles.map(
                                     ({ file, isUploading }, index) => (
-                                      <div className="relative">
+                                      <div className="relative shrink-0">
                                         <ChatImage
                                           key={`${file.name}_${index}`}
                                           src={URL.createObjectURL(file)}

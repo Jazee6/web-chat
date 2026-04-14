@@ -12,10 +12,10 @@ export function cn(...inputs: ClassValue[]) {
 export const appName = "Web Chat";
 
 export const api = ky.extend({
-  prefixUrl: import.meta.env.VITE_API_URL,
+  prefix: import.meta.env.VITE_API_URL,
   hooks: {
     afterResponse: [
-      async (_, __, response) => {
+      async ({ response }) => {
         if (response.status === 401) {
           location.href = "/login";
           return;
@@ -150,15 +150,4 @@ export const calculateSHA256 = async (file: File) => {
     .replace(/\+/g, "-")
     .replace(/\//g, "_")
     .replace(/=+$/, "");
-};
-
-export const createPeerConnection = () => {
-  return new RTCPeerConnection({
-    iceServers: [
-      {
-        urls: "stun:stun.cloudflare.com:3478",
-      },
-    ],
-    bundlePolicy: "max-bundle",
-  });
 };

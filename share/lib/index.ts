@@ -42,6 +42,7 @@ export interface ServerRealtimeStatus extends RealtimeStatus {
 
 export interface RoomRealtime {
   total: number;
+  userIds: string[];
 }
 
 export type ServerMessage =
@@ -67,22 +68,6 @@ export type ServerMessage =
   | {
       type: "realtimeStatus";
       data: ServerRealtimeStatus[];
-    }
-  | {
-      type: "realtimeUpdate";
-      data: ServerRealtimeStatus;
-    }
-  | {
-      type: "realtimeJoin";
-      data: {
-        userId: string;
-      };
-    }
-  | {
-      type: "realtimeLeave";
-      data: {
-        userId: string;
-      };
     }
   | {
       type: "roomRealtime";

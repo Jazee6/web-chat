@@ -22,25 +22,21 @@ interface WsAttachment {
 }
 
 export class Room extends DurableObject {
-  sessions: Map<WebSocket, WsSession>;
-  realtime: Map<WebSocket, ServerRealtimeStatus>;
+  sessions = new Map<WebSocket, WsSession>();
+  realtime = new Map<WebSocket, ServerRealtimeStatus>();
   storage: DurableObjectStorage;
   db: DrizzleSqliteDODatabase;
 
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
-    this.sessions = new Map();
-    this.realtime = new Map();
     this.storage = ctx.storage;
     this.db = drizzle(this.storage, { logger: false });
 
     this.ctx.getWebSockets().forEach((ws) => {
-      let attachment = ws.deserializeAttachment() as WsAttachment;
+      const attachment = ws.deserializeAttachment() as WsAttachment;
       if (attachment) {
         this.sessions.set(ws, attachment.session);
-        if (attachment.realtime) {
-          this.realtime.set(ws, attachment.realtime);
-        }
+        if (attachment.realtime) this.realtime.set(ws, attachment.realtime);
       }
     });
 
@@ -51,45 +47,46 @@ export class Room extends DurableObject {
       ),
     );
 
-    ctx
-      .blockConcurrencyWhile(async () => {
-        await this._migrate();
-      })
-      .then();
+    ctx.blockConcurrencyWhile(async () => migrate(this.db, migrations)).then();
   }
 
-  async _migrate() {
-    await migrate(this.db, migrations);
-  }
+  storeSession = (ws: WebSocket, session: WsSession) => {
+    ws.serializeAttachment({
+      ...ws.deserializeAttachment(),
+      session,
+    });
+    this.sessions.set(ws, session);
+  };
+
+  storeRealtime = (ws: WebSocket, realtime?: ServerRealtimeStatus) => {
+    ws.serializeAttachment({
+      ...ws.deserializeAttachment(),
+      realtime,
+    });
+    if (!realtime) {
+      this.realtime.delete(ws);
+      return;
+    }
+    this.realtime.set(ws, realtime);
+  };
 
   async fetch(request: Request): Promise<Response> {
-    const url = new URL(request.url);
-    const userId = url.searchParams.get("user_id");
-    if (!userId) {
-      return new Response(null, { status: 400 });
-    }
+    const userId = new URL(request.url).searchParams.get("user_id");
+    if (!userId) return new Response(null, { status: 400 });
 
-    const webSocketPair = new WebSocketPair();
-    const [client, server] = Object.values(webSocketPair);
+    const { 0: client, 1: server } = new WebSocketPair();
     this.ctx.acceptWebSocket(server);
-    server.serializeAttachment({
-      session: { id: userId },
-    });
-    this.sessions.set(server, { id: userId });
+    const session = { id: userId };
+    server.serializeAttachment({ session });
+    this.sessions.set(server, session);
 
-    // await this.storage.setAlarm(Date.now() + 1000 * 60 * 60 * 24 * 30);
-
-    return new Response(null, {
-      status: 101,
-      webSocket: client,
-    });
+    return new Response(null, { status: 101, webSocket: client });
   }
 
   broadcast(message: ServerMessage, excludeWs?: WebSocket[]) {
+    const msg = gm(message);
     this.sessions.forEach((_, ws) => {
-      if (!excludeWs?.includes(ws)) {
-        ws.send(gm(message));
-      }
+      if (!excludeWs?.includes(ws)) ws.send(msg);
     });
   }
 
@@ -97,19 +94,29 @@ export class Room extends DurableObject {
     this.broadcast(
       {
         type: "roomStats",
-        data: {
-          users: Array.from(this.sessions.values()),
-        },
+        data: { users: Array.from(this.sessions.values()) },
       },
       excludeWs,
     );
   }
 
-  broadcastRealtime(message: ServerMessage, excludeWs?: WebSocket[]) {
+  broadcastRealtime(excludeWs?: WebSocket[]) {
+    const msg = gm({
+      type: "realtimeStatus",
+      data: Array.from(this.realtime.values()),
+    });
     this.realtime.forEach((_, ws) => {
-      if (!excludeWs?.includes(ws)) {
-        ws.send(gm(message));
-      }
+      if (!excludeWs?.includes(ws)) ws.send(msg);
+    });
+  }
+
+  broadcastRoomRealTime() {
+    this.broadcast({
+      type: "roomRealtime",
+      data: {
+        userIds: Array.from(this.realtime.values()).map((r) => r.userId),
+        total: this.realtime.size,
+      },
     });
   }
 
@@ -122,16 +129,10 @@ export class Room extends DurableObject {
     }
 
     switch (clientMessage.type) {
-      case "join":
+      case "join": {
         this.broadcastRoomStats();
-        ws.send(
-          gm({
-            type: "roomRealtime",
-            data: {
-              total: this.realtime.size,
-            },
-          }),
-        );
+        this.broadcastRoomRealTime();
+
         const history = await this.db
           .select()
           .from(messageTable)
@@ -146,10 +147,11 @@ export class Room extends DurableObject {
           }),
         );
         break;
-      case "send":
+      }
+      case "send": {
         const meta = this.sessions.get(ws);
         if (!meta) {
-          ws.close();
+          this.handleDisconnect(ws);
           return;
         }
         const { type, content } = clientMessage.data;
@@ -173,7 +175,8 @@ export class Room extends DurableObject {
           [ws],
         );
         break;
-      case "loadHistory":
+      }
+      case "loadHistory": {
         const before = clientMessage.data.before;
         const beforeDate = new Date(before);
         if (isNaN(beforeDate.getTime())) {
@@ -194,122 +197,83 @@ export class Room extends DurableObject {
           }),
         );
         break;
-      case "userStatus":
+      }
+      case "userStatus": {
         const currentSession = this.sessions.get(ws);
         if (!currentSession) {
-          ws.close();
+          this.handleDisconnect(ws);
           return;
         }
         const s = {
           ...currentSession,
           status: clientMessage.data,
         };
-        ws.serializeAttachment({
-          ...ws.deserializeAttachment(),
-          session: s,
-        });
-        this.sessions.set(ws, s);
+        this.storeSession(ws, s);
 
         this.broadcastRoomStats();
         break;
+      }
       case "realtimeJoin": {
-        const attachment = ws.deserializeAttachment() as WsAttachment;
+        const session = this.sessions.get(ws);
+        if (!session) {
+          this.handleDisconnect(ws);
+          return;
+        }
         const realtime = {
-          userId: attachment.session.id,
+          userId: session.id,
         };
-        this.realtime.set(ws, realtime);
-        ws.serializeAttachment({
-          ...attachment,
-          realtime,
-        });
+        this.storeRealtime(ws, realtime);
         ws.send(
           gm({
             type: "realtimeStatus",
             data: Array.from(this.realtime.values()),
           }),
         );
-        this.broadcastRealtime(
-          {
-            type: "realtimeJoin",
-            data: realtime,
-          },
-          [ws],
-        );
-        this.broadcast({
-          type: "roomRealtime",
-          data: {
-            total: this.realtime.size,
-          },
-        });
-
+        this.broadcastRealtime();
+        this.broadcastRoomRealTime();
         break;
       }
       case "realtimeUpdate": {
         const r = clientMessage.data;
-        const attachment = ws.deserializeAttachment() as WsAttachment;
-        const userId = attachment.session.id;
+        const session = this.sessions.get(ws);
+        if (!session) {
+          this.handleDisconnect(ws);
+          return;
+        }
+        const userId = session.id;
         const realtime = {
           userId,
           ...r,
         };
-        ws.serializeAttachment({
-          ...attachment,
-          realtime,
-        });
-        this.realtime.set(ws, realtime);
-
-        this.broadcastRealtime(
-          {
-            type: "realtimeUpdate",
-            data: realtime,
-          },
-          [ws],
-        );
-
+        this.storeRealtime(ws, realtime);
+        this.broadcastRealtime();
         break;
       }
       case "realtimeLeave": {
-        const attachment = ws.deserializeAttachment() as WsAttachment;
-        ws.serializeAttachment({
-          ...attachment,
-          realtime: undefined,
-        });
-        this.realtime.delete(ws);
-
-        this.broadcastRealtime(
-          {
-            type: "realtimeLeave",
-            data: {
-              userId: attachment.session.id,
-            },
-          },
-          [ws],
-        );
-        this.broadcast({
-          type: "roomRealtime",
-          data: {
-            total: this.realtime.size,
-          },
-        });
+        this.storeRealtime(ws);
+        this.broadcastRealtime();
+        this.broadcastRoomRealTime();
         break;
       }
     }
   }
 
-  async webSocketClose(ws: WebSocket, code: number, reason: string) {
+  async webSocketClose(ws: WebSocket) {
     this.handleDisconnect(ws);
-    ws.close(code, reason);
   }
 
   async webSocketError(ws: WebSocket) {
     this.handleDisconnect(ws);
-    ws.close();
   }
 
   handleDisconnect(ws: WebSocket) {
+    ws.serializeAttachment(null);
     this.sessions.delete(ws);
     this.realtime.delete(ws);
     this.broadcastRoomStats();
+    this.broadcastRoomRealTime();
+    this.broadcastRealtime();
+    ws.close();
   }
 
   async clearStorage() {
