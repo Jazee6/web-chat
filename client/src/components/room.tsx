@@ -70,7 +70,7 @@ const Room = ({
             <div className="max-[1080px]:ml-12">{roomInfo?.name}</div>
 
             <div className="absolute left-1/2 -translate-x-1/2">
-              <RealtimeLand data={roomRealtime} onClick={onCall} />
+              <RealtimeLand data={roomRealtime} onClick={() => {}} />
             </div>
 
             <div className="flex items-center">
@@ -141,25 +141,26 @@ const Room = ({
           isLoading={isLoading}
           onCall={onCall}
         />
-
-        {/*<ViewTransition>*/}
-        {realtimeWindowOpen && (
-          <RoomContext
-            value={{
-              ws,
-            }}
-          >
-            <RealtimeProvider>
-              <RealtimeWindow
-                open={realtimeWindowOpen}
-                onOpenChange={setRealtimeWindowOpen}
-              />
-
-              <AudioStream tracksToPull={tracksToPull} />
-            </RealtimeProvider>
-          </RoomContext>
-        )}
       </div>
+
+      {/*<ViewTransition>*/}
+      {realtimeWindowOpen && (
+        <RoomContext
+          value={{
+            ws,
+            roomRealtime,
+          }}
+        >
+          <RealtimeProvider>
+            <RealtimeWindow
+              open={realtimeWindowOpen}
+              onOpenChange={setRealtimeWindowOpen}
+            />
+
+            <AudioStream tracksToPull={tracksToPull} />
+          </RealtimeProvider>
+        </RoomContext>
+      )}
     </>
   );
 };

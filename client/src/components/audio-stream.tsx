@@ -1,13 +1,6 @@
 import { useRealtime } from "@/lib/context.ts";
-import { useObservableAsValue } from "partytracks/react";
-import {
-  type FC,
-  useEffect,
-  useEffectEvent,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
+import { createAudioSink } from "partytracks/client";
+import { type FC, useEffect, useMemo, useRef, useState } from "react";
 import { of } from "rxjs";
 
 interface TrackObject {
@@ -20,61 +13,45 @@ interface AudioStreamProps {
 }
 
 export const AudioStream: FC<AudioStreamProps> = ({ tracksToPull }) => {
-  const [mediaStream] = useState(() => new MediaStream());
   const ref = useRef<HTMLAudioElement>(null);
+  const [audioSink, setAudioSink] = useState<ReturnType<
+    typeof createAudioSink
+  > | null>(null);
 
   useEffect(() => {
-    const audio = ref.current;
-    if (!audio) return;
-    audio.srcObject = mediaStream;
-  }, [mediaStream]);
-
-  const resetSrcObject = () => {
-    const audio = ref.current;
-    if (!audio || !mediaStream) return;
-    audio.addEventListener("canplay", () => audio.play(), { once: true });
-    audio.srcObject = mediaStream;
-  };
+    if (ref.current && !audioSink) {
+      setAudioSink(createAudioSink({ audioElement: ref.current }));
+    }
+  }, [audioSink]);
 
   return (
     <>
       <audio ref={ref} autoPlay />
 
-      {tracksToPull.map(({ sessionId, trackName }) => (
-        <AudioTrack
-          key={trackName}
-          sessionId={sessionId}
-          trackName={trackName}
-          mediaStream={mediaStream}
-          onTrackAdded={() => {
-            resetSrcObject();
-          }}
-          onTrackRemoved={() => {
-            resetSrcObject();
-          }}
-        />
-      ))}
+      {audioSink &&
+        tracksToPull.map(({ sessionId, trackName }) => (
+          <AudioTrack
+            key={trackName}
+            sessionId={sessionId}
+            trackName={trackName}
+            audioSink={audioSink}
+          />
+        ))}
     </>
   );
 };
 
 function AudioTrack({
-  mediaStream,
   trackName,
   sessionId,
-  onTrackAdded,
-  onTrackRemoved,
+  audioSink,
 }: {
-  mediaStream: MediaStream;
   trackName: string;
   sessionId: string;
-  onTrackAdded: (trackObject: TrackObject, track: MediaStreamTrack) => void;
-  onTrackRemoved: (trackObject: TrackObject, track: MediaStreamTrack) => void;
+  audioSink: ReturnType<typeof createAudioSink>;
 }) {
-  const onTrackAddedEvent = useEffectEvent(onTrackAdded);
-  const onTrackRemovedEvent = useEffectEvent(onTrackRemoved);
-
   const { partyTracks } = useRealtime();
+
   const trackObject = useMemo(() => {
     return {
       sessionId,
@@ -87,17 +64,10 @@ function AudioTrack({
     return partyTracks.pull(of(trackObject));
   }, [partyTracks, trackObject]);
 
-  const audioTrack = useObservableAsValue(pulledTrack$);
-
   useEffect(() => {
-    if (!audioTrack) return;
-    mediaStream.addTrack(audioTrack);
-    onTrackAddedEvent(trackObject, audioTrack);
-    return () => {
-      mediaStream.removeTrack(audioTrack);
-      onTrackRemovedEvent(trackObject, audioTrack);
-    };
-  }, [audioTrack, mediaStream, trackObject]);
+    const subscription = audioSink.attach(pulledTrack$);
+    return () => subscription.unsubscribe();
+  }, [audioSink, pulledTrack$]);
 
   return null;
 }

@@ -1,9 +1,11 @@
 import type { UserMedia } from "@/hooks/use-user-media.ts";
 import type { PartyTracks } from "partytracks/client";
 import { createContext, useContext } from "react";
+import type { RoomRealtime } from "web-chat-share";
 
 interface RoomContextType {
   ws?: WebSocket;
+  roomRealtime?: RoomRealtime;
 }
 
 export const RoomContext = createContext<RoomContextType | undefined>(

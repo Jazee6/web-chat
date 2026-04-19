@@ -43,18 +43,11 @@ const RoomStateDialog = ({
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) => {
+  const { users: roomUsers } = roomStats;
+
   const { users, fetchMissingUsers } = useUserInfo();
 
-  const uniqueUsers = useMemo(() => {
-    const seen = new Set();
-    return roomStats.users.filter((user) => {
-      if (seen.has(user.id)) return false;
-      seen.add(user.id);
-      return true;
-    });
-  }, [roomStats.users]);
-
-  const userIds = useMemo(() => uniqueUsers.map((u) => u.id), [uniqueUsers]);
+  const userIds = useMemo(() => roomUsers.map((u) => u.id), [roomUsers]);
 
   useEffect(() => {
     if (!open) return;
@@ -71,7 +64,7 @@ const RoomStateDialog = ({
         </DialogHeader>
 
         <ItemGroup className="gap-0 -mt-2">
-          {uniqueUsers.map(({ id, status }, index) => (
+          {roomUsers.map(({ id, status }, index) => (
             <Fragment key={id}>
               <Item className="p-0">
                 <ItemMedia>
@@ -98,7 +91,7 @@ const RoomStateDialog = ({
                 </ItemContent>
                 <ItemActions></ItemActions>
               </Item>
-              {index !== uniqueUsers.length - 1 && (
+              {index !== roomUsers.length - 1 && (
                 <ItemSeparator className="h-px" />
               )}
             </Fragment>

@@ -223,12 +223,6 @@ export class Room extends DurableObject {
           userId: session.id,
         };
         this.storeRealtime(ws, realtime);
-        ws.send(
-          gm({
-            type: "realtimeStatus",
-            data: Array.from(this.realtime.values()),
-          }),
-        );
         this.broadcastRealtime();
         this.broadcastRoomRealTime();
         break;
@@ -268,11 +262,11 @@ export class Room extends DurableObject {
 
   handleDisconnect(ws: WebSocket) {
     ws.serializeAttachment(null);
-    this.sessions.delete(ws);
     this.realtime.delete(ws);
-    this.broadcastRoomStats();
-    this.broadcastRoomRealTime();
+    this.sessions.delete(ws);
     this.broadcastRealtime();
+    this.broadcastRoomRealTime();
+    this.broadcastRoomStats();
     ws.close();
   }
 

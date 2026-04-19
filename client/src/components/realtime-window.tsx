@@ -1,12 +1,10 @@
 import DeviceDropdown from "@/components/device-dropdown.tsx";
-import {
-  Avatar,
-  AvatarFallback,
-  AvatarImage,
-} from "@/components/ui/avatar.tsx";
+import EnsureOnline from "@/components/ensure-online.tsx";
+import EnsurePermissions from "@/components/ensure-permissions.tsx";
 import { LiveWaveform } from "@/components/ui/live-waveform.tsx";
+import { errorMessageMap } from "@/hooks/use-user-media.ts";
 import { useRealtime } from "@/lib/context.ts";
-import { PhoneOff } from "lucide-react";
+import { Ban, CircleAlert, GlobeX, Mic, MicOff, PhoneOff } from "lucide-react";
 import {
   useEffect,
   useRef,
@@ -15,6 +13,23 @@ import {
 } from "react";
 import { Button } from "./ui/button";
 
+const PhoneOffButton = ({ onClick }: { onClick?: () => void }) => {
+  return (
+    <Button
+      variant="destructive"
+      size="icon"
+      className="rounded-full"
+      onClick={(e) => {
+        e.stopPropagation();
+        onClick?.();
+      }}
+      onMouseDown={(e) => e.stopPropagation()}
+    >
+      <PhoneOff />
+    </Button>
+  );
+};
+
 const Content = ({
   onOpenChange,
 }: {
@@ -22,6 +37,13 @@ const Content = ({
 }) => {
   const { iceConnectionState, userMedia } = useRealtime();
   const [duration, setDuration] = useState(0);
+  const {
+    audioMonitorStreamTrack,
+    audioEnabled,
+    turnMicOn,
+    turnMicOff,
+    audioUnavailableReason,
+  } = userMedia;
 
   useEffect(() => {
     let interval: number;
@@ -34,54 +56,100 @@ const Content = ({
   }, [iceConnectionState]);
 
   return (
-    <>
-      <div className="flex items-center gap-2 mb-1.5">
-        <Avatar>
-          <AvatarImage />
-          <AvatarFallback>WIP</AvatarFallback>
-        </Avatar>
-
-        <div>
-          <div className="text-sm">Call</div>
-
-          <div className="text-xs text-secondary">
-            {iceConnectionState !== "connected"
-              ? iceConnectionState
-              : `${Math.floor(duration / 60)
-                  .toString()
-                  .padStart(
-                    2,
-                    "0",
-                  )}:${(duration % 60).toString().padStart(2, "0")}`}
+    <EnsureOnline
+      fallback={
+        <>
+          <div className="flex gap-2 text-sm items-center">
+            <GlobeX />
+            <div>You are offline</div>
           </div>
-        </div>
 
-        <div className="w-24 ml-auto">
-          <LiveWaveform
-            mode="scrolling"
-            height={36}
-            active
-            audioStreamTrack={userMedia.audioStreamTrack}
-          />
-        </div>
-      </div>
+          <div className="flex justify-end mt-4.5">
+            <PhoneOffButton onClick={() => onOpenChange(false)} />
+          </div>
+        </>
+      }
+    >
+      <EnsurePermissions
+        fallback={
+          <>
+            <div className="flex gap-2 text-sm items-center">
+              <Ban />
+              <div>Permission denied</div>
+            </div>
 
-      <div className="flex items-center justify-end gap-1">
-        <DeviceDropdown />
-        <Button
-          variant="destructive"
-          size="icon"
-          className="rounded-full"
-          onClick={(e) => {
-            e.stopPropagation();
-            onOpenChange(false);
-          }}
-          onMouseDown={(e) => e.stopPropagation()}
-        >
-          <PhoneOff />
-        </Button>
-      </div>
-    </>
+            <div className="flex justify-end mt-4.5">
+              <PhoneOffButton onClick={() => onOpenChange(false)} />
+            </div>
+          </>
+        }
+      >
+        {audioUnavailableReason ? (
+          <>
+            <div className="flex gap-2 text-sm items-center">
+              <CircleAlert />
+              <div>{errorMessageMap[audioUnavailableReason]}</div>
+            </div>
+
+            <div className="flex justify-end mt-4.5 gap-1">
+              <DeviceDropdown />
+              <PhoneOffButton onClick={() => onOpenChange(false)} />
+            </div>
+          </>
+        ) : (
+          <>
+            <div className="flex items-center gap-2 mb-1.5">
+              <div>
+                <div className="text-sm">Call</div>
+
+                <div className="text-xs text-secondary">
+                  {iceConnectionState !== "connected"
+                    ? iceConnectionState
+                    : `${Math.floor(duration / 60)
+                        .toString()
+                        .padStart(
+                          2,
+                          "0",
+                        )}:${(duration % 60).toString().padStart(2, "0")}`}
+                </div>
+              </div>
+
+              <div className="w-28 ml-auto">
+                <LiveWaveform
+                  mode="scrolling"
+                  height={36}
+                  active
+                  audioStreamTrack={audioMonitorStreamTrack}
+                />
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-1">
+              <Button
+                size="icon"
+                variant={audioEnabled ? "default" : "secondary"}
+                className="rounded-full"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (audioEnabled) {
+                    turnMicOff();
+                  } else {
+                    turnMicOn();
+                  }
+                }}
+                onMouseDown={(e) => e.stopPropagation()}
+              >
+                {audioEnabled ? <Mic /> : <MicOff />}
+              </Button>
+
+              <DeviceDropdown />
+
+              <PhoneOffButton onClick={() => onOpenChange(false)} />
+            </div>
+          </>
+        )}
+      </EnsurePermissions>
+    </EnsureOnline>
   );
 };
 

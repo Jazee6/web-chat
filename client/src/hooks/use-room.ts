@@ -65,15 +65,14 @@ export function useRoom({
 
   const { data: roomInfo } = useQuery({
     queryKey: ["roomInfo", id],
-    queryFn: () =>
-      api
-        .get<RoomInfo>(`room/${id}/info`)
-        .json()
-        .then((i) => {
-          document.title = `${i.name} - ${appName}`;
-          return i;
-        }),
+    queryFn: () => api.get<RoomInfo>(`room/${id}/info`).json(),
   });
+
+  useEffect(() => {
+    if (roomInfo) {
+      document.title = `${roomInfo.name} - ${appName}`;
+    }
+  }, [roomInfo]);
 
   const scrollToBottom = useEffectEvent(
     (behavior: ScrollBehavior = "smooth") => {
@@ -163,7 +162,7 @@ export function useRoom({
             const { scrollTop, scrollHeight, clientHeight } =
               chatListRef.current;
             shouldScrollToBottomRef.current =
-              scrollTop + clientHeight >= scrollHeight - 50;
+              scrollTop + clientHeight >= scrollHeight - 100;
           } else {
             shouldScrollToBottomRef.current = true;
           }
@@ -192,7 +191,7 @@ export function useRoom({
           break;
         }
         case "realtimeStatus": {
-          setRealtimeStatus(m.data);
+          setRealtimeStatus(m.data.filter((i) => i.userId !== user.id));
           break;
         }
       }
@@ -219,7 +218,7 @@ export function useRoom({
         },
       }),
     );
-  }, [screenState, sendMessage, settings.showStatus, userState, readyState]);
+  }, [screenState, settings.showStatus, userState, readyState, sendMessage]);
 
   useEffect(() => {
     if (isLoading) {
@@ -227,7 +226,7 @@ export function useRoom({
     }
 
     scrollToBottom("instant");
-  }, [isLoading, chatListRef]);
+  }, [isLoading]);
 
   useLayoutEffect(() => {
     if (isLoadingHistoryRef.current && chatListRef.current) {
@@ -264,7 +263,7 @@ export function useRoom({
     return () => {
       observer.disconnect();
     };
-  }, [sendMessage, isLoading, loaderRef]);
+  }, [isLoading, loaderRef, sendMessage]);
 
   useEffect(() => {
     const handleVisibilityChange = () => {

@@ -1,4 +1,5 @@
 import { AppSidebar } from "@/components/app-sidebar";
+import RealtimeSidebar from "@/components/realtime-sidebar.tsx";
 import {
   SidebarInset,
   SidebarProvider,
@@ -33,6 +34,10 @@ const Layout = () => {
           <Outlet />
         </div>
       </SidebarInset>
+
+      <SidebarProvider className="w-auto">
+        <RealtimeSidebar />
+      </SidebarProvider>
     </SidebarProvider>
   );
 };

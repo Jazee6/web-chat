@@ -207,9 +207,11 @@ const ChatList = memo(
                               {c.localFiles?.length
                                 ? c.localFiles.map(
                                     ({ file, isUploading }, index) => (
-                                      <div className="relative shrink-0">
+                                      <div
+                                        className="relative shrink-0"
+                                        key={`${file.name}_${index}`}
+                                      >
                                         <ChatImage
-                                          key={`${file.name}_${index}`}
                                           src={URL.createObjectURL(file)}
                                           alt={file.name}
                                         />
@@ -224,11 +226,12 @@ const ChatList = memo(
                                   )
                                 : (JSON.parse(c.content) as string[]).map(
                                     (i, index) => (
-                                      <ChatImage
-                                        key={i}
-                                        src={`${import.meta.env.VITE_API_URL}/room/images/${i}`}
-                                        alt={`image_${index}`}
-                                      />
+                                      <div className="shrink-0" key={i}>
+                                        <ChatImage
+                                          src={`${import.meta.env.VITE_API_URL}/room/images/${i}`}
+                                          alt={`image_${index}`}
+                                        />
+                                      </div>
                                     ),
                                   )}
                             </div>
