@@ -2,6 +2,7 @@ import type { RoomInfo } from "@/components/room-state-dialog.tsx";
 import useIdleDetector from "@/hooks/use-idle-detector.ts";
 import useSettings from "@/hooks/use-settings.ts";
 import { useUserInfo } from "@/hooks/use-user-info.ts";
+import { useRealtimeSidebar } from "@/lib/context.ts";
 import {
   api,
   appName,
@@ -24,11 +25,9 @@ import {
 } from "react";
 import {
   gm,
-  type RoomRealtime,
   type RoomStats,
   sendMessageSchema,
   type ServerMessage,
-  type ServerRealtimeStatus,
   type UIChatMessage,
 } from "web-chat-share";
 import { z } from "zod";
@@ -51,10 +50,8 @@ export function useRoom({
   const { users, fetchMissingUsers } = useUserInfo();
   const [settings] = useSettings();
   const { start, userState, screenState } = useIdleDetector();
-  const [roomRealtime, setRoomRealtime] = useState<RoomRealtime>();
-  const [realtimeStatus, setRealtimeStatus] = useState<ServerRealtimeStatus[]>(
-    [],
-  );
+  const { roomRealtime, setRoomRealtime, realtimeStatus, setRealtimeStatus } =
+    useRealtimeSidebar();
 
   const notificationListRef = useRef<Notification[]>([]);
   const oldestChatTimeRef = useRef<string | null>(null);
@@ -191,7 +188,7 @@ export function useRoom({
           break;
         }
         case "realtimeStatus": {
-          setRealtimeStatus(m.data.filter((i) => i.userId !== user.id));
+          setRealtimeStatus(m.data);
           break;
         }
       }
@@ -200,7 +197,7 @@ export function useRoom({
 
   useEffect(() => {
     if (settings?.showStatus) {
-      start().then();
+      void start();
     }
   }, [settings.showStatus, start]);
 

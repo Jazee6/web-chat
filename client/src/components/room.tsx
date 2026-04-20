@@ -2,7 +2,7 @@ import AddFavoritesButton from "@/components/add-favorites-button.tsx";
 import { AudioStream } from "@/components/audio-stream.tsx";
 import ChatInput from "@/components/chat-input.tsx";
 import ChatList from "@/components/chat-list.tsx";
-import RealtimeProvider from "@/components/realtime-context.tsx";
+import RealtimeProvider from "@/components/context/realtime-context.tsx";
 import RealtimeLand from "@/components/realtime-land.tsx";
 import RealtimeWindow from "@/components/realtime-window.tsx";
 import RoomStateDialog from "@/components/room-state-dialog.tsx";
@@ -10,7 +10,7 @@ import ShareButton from "@/components/share-button.tsx";
 import { Button } from "@/components/ui/button.tsx";
 import { Spinner } from "@/components/ui/spinner.tsx";
 import { useRoom } from "@/hooks/use-room.ts";
-import { RoomContext } from "@/lib/context.ts";
+import { RoomContext, useRealtimeSidebar } from "@/lib/context.ts";
 import { appName } from "@/lib/utils.ts";
 import type { User } from "better-auth";
 import { PictureInPicture } from "lucide-react";
@@ -29,6 +29,7 @@ const Room = ({
 }) => {
   const [roomStateDialogOpen, setRoomStateDialogOpen] = useState(false);
   const [realtimeWindowOpen, setRealtimeWindowOpen] = useState(false);
+  const { setIsOpen } = useRealtimeSidebar();
 
   const chatListRef = useRef<HTMLDivElement>(null);
   const loaderRef = useRef<HTMLDivElement>(null);
@@ -55,12 +56,14 @@ const Room = ({
     setRealtimeWindowOpen(true);
   };
 
-  const tracksToPull = realtimeStatus
-    .filter((status) => status.sessionId && status.audio?.id)
-    .map((status) => ({
-      sessionId: status.sessionId!,
-      trackName: status.audio!.id,
-    }));
+  const tracksToPull =
+    realtimeStatus
+      ?.filter((i) => i.userId !== user.id)
+      ?.filter((status) => status.sessionId && status.audio?.id)
+      .map((status) => ({
+        sessionId: status.sessionId!,
+        trackName: status.audio!.id,
+      })) ?? [];
 
   return (
     <>
@@ -70,7 +73,10 @@ const Room = ({
             <div className="max-[1080px]:ml-12">{roomInfo?.name}</div>
 
             <div className="absolute left-1/2 -translate-x-1/2">
-              <RealtimeLand data={roomRealtime} onClick={() => {}} />
+              <RealtimeLand
+                data={roomRealtime}
+                onClick={() => setIsOpen(true)}
+              />
             </div>
 
             <div className="flex items-center">
@@ -112,7 +118,7 @@ const Room = ({
         )}
       </header>
 
-      <div className="h-[calc(100vh-1rem)] flex flex-col">
+      <div className="h-dvh flex flex-col">
         {chats && (
           <div
             style={{ scrollbarGutter: "stable both-edges" }}
@@ -148,7 +154,6 @@ const Room = ({
         <RoomContext
           value={{
             ws,
-            roomRealtime,
           }}
         >
           <RealtimeProvider>

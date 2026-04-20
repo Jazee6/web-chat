@@ -8,6 +8,7 @@ import {
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
+  SidebarMenuSkeleton,
 } from "@/components/ui/sidebar";
 import { Skeleton } from "@/components/ui/skeleton.tsx";
 import { useSession } from "@/lib/auth-client.ts";
@@ -72,7 +73,7 @@ export function AppSidebar({ ...props }: ComponentProps<typeof Sidebar>) {
   const favoriteRoomsData = favoriteRooms?.pages.flat() ?? [];
 
   return (
-    <Sidebar variant="inset" {...props}>
+    <Sidebar {...props}>
       <SidebarHeader>
         <SidebarMenu>
           <SidebarMenuItem>
@@ -94,11 +95,13 @@ export function AppSidebar({ ...props }: ComponentProps<typeof Sidebar>) {
       </SidebarHeader>
       <SidebarContent>
         {isFavoriteRoomsFetching ? (
-          <>
-            <Skeleton className="h-8 px-2" />
-            <Skeleton className="h-8 px-2" />
-            <Skeleton className="h-8 px-2" />
-          </>
+          <SidebarMenu>
+            <SidebarMenuItem>
+              <SidebarMenuSkeleton />
+              <SidebarMenuSkeleton />
+              <SidebarMenuSkeleton />
+            </SidebarMenuItem>
+          </SidebarMenu>
         ) : (
           favoriteRoomsData.length > 0 && (
             <NavMain
@@ -113,11 +116,13 @@ export function AppSidebar({ ...props }: ComponentProps<typeof Sidebar>) {
         )}
 
         {isFetching ? (
-          <>
-            <Skeleton className="h-8 px-2" />
-            <Skeleton className="h-8 px-2" />
-            <Skeleton className="h-8 px-2" />
-          </>
+          <SidebarMenu>
+            <SidebarMenuItem>
+              <SidebarMenuSkeleton />
+              <SidebarMenuSkeleton />
+              <SidebarMenuSkeleton />
+            </SidebarMenuItem>
+          </SidebarMenu>
         ) : (
           roomsData.length > 0 && (
             <NavMain

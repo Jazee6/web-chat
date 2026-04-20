@@ -47,7 +47,7 @@ export class Room extends DurableObject {
       ),
     );
 
-    ctx.blockConcurrencyWhile(async () => migrate(this.db, migrations)).then();
+    void ctx.blockConcurrencyWhile(async () => migrate(this.db, migrations));
   }
 
   storeSession = (ws: WebSocket, session: WsSession) => {
