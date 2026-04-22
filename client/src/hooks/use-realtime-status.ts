@@ -1,5 +1,5 @@
 import type { UserMedia } from "@/hooks/use-user-media.ts";
-import { useRoom } from "@/lib/context.ts";
+import { useRoomContext } from "@/lib/context.ts";
 import { useEffect } from "react";
 import { gm } from "web-chat-share";
 
@@ -14,7 +14,7 @@ const useRealtimeStatus = ({
     id?: string;
   };
 }) => {
-  const { ws } = useRoom();
+  const { ws } = useRoomContext();
 
   useEffect(() => {
     if (!ws || ws.readyState !== WebSocket.OPEN) {

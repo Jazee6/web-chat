@@ -1,4 +1,4 @@
-import { useRealtime } from "@/lib/context.ts";
+import { useRealtimeContext } from "@/lib/context.ts";
 import { createAudioSink } from "partytracks/client";
 import { type FC, useEffect, useMemo, useRef, useState } from "react";
 import { of } from "rxjs";
@@ -50,7 +50,7 @@ function AudioTrack({
   sessionId: string;
   audioSink: ReturnType<typeof createAudioSink>;
 }) {
-  const { partyTracks } = useRealtime();
+  const { partyTracks } = useRealtimeContext();
 
   const trackObject = useMemo(() => {
     return {

@@ -3,7 +3,7 @@ import EnsureOnline from "@/components/ensure-online.tsx";
 import EnsurePermissions from "@/components/ensure-permissions.tsx";
 import { LiveWaveform } from "@/components/ui/live-waveform.tsx";
 import { errorMessageMap } from "@/hooks/use-user-media.ts";
-import { useRealtime } from "@/lib/context.ts";
+import { useRealtimeContext } from "@/lib/context.ts";
 import { Ban, CircleAlert, GlobeX, Mic, MicOff, PhoneOff } from "lucide-react";
 import {
   useEffect,
@@ -35,7 +35,7 @@ const Content = ({
 }: {
   onOpenChange: (open: boolean) => void;
 }) => {
-  const { iceConnectionState, userMedia } = useRealtime();
+  const { iceConnectionState, userMedia } = useRealtimeContext();
   const [duration, setDuration] = useState(0);
   const {
     audioMonitorStreamTrack,
