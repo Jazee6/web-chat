@@ -17,6 +17,7 @@ import { appName } from "@/lib/utils.ts";
 import type { User } from "better-auth";
 import { PictureInPicture } from "lucide-react";
 import { useRef, useState } from "react";
+import { useBeforeUnload } from "react-router";
 
 const Room = ({
   id,
@@ -55,6 +56,12 @@ const Room = ({
     user,
     chatListRef,
     loaderRef,
+  });
+
+  useBeforeUnload((e) => {
+    if (realtimeWindowOpen) {
+      e.preventDefault();
+    }
   });
 
   const onCall = () => {
