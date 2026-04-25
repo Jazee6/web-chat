@@ -1,3 +1,4 @@
+import { noiseSuppression } from "@/lib/noise-suppression.ts";
 import { getCamera, getMic, getScreenshare } from "partytracks/client";
 import { useObservable, useObservableAsValue } from "partytracks/react";
 import { useCallback, useEffect, useState } from "react";
@@ -110,6 +111,14 @@ export default function useUserMedia(options?: {
     setVideoUnavailableReason(reason);
     camera.stopBroadcasting();
   });
+
+  useEffect(() => {
+    mic.addTransform(noiseSuppression);
+
+    return () => {
+      mic.removeTransform(noiseSuppression);
+    };
+  }, []);
 
   return {
     turnMicOn: mic.startBroadcasting,
