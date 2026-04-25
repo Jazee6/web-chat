@@ -1,18 +1,23 @@
 import { useRealtimeContext } from "@/lib/context.ts";
 import { createAudioSink } from "partytracks/client";
-import { type FC, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { of } from "rxjs";
 
 interface TrackObject {
+  uid: string;
   sessionId: string;
   trackName: string;
 }
 
-interface AudioStreamProps {
+export const AudioStream = ({
+  tracksToPull,
+  onTrackAdded,
+  onTrackRemoved,
+}: {
   tracksToPull: TrackObject[];
-}
-
-export const AudioStream: FC<AudioStreamProps> = ({ tracksToPull }) => {
+  onTrackAdded: (uid: string, track: MediaStreamTrack) => void;
+  onTrackRemoved: (uid: string, track: MediaStreamTrack) => void;
+}) => {
   const ref = useRef<HTMLAudioElement>(null);
   const [audioSink, setAudioSink] = useState<ReturnType<
     typeof createAudioSink
@@ -29,45 +34,61 @@ export const AudioStream: FC<AudioStreamProps> = ({ tracksToPull }) => {
       <audio ref={ref} autoPlay />
 
       {audioSink &&
-        tracksToPull.map(({ sessionId, trackName }) => (
+        tracksToPull.map((trackToPull) => (
           <AudioTrack
-            key={trackName}
-            sessionId={sessionId}
-            trackName={trackName}
+            key={`${trackToPull.sessionId}/${trackToPull.trackName}`}
+            trackToPull={trackToPull}
             audioSink={audioSink}
+            onTrackAdded={onTrackAdded}
+            onTrackRemoved={onTrackRemoved}
           />
         ))}
     </>
   );
 };
 
-function AudioTrack({
-  trackName,
-  sessionId,
+const AudioTrack = ({
+  trackToPull,
   audioSink,
+  onTrackAdded,
+  onTrackRemoved,
 }: {
-  trackName: string;
-  sessionId: string;
+  trackToPull: TrackObject;
   audioSink: ReturnType<typeof createAudioSink>;
-}) {
+  onTrackAdded: (uid: string, track: MediaStreamTrack) => void;
+  onTrackRemoved: (uid: string, track: MediaStreamTrack) => void;
+}) => {
   const { partyTracks } = useRealtimeContext();
 
-  const trackObject = useMemo(() => {
-    return {
-      sessionId,
-      trackName,
-      location: "remote",
-    } as const;
-  }, [sessionId, trackName]);
+  const { uid, sessionId, trackName } = trackToPull;
 
   const pulledTrack$ = useMemo(() => {
-    return partyTracks.pull(of(trackObject));
-  }, [partyTracks, trackObject]);
+    return partyTracks.pull(
+      of({ uid, sessionId, trackName, location: "remote" as const }),
+    );
+  }, [partyTracks, uid, sessionId, trackName]);
 
   useEffect(() => {
     const subscription = audioSink.attach(pulledTrack$);
-    return () => subscription.unsubscribe();
-  }, [audioSink, pulledTrack$]);
+
+    let currentTrack: MediaStreamTrack | null = null;
+
+    const trackSub = pulledTrack$.subscribe((track) => {
+      if (currentTrack) {
+        onTrackRemoved(trackToPull.uid, currentTrack);
+      }
+      currentTrack = track;
+      onTrackAdded(trackToPull.uid, track);
+    });
+
+    return () => {
+      subscription.unsubscribe();
+      trackSub.unsubscribe();
+      if (currentTrack) {
+        onTrackRemoved(trackToPull.uid, currentTrack);
+      }
+    };
+  }, [audioSink, onTrackAdded, onTrackRemoved, pulledTrack$, trackToPull.uid]);
 
   return null;
-}
+};

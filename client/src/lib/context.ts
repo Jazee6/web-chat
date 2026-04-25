@@ -8,6 +8,9 @@ export interface RoomContextType {
   uid: string;
   roomRealtime?: RoomRealtime;
   realtimeStatus?: ServerRealtimeStatus[];
+  setRealtimeWindowOpen: (open: boolean) => void;
+  realtimeSidebarOpen: boolean;
+  audioTrackMap: Record<string, MediaStreamTrack>;
 }
 
 export const RoomContext = createContext<RoomContextType | undefined>(

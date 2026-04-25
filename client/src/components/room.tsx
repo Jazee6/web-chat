@@ -32,6 +32,9 @@ const Room = ({
   const [roomStateDialogOpen, setRoomStateDialogOpen] = useState(false);
   const [realtimeWindowOpen, setRealtimeWindowOpen] = useState(false);
   const [realtimeSidebarOpen, setRealtimeSidebarOpen] = useState(false);
+  const [audioTrackMap, setAudioTrackMap] = useState<
+    Record<string, MediaStreamTrack>
+  >({});
 
   const chatListRef = useRef<HTMLDivElement>(null);
   const loaderRef = useRef<HTMLDivElement>(null);
@@ -63,6 +66,7 @@ const Room = ({
       ?.filter((i) => i.userId !== user.id)
       ?.filter((status) => status.sessionId && status.audio?.id)
       .map((status) => ({
+        uid: status.userId,
         sessionId: status.sessionId!,
         trackName: status.audio!.id,
       })) ?? [];
@@ -72,6 +76,23 @@ const Room = ({
     uid: user.id,
     roomRealtime,
     realtimeStatus,
+    setRealtimeWindowOpen,
+    realtimeSidebarOpen,
+    audioTrackMap,
+  };
+
+  const onTrackAdded = (uid: string, track: MediaStreamTrack) =>
+    setAudioTrackMap((previous) => ({
+      ...previous,
+      [uid]: track,
+    }));
+
+  const onTrackRemoved = (uid: string) => {
+    setAudioTrackMap((previous) => {
+      const update = { ...previous };
+      delete update[uid];
+      return update;
+    });
   };
 
   return (
@@ -84,7 +105,11 @@ const Room = ({
               onOpenChange={setRealtimeWindowOpen}
             />
 
-            <AudioStream tracksToPull={tracksToPull} />
+            <AudioStream
+              tracksToPull={tracksToPull}
+              onTrackAdded={onTrackAdded}
+              onTrackRemoved={onTrackRemoved}
+            />
           </RealtimeProvider>
         )}
         <SidebarProvider
