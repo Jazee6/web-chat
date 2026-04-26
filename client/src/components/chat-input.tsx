@@ -11,6 +11,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { ArrowUpIcon, ImagePlus, PhoneCall, X } from "lucide-react";
 import { type ChangeEvent, type ClipboardEvent, useRef, useState } from "react";
 import { Controller, useForm } from "react-hook-form";
+import Zoom from "react-medium-image-zoom";
 import { toast } from "sonner";
 import { sendMessageSchema } from "web-chat-share";
 import { z } from "zod";
@@ -155,14 +156,19 @@ const ChatInput = ({
                           key={`${image.name}_${index}`}
                           className="relative shrink-0 group"
                         >
-                          <img
-                            src={src}
-                            alt={image.name}
-                            className="h-16 rounded object-cover cursor-zoom-in"
-                          />
-
+                          <Zoom
+                            classDialog='[&_[data-rmiz-modal-overlay="visible"]]:bg-background/80!
+      [&_[data-rmiz-modal-overlay="visible"]]:backdrop-blur-md
+      [&_[data-rmiz-modal-img]]:rounded'
+                          >
+                            <img
+                              src={src}
+                              alt={image.name}
+                              className="h-16 rounded object-cover cursor-zoom-in"
+                            />
+                          </Zoom>
                           <X
-                            className="size-4 cursor-pointer absolute top-px right-px max-md:opacity-100 opacity-0 group-hover:opacity-100 transition-opacity rounded-full bg-destructive/80 text-destructive-foreground hover:bg-destructive/60"
+                            className="size-4 cursor-pointer absolute top-px right-px max-md:opacity-100 opacity-0 group-hover:opacity-100 transition-opacity rounded-full bg-destructive/80 text-secondary-foreground hover:bg-destructive/60"
                             onClick={() => {
                               URL.revokeObjectURL(src);
                               setImages((p) => p.filter((_, i) => i !== index));

@@ -18,6 +18,8 @@ type UserMediaError = keyof typeof errorMessageMap;
 export const mic = getMic({
   broadcasting: true,
   constraints: {
+    sampleRate: { ideal: 48000 },
+    channelCount: { ideal: 1 },
     echoCancellation: true,
     noiseSuppression: false,
     autoGainControl: true,

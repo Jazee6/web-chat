@@ -234,7 +234,7 @@ const RealtimeWindow = ({
   return (
     <div
       ref={elementRef}
-      className="fixed top-20 right-6 w-64 h-24 bg-background/80 backdrop-blur border rounded-lg shadow-lg z-50 cursor-move p-2"
+      className="fixed top-20 right-16 w-64 h-24 bg-background/80 backdrop-blur border rounded-lg shadow-lg z-50 cursor-move p-2"
       style={{
         transform: `translate(${position.x}px, ${position.y}px)`,
       }}
