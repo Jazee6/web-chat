@@ -20,7 +20,7 @@ export const mic = getMic({
   constraints: {
     echoCancellation: true,
     noiseSuppression: false,
-    autoGainControl: false,
+    autoGainControl: true,
   },
 });
 export const camera = getCamera();

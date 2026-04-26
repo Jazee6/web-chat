@@ -40,6 +40,16 @@ const Room = ({
   const chatListRef = useRef<HTMLDivElement>(null);
   const loaderRef = useRef<HTMLDivElement>(null);
 
+  const onOpen = () => {
+    if (realtimeWindowOpen) {
+      setRealtimeWindowOpen(false);
+
+      setTimeout(() => {
+        setRealtimeWindowOpen(true);
+      }, 100);
+    }
+  };
+
   const {
     ws,
     isLoading,
@@ -56,6 +66,7 @@ const Room = ({
     user,
     chatListRef,
     loaderRef,
+    onOpen,
   });
 
   useBeforeUnload((e) => {

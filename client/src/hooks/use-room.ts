@@ -38,11 +38,13 @@ export function useRoom({
   user,
   chatListRef,
   loaderRef,
+  onOpen,
 }: {
   id: string;
   user: User;
   chatListRef: RefObject<HTMLDivElement | null>;
   loaderRef: RefObject<HTMLDivElement | null>;
+  onOpen?: () => void;
 }) {
   const [isLoading, setIsLoading] = useState(true);
   const [roomStats, setRoomStats] = useState<RoomStats>();
@@ -102,13 +104,8 @@ export function useRoom({
             type: "ping",
           }),
         );
-      }, 1000 * 45);
-    },
-    onError: (_, instance) => {
-      if (pingIntervalRef.current) {
-        clearInterval(pingIntervalRef.current);
-      }
-      instance.close();
+      }, 1000 * 5);
+      onOpen?.();
     },
     onClose: () => {
       if (pingIntervalRef.current) {
@@ -280,9 +277,18 @@ export function useRoom({
       }
     };
 
+    const handleOnline = () => {
+      if (readyState !== WebSocket.OPEN) {
+        connect();
+      }
+    };
+
     document.addEventListener("visibilitychange", handleVisibilityChange);
+    addEventListener("online", handleOnline);
+
     return () => {
       document.removeEventListener("visibilitychange", handleVisibilityChange);
+      removeEventListener("online", handleOnline);
     };
   }, [connect, readyState]);
 
