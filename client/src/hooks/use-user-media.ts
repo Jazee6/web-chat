@@ -108,10 +108,15 @@ export default function useUserMedia(options?: {
   });
 
   useEffect(() => {
-    mic.addTransform(noiseSuppression);
+    const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
+    if (!isSafari) {
+      mic.addTransform(noiseSuppression);
+    }
 
     return () => {
-      mic.removeTransform(noiseSuppression);
+      if (!isSafari) {
+        mic.removeTransform(noiseSuppression);
+      }
     };
   }, []);
 
