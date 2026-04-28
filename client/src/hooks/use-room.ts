@@ -63,6 +63,7 @@ export function useRoom({
   const isLoadingHistoryRef = useRef(false);
   const pingIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const shouldScrollToBottomRef = useRef(false);
+  const roomRealtimeTotalRef = useRef(0);
 
   const { data: roomInfo } = useQuery({
     queryKey: ["roomInfo", id],
@@ -168,9 +169,11 @@ export function useRoom({
 
           if (document.visibilityState !== "visible") {
             const u = users[m.data.userId];
-            document.head
-              .querySelector("link[rel='icon']")
-              ?.setAttribute("href", "/message-circle-more.svg");
+            if (roomRealtimeTotalRef.current === 0) {
+              document.head
+                .querySelector("link[rel='icon']")
+                ?.setAttribute("href", "/message-circle-more.svg");
+            }
 
             const n = pushNotification(u?.name ?? "New Message", {
               body: getNotificationBody(m.data),
@@ -183,7 +186,23 @@ export function useRoom({
           break;
         }
         case "roomRealtime": {
+          roomRealtimeTotalRef.current = m.data.total;
           setRoomRealtime(m.data);
+
+          if (m.data.total > 0) {
+            document.head
+              .querySelector("link[rel='icon']")
+              ?.setAttribute("href", "/audio-lines.svg");
+          } else {
+            document.head
+              .querySelector("link[rel='icon']")
+              ?.setAttribute(
+                "href",
+                notificationListRef.current.length > 0
+                  ? "/message-circle-more.svg"
+                  : "/icon.svg",
+              );
+          }
           break;
         }
         case "realtimeStatus": {
@@ -269,7 +288,10 @@ export function useRoom({
 
         document.head
           .querySelector("link[rel='icon']")
-          ?.setAttribute("href", "/icon.svg");
+          ?.setAttribute(
+            "href",
+            roomRealtimeTotalRef.current > 0 ? "/audio-lines.svg" : "/icon.svg",
+          );
 
         if (readyState !== WebSocket.OPEN) {
           connect();
