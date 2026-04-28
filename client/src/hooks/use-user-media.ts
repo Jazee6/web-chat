@@ -15,8 +15,17 @@ export const errorMessageMap = {
 
 type UserMediaError = keyof typeof errorMessageMap;
 
+const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
+
 export const mic = getMic({
   broadcasting: true,
+  constraints: isSafari
+    ? {
+        noiseSuppression: true,
+        echoCancellation: true,
+        autoGainControl: true,
+      }
+    : undefined,
 });
 export const camera = getCamera();
 export const screenShare = getScreenshare({ audio: false });
@@ -108,7 +117,6 @@ export default function useUserMedia(options?: {
   });
 
   useEffect(() => {
-    const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
     if (!isSafari) {
       mic.addTransform(noiseSuppression);
     }
