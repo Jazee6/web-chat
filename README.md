@@ -2,7 +2,7 @@
 
 中文 ｜ [English](./README.en.md)
 
-<img width="3588" height="1867" alt="Image" src="https://github.com/user-attachments/assets/d81364fd-b076-4fe6-9ffc-d1c38abd6abc" />
+<img width="3588" height="1867" alt="Image" src="https://github.com/user-attachments/assets/8190ed14-0d52-40b7-a721-f19d6fd42a54" />
 
 基于 Cloudflare 生态构建的实时 Web 聊天与通话应用。采用 Monorepo 架构，集成 WebRTC 通话、Durable Objects 状态管理与
 D1 数据库，提供低延迟、高可用的 Serverless 聊天体验。
@@ -20,7 +20,7 @@ D1 数据库，提供低延迟、高可用的 Serverless 聊天体验。
 
 ## 部署
 
-### 1. 创建 Cloudflare 资源
+### 创建 Cloudflare 资源
 
 在 [Cloudflare Dashboard](https://dash.cloudflare.com) 中创建以下资源：
 
@@ -29,11 +29,7 @@ D1 数据库，提供低延迟、高可用的 Serverless 聊天体验。
 - **Durable Objects**：部署时由 Wrangler 自动创建
 - **RealtimeKit (SFU/TURN)**：Realtime > Create SFU App / Create TURN Key
 
-### 2. 配置环境变量
-
-在 `server/.env` 中填入所有必需的 Cloudflare 凭证（参见上方环境变量列表）。
-
-### 3. 数据库迁移
+### 数据库迁移
 
 ```bash
 cd server
@@ -48,7 +44,7 @@ bun run db:generate:auth
 bun run db:push:d1
 ```
 
-### 4. 部署到 Cloudflare Workers
+### 部署到 Cloudflare Workers
 
 ```bash
 cd server
@@ -76,7 +72,7 @@ bun run deploy
 | CLOUDFLARE_R2_ACCESS_KEY_ID     | R2 存储 Access Key ID                                     |
 | CLOUDFLARE_R2_SECRET_ACCESS_KEY | R2 存储 Secret Access Key                                 |
 
-### 客户端 (`client/.env.local`)
+### 客户端 (`client/.env`)
 
 | 名称           | 描述        |
 |--------------|-----------|
