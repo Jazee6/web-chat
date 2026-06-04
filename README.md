@@ -79,14 +79,6 @@ bun run deploy
 |--------------|-----------|
 | VITE_API_URL | 后端 API 地址 |
 
-### Wrangler 静态变量 (`wrangler.jsonc`)
-
-| 名称                  | 描述                                                      |
-|---------------------|---------------------------------------------------------|
-| BETTER_AUTH_URL     | 认证服务地址（后端地址）                                            |
-| EASY_AUTH_CLIENT_ID | [Easy Auth](https://github.com/Jazee6/easy-auth) 客户端 ID |
-| SITE_URL            | 前端站点地址                                                  |
-
 ## 赞助
 
 [Click Me](https://jaze.top/sponsor)

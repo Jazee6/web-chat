@@ -81,14 +81,6 @@ bun run deploy
 |--------------|-----------------|
 | VITE_API_URL | Backend API URL |
 
-### Wrangler Static Variables (`wrangler.jsonc`)
-
-| Name                | Description                                                |
-|---------------------|------------------------------------------------------------|
-| BETTER_AUTH_URL     | Authentication service URL (backend URL)                   |
-| EASY_AUTH_CLIENT_ID | [Easy Auth](https://github.com/Jazee6/easy-auth) Client ID |
-| SITE_URL            | Frontend site URL                                          |
-
 ## Sponsor
 
 [Click Me](https://jaze.top/sponsor)
