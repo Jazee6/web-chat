@@ -62,6 +62,7 @@ bun run deploy
 | SITE_URL                        | Frontend site URL                                              |
 | BETTER_AUTH_URL                 | Authentication service URL (backend URL)                       |
 | BETTER_AUTH_SECRET              | `better-auth` secret (random string)                           |
+| EASY_AUTH_URL                   | [Easy Auth](https://github.com/Jazee6/easy-auth) URL           |
 | EASY_AUTH_CLIENT_ID             | [Easy Auth](https://github.com/Jazee6/easy-auth) Client ID     |
 | EASY_AUTH_CLIENT_SECRET         | [Easy Auth](https://github.com/Jazee6/easy-auth) Client Secret |
 | CLOUDFLARE_ACCOUNT_ID           | Cloudflare Account ID                                          |

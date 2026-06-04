@@ -60,6 +60,7 @@ bun run deploy
 | SITE_URL                        | 前端站点地址                                                  |
 | BETTER_AUTH_URL                 | 认证服务地址（后端地址）                                            |
 | BETTER_AUTH_SECRET              | better-auth 密钥（随机字符串）                                   |
+| EASY_AUTH_URL                   | [Easy Auth](https://github.com/Jazee6/easy-auth) URL    |
 | EASY_AUTH_CLIENT_ID             | [Easy Auth](https://github.com/Jazee6/easy-auth) 客户端 ID |
 | EASY_AUTH_CLIENT_SECRET         | [Easy Auth](https://github.com/Jazee6/easy-auth) 客户端密钥  |
 | CLOUDFLARE_ACCOUNT_ID           | Cloudflare 账户 ID                                        |
