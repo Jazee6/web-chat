@@ -8,6 +8,8 @@ A real-time web chat and calling application built on the Cloudflare ecosystem. 
 integrates WebRTC calling, Durable Objects for state management, and D1 database to deliver a low-latency, highly
 available serverless chat experience.
 
+Live Demo: https://chat.jaze.top
+
 ## Features
 
 - **Monorepo Architecture**: Includes three workspaces — `client` (frontend), `server` (backend), and `share` (shared

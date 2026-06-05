@@ -7,6 +7,8 @@
 基于 Cloudflare 生态构建的实时 Web 聊天与通话应用。采用 Monorepo 架构，集成 WebRTC 通话、Durable Objects 状态管理与
 D1 数据库，提供低延迟、高可用的 Serverless 聊天体验。
 
+Live Demo: https://chat.jaze.top
+
 ## 特性
 
 - **Monorepo 架构**：包含 `client`（前端）、`server`（后端）、`share`（共享类型与工具）三个工作区
