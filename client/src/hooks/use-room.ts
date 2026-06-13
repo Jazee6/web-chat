@@ -16,6 +16,7 @@ import type { User } from "better-auth";
 import ky from "ky";
 import {
   type RefObject,
+  useCallback,
   useEffect,
   useEffectEvent,
   useLayoutEffect,
@@ -314,6 +315,109 @@ export function useRoom({
     };
   }, [connect, readyState]);
 
+  const addChatMessage = useCallback(
+    (msg: Omit<UIChatMessage, "id" | "userId" | "createdAt">) => {
+      shouldScrollToBottomRef.current = true;
+      setChats((prev) => [
+        ...prev,
+        {
+          ...msg,
+          id: crypto.randomUUID(),
+          userId: user.id,
+          createdAt: new Date().toISOString(),
+        },
+      ]);
+    },
+    [user.id],
+  );
+
+  const sendText = useCallback(
+    (content: string) => {
+      addChatMessage({ type: "text", content });
+      sendMessage(
+        gm({
+          type: "send",
+          data: { type: "text", content },
+        }),
+      );
+    },
+    [addChatMessage, sendMessage],
+  );
+
+  const sendImages = useCallback(
+    async (rawImages: File[], textMessage?: string) => {
+      const messageId = crypto.randomUUID();
+
+      setChats((prev) => {
+        shouldScrollToBottomRef.current = true;
+        const next = [
+          ...prev,
+          {
+            id: messageId,
+            userId: user.id,
+            type: "image" as const,
+            content: "",
+            localFiles: rawImages.map((file) => ({
+              file,
+              isUploading: true,
+            })),
+            createdAt: new Date().toISOString(),
+          },
+        ];
+        if (textMessage) {
+          next.push({
+            id: crypto.randomUUID(),
+            userId: user.id,
+            type: "text" as const,
+            content: textMessage,
+            createdAt: new Date().toISOString(),
+          });
+        }
+        return next;
+      });
+
+      const converted = await Promise.all(rawImages.map(convertImageToWebP));
+      const sha256List = await Promise.all(converted.map(calculateSHA256));
+
+      const presigned = await api
+        .post<{ url: string | null; key: string }[]>("room/upload/presigned", {
+          json: { sha256List },
+        })
+        .json();
+
+      await Promise.all(
+        presigned.map(async ({ url }, i) => {
+          if (url) {
+            await ky.put(url, { body: converted[i] });
+          }
+          setChats((prev) =>
+            prev.map((c) =>
+              c.id === messageId
+                ? {
+                    ...c,
+                    localFiles: c.localFiles?.map((f, idx) =>
+                      idx === i ? { ...f, isUploading: false } : f,
+                    ),
+                  }
+                : c,
+            ),
+          );
+        }),
+      );
+
+      sendMessage(
+        gm({
+          type: "send",
+          data: {
+            type: "image",
+            content: JSON.stringify(sha256List),
+          },
+        }),
+      );
+    },
+    [sendMessage, user.id],
+  );
+
   const onSend = async (
     data: z.infer<typeof sendMessageSchema> & {
       images: File[];
@@ -324,122 +428,11 @@ export function useRoom({
     }
 
     const { message, images: rawImages } = data;
-    let hasSetMessage = false;
 
     if (rawImages.length > 0) {
-      const messageId = crypto.randomUUID();
-      setChats((p) => {
-        shouldScrollToBottomRef.current = true;
-        const n = [
-          ...p,
-          {
-            id: messageId,
-            userId: user.id,
-            type: "image" as const,
-            content: "",
-            localFiles: rawImages.map((i) => ({
-              file: i,
-              isUploading: true,
-            })),
-            createdAt: new Date().toISOString(),
-          },
-        ];
-
-        if (message) {
-          hasSetMessage = true;
-          n.push({
-            id: crypto.randomUUID(),
-            userId: user.id,
-            type: "text",
-            content: message,
-            createdAt: new Date().toISOString(),
-          });
-        }
-
-        return n;
-      });
-
-      const images = await Promise.all(
-        rawImages.map((i) => convertImageToWebP(i)),
-      );
-      const sha256List = await Promise.all(images.map(calculateSHA256));
-      const imageContent = JSON.stringify(sha256List);
-
-      const u = await api
-        .post<
-          {
-            url: string | null;
-            key: string;
-          }[]
-        >("room/upload/presigned", {
-          json: { sha256List },
-        })
-        .json();
-
-      await Promise.all(
-        u.map(async (u, i) => {
-          if (u.url) {
-            await ky.put(u.url, {
-              body: images[i],
-            });
-          }
-          setChats((p) =>
-            p.map((c) => {
-              if (c.id === messageId) {
-                return {
-                  ...c,
-                  localFiles: c.localFiles?.map((f, index) => {
-                    if (index === i) {
-                      return {
-                        ...f,
-                        isUploading: false,
-                      };
-                    }
-                    return f;
-                  }),
-                };
-              }
-              return c;
-            }),
-          );
-        }),
-      );
-
-      sendMessage(
-        gm({
-          type: "send",
-          data: {
-            type: "image",
-            content: imageContent,
-          },
-        }),
-      );
-    }
-
-    if (message) {
-      if (!hasSetMessage) {
-        shouldScrollToBottomRef.current = true;
-        setChats((p) => [
-          ...p,
-          {
-            id: crypto.randomUUID(),
-            userId: user.id,
-            type: "text",
-            content: message,
-            createdAt: new Date().toISOString(),
-          },
-        ]);
-      }
-
-      sendMessage(
-        gm({
-          type: "send",
-          data: {
-            type: "text",
-            content: message,
-          },
-        }),
-      );
+      await sendImages(rawImages, message || undefined);
+    } else if (message) {
+      sendText(message);
     }
   };
 

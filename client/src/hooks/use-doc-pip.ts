@@ -31,15 +31,13 @@ export const useDocPip = () => {
       height,
     });
 
-    [...document.styleSheets].forEach((styleSheet) => {
-      const cssRules = [...styleSheet.cssRules]
-        .map((rule) => rule.cssText)
-        .join("");
-      const style = document.createElement("style");
-
-      style.textContent = cssRules;
-      win.document.head.appendChild(style);
-    });
+    document
+      .querySelectorAll<HTMLStyleElement | HTMLLinkElement>(
+        "style, link[rel='stylesheet']",
+      )
+      .forEach((el) => {
+        win.document.head.appendChild(el.cloneNode(true));
+      });
     win.document.documentElement.classList.add("dark");
 
     win.addEventListener("pagehide", () => {

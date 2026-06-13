@@ -20,30 +20,23 @@ const AddFavoritesButton = ({
 
   const onFavorite = async () => {
     setIsLoading(true);
-    if (!added) {
-      await api.post(`room/${id}/favorite`).finally(() => setIsLoading(false));
-      await Promise.all([
-        queryClient.refetchQueries({
-          queryKey: ["roomInfo", id],
-        }),
-        queryClient.refetchQueries({
-          queryKey: ["favoriteRoom"],
-        }),
-      ]);
-      toast.success("Favorite added successfully.");
-      return;
-    }
-
-    await api.delete(`room/${id}/favorite`).finally(() => setIsLoading(false));
-    await Promise.all([
-      queryClient.refetchQueries({
+    try {
+      if (added) {
+        await api.delete(`room/${id}/favorite`);
+        toast.success("Favorite removed successfully.");
+      } else {
+        await api.post(`room/${id}/favorite`);
+        toast.success("Favorite added successfully.");
+      }
+      await queryClient.invalidateQueries({
         queryKey: ["roomInfo", id],
-      }),
-      queryClient.refetchQueries({
+      });
+      await queryClient.invalidateQueries({
         queryKey: ["favoriteRoom"],
-      }),
-    ]);
-    toast.success("Favorite removed successfully.");
+      });
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (

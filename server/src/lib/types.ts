@@ -6,9 +6,5 @@ export interface HONOInstance {
     user: User;
     session: Session;
   };
-  Bindings: {
-    web_chat: D1Database;
-    ROOM: DurableObjectNamespace<Room>;
-    FILE: R2Bucket;
-  };
+  Bindings: CloudflareBindings;
 }

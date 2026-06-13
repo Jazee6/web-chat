@@ -31,46 +31,34 @@ interface FavoriteRoom {
   createdAt: string;
 }
 
-export function AppSidebar({ ...props }: ComponentProps<typeof Sidebar>) {
-  const { data, isPending } = useSession();
-
-  const { data: rooms, isFetching } = useInfiniteQuery({
-    queryKey: ["room"],
-    queryFn: async ({ pageParam }) => {
+function useRoomPages<T>(queryKey: string, url: string, enabled: boolean) {
+  const { data, isFetching } = useInfiniteQuery({
+    queryKey: [queryKey],
+    queryFn: async ({ pageParam }: { pageParam: number }) => {
       return await api
-        .get<Room[]>("room", {
-          searchParams: {
-            limit: 20,
-            offset: pageParam,
-          },
+        .get<T[]>(url, {
+          searchParams: { limit: 20, offset: pageParam },
         })
         .json();
     },
     initialPageParam: 0,
-    getNextPageParam: (_, __, lastPageParam) => lastPageParam + 20,
-    enabled: !!data,
+    getNextPageParam: (_, __, lastPageParam: number) => lastPageParam + 20,
+    enabled,
   });
+  return { data: data?.pages.flat() ?? [], isFetching };
+}
 
-  const { data: favoriteRooms, isFetching: isFavoriteRoomsFetching } =
-    useInfiniteQuery({
-      queryKey: ["favoriteRoom"],
-      queryFn: async ({ pageParam }) => {
-        return await api
-          .get<FavoriteRoom[]>("room/favorite", {
-            searchParams: {
-              limit: 20,
-              offset: pageParam,
-            },
-          })
-          .json();
-      },
-      initialPageParam: 0,
-      getNextPageParam: (_, __, lastPageParam) => lastPageParam + 20,
-      enabled: !!data,
-    });
+export function AppSidebar({ ...props }: ComponentProps<typeof Sidebar>) {
+  const { data, isPending } = useSession();
 
-  const roomsData = rooms?.pages.flat() ?? [];
-  const favoriteRoomsData = favoriteRooms?.pages.flat() ?? [];
+  const { data: roomsData, isFetching } = useRoomPages<Room>(
+    "room",
+    "room",
+    !!data,
+  );
+
+  const { data: favoriteRoomsData, isFetching: isFavoriteRoomsFetching } =
+    useRoomPages<FavoriteRoom>("favoriteRoom", "room/favorite", !!data);
 
   return (
     <Sidebar {...props}>

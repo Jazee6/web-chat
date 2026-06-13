@@ -17,6 +17,8 @@ const RealtimeLand = ({
       </Button>
     );
   }
+
+  return null;
 };
 
 export default RealtimeLand;

@@ -3,6 +3,8 @@ import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { betterAuth } from "better-auth/minimal";
 import { genericOAuth } from "better-auth/plugins";
 import { env } from "cloudflare:workers";
+import { drizzle } from "drizzle-orm/d1";
+import * as authSchema from "./schema/auth";
 
 export const authConfig: BetterAuthOptions = {
   database: drizzleAdapter(env.web_chat, {
@@ -23,21 +25,6 @@ export const authConfig: BetterAuthOptions = {
       ],
     }),
   ],
-  // databaseHooks: {
-  //   user: {
-  //     create: {
-  //       // @ts-ignore
-  //       before: (user) => {
-  //         return {
-  //           data: {
-  //             ...user,
-  //             id: user.sub,
-  //           },
-  //         };
-  //       },
-  //     },
-  //   },
-  // },
   trustedOrigins: [process.env.SITE_URL],
   session: {
     cookieCache: {
@@ -48,6 +35,21 @@ export const authConfig: BetterAuthOptions = {
   advanced: {
     cookiePrefix: "wc",
   },
+};
+
+let cachedAuth: typeof auth | null = null;
+
+export const getAuth = (db: D1Database): typeof auth => {
+  if (!cachedAuth) {
+    cachedAuth = betterAuth({
+      ...authConfig,
+      database: drizzleAdapter(drizzle(db), {
+        provider: "sqlite",
+        schema: authSchema,
+      }),
+    }) as typeof auth;
+  }
+  return cachedAuth;
 };
 
 export const auth = betterAuth(authConfig);

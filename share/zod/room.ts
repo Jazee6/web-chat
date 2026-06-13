@@ -39,3 +39,47 @@ export const getPresignedUrlSchema = z.object({
 export const getImageSchema = z.object({
   key: z.hash("sha256", { enc: "base64url" }),
 });
+
+export const userStatusSchema = z.object({
+  user: z.enum(["active", "idle"]).optional(),
+  screen: z.enum(["locked", "unlocked"]).optional(),
+  typing: z.boolean().optional(),
+});
+
+export const realtimeStatusSchema = z.object({
+  sessionId: z.string().optional(),
+  audio: z
+    .object({
+      id: z.string(),
+      enabled: z.boolean().optional(),
+    })
+    .optional(),
+});
+
+export const clientMessageSchema = z.discriminatedUnion("type", [
+  z.object({ type: z.literal("ping") }),
+  z.object({ type: z.literal("join") }),
+  z.object({
+    type: z.literal("send"),
+    data: z.object({
+      type: z.enum(["text", "image"]),
+      content: z.string(),
+    }),
+  }),
+  z.object({
+    type: z.literal("loadHistory"),
+    data: z.object({
+      before: z.string(),
+    }),
+  }),
+  z.object({
+    type: z.literal("userStatus"),
+    data: userStatusSchema,
+  }),
+  z.object({ type: z.literal("realtimeJoin") }),
+  z.object({
+    type: z.literal("realtimeUpdate"),
+    data: realtimeStatusSchema,
+  }),
+  z.object({ type: z.literal("realtimeLeave") }),
+]);

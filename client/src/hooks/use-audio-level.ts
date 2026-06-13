@@ -1,5 +1,17 @@
 import { useEffect, useState } from "react";
 
+let sharedAudioContext: AudioContext | null = null;
+
+const getSharedAudioContext = () => {
+  if (!sharedAudioContext || sharedAudioContext.state === "closed") {
+    sharedAudioContext = new AudioContext();
+  }
+  if (sharedAudioContext.state === "suspended") {
+    void sharedAudioContext.resume();
+  }
+  return sharedAudioContext;
+};
+
 const useAudioLevel = (track?: MediaStreamTrack) => {
   const [level, setLevel] = useState(0);
   const [isSpeaking, setIsSpeaking] = useState(false);
@@ -9,7 +21,7 @@ const useAudioLevel = (track?: MediaStreamTrack) => {
       return;
     }
 
-    const audioContext = new AudioContext();
+    const audioContext = getSharedAudioContext();
     const mediaStream = new MediaStream([track]);
     const source = audioContext.createMediaStreamSource(mediaStream);
     const analyser = audioContext.createAnalyser();
@@ -38,7 +50,6 @@ const useAudioLevel = (track?: MediaStreamTrack) => {
     return () => {
       cancelAnimationFrame(animationFrameId);
       source.disconnect();
-      void audioContext.close();
     };
   }, [track]);
 

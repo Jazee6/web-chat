@@ -19,7 +19,9 @@ export const favoriteRoomTable = sqliteTable("favorite_room", {
     .primaryKey()
     .$defaultFn(() => v7()),
   userId: text().notNull(),
-  roomId: text().notNull(),
+  roomId: text()
+    .notNull()
+    .references(() => roomTable.id, { onDelete: "cascade" }),
   createdAt: integer({ mode: "timestamp" })
     .notNull()
     .$defaultFn(() => new Date()),

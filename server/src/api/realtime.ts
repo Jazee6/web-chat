@@ -6,10 +6,10 @@ const realtime = new Hono<HONOInstance>();
 
 realtime.all("/partytracks/*", (c) =>
   routePartyTracksRequest({
-    appId: process.env.CLOUDFLARE_SFU_ID,
-    token: process.env.CLOUDFLARE_SFU_SECRET,
-    turnServerAppId: process.env.CLOUDFLARE_TURN_ID,
-    turnServerAppToken: process.env.CLOUDFLARE_TURN_SECRET,
+    appId: c.env.CLOUDFLARE_SFU_ID,
+    token: c.env.CLOUDFLARE_SFU_SECRET,
+    turnServerAppId: c.env.CLOUDFLARE_TURN_ID,
+    turnServerAppToken: c.env.CLOUDFLARE_TURN_SECRET,
     request: c.req.raw,
     prefix: "/room/partytracks",
   }),

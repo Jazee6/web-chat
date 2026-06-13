@@ -9,7 +9,13 @@ import { Spinner } from "@/components/ui/spinner.tsx";
 import { cn } from "@/lib/utils.ts";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { ArrowUpIcon, ImagePlus, PhoneCall, X } from "lucide-react";
-import { type ChangeEvent, type ClipboardEvent, useRef, useState } from "react";
+import {
+  type ChangeEvent,
+  type ClipboardEvent,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 import { Controller, useForm } from "react-hook-form";
 import Zoom from "react-medium-image-zoom";
 import { toast } from "sonner";
@@ -34,6 +40,37 @@ const ChatInput = ({
   const [images, setImages] = useState<File[]>([]);
   const [isSending, setIsSending] = useState(false);
   const imageInputRef = useRef<HTMLInputElement>(null);
+  const imagePreviewUrls = useRef(new Map<File, string>());
+
+  useEffect(() => {
+    const urls = imagePreviewUrls.current;
+    return () => {
+      urls.forEach((url) => URL.revokeObjectURL(url));
+      urls.clear();
+    };
+  }, []);
+
+  const getImagePreviewUrl = (file: File) => {
+    const existing = imagePreviewUrls.current.get(file);
+    if (existing) return existing;
+    const url = URL.createObjectURL(file);
+    imagePreviewUrls.current.set(file, url);
+    return url;
+  };
+
+  const removeImage = (index: number) => {
+    setImages((prev) => {
+      const file = prev[index];
+      if (file) {
+        const url = imagePreviewUrls.current.get(file);
+        if (url) {
+          URL.revokeObjectURL(url);
+          imagePreviewUrls.current.delete(file);
+        }
+      }
+      return prev.filter((_, i) => i !== index);
+    });
+  };
 
   const form = useForm<z.infer<typeof sendMessageSchema>>({
     resolver: zodResolver(sendMessageSchema),
@@ -44,6 +81,8 @@ const ChatInput = ({
 
   const onSubmit = async (data: z.infer<typeof sendMessageSchema>) => {
     setIsSending(true);
+    imagePreviewUrls.current.forEach((url) => URL.revokeObjectURL(url));
+    imagePreviewUrls.current.clear();
     form.reset();
     setImages([]);
 
@@ -148,35 +187,28 @@ const ChatInput = ({
               {images.length > 0 && (
                 <InputGroupAddon align="block-start">
                   <div className="flex gap-2 overflow-x-auto scrollbar">
-                    {images.map((image, index) => {
-                      const src = URL.createObjectURL(image);
-
-                      return (
-                        <div
-                          key={`${image.name}_${index}`}
-                          className="relative shrink-0 group"
-                        >
-                          <Zoom
-                            classDialog='[&_[data-rmiz-modal-overlay="visible"]]:bg-background/80!
+                    {images.map((image, index) => (
+                      <div
+                        key={`${image.name}_${index}`}
+                        className="relative shrink-0 group"
+                      >
+                        <Zoom
+                          classDialog='[&_[data-rmiz-modal-overlay="visible"]]:bg-background/80!
       [&_[data-rmiz-modal-overlay="visible"]]:backdrop-blur-md
       [&_[data-rmiz-modal-img]]:rounded'
-                          >
-                            <img
-                              src={src}
-                              alt={image.name}
-                              className="h-16 rounded object-cover cursor-zoom-in"
-                            />
-                          </Zoom>
-                          <X
-                            className="size-4 cursor-pointer absolute top-px right-px max-md:opacity-100 opacity-0 group-hover:opacity-100 transition-opacity rounded-full bg-destructive/80 text-secondary-foreground hover:bg-destructive/60"
-                            onClick={() => {
-                              URL.revokeObjectURL(src);
-                              setImages((p) => p.filter((_, i) => i !== index));
-                            }}
+                        >
+                          <img
+                            src={getImagePreviewUrl(image)}
+                            alt={image.name}
+                            className="h-16 rounded object-cover cursor-zoom-in"
                           />
-                        </div>
-                      );
-                    })}
+                        </Zoom>
+                        <X
+                          className="size-4 cursor-pointer absolute top-px right-px max-md:opacity-100 opacity-0 group-hover:opacity-100 transition-opacity rounded-full bg-destructive/80 text-secondary-foreground hover:bg-destructive/60"
+                          onClick={() => removeImage(index)}
+                        />
+                      </div>
+                    ))}
                   </div>
                 </InputGroupAddon>
               )}

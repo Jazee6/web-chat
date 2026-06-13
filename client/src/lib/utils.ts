@@ -113,7 +113,9 @@ export const getNotificationBody = (data: ChatMessage) => {
 export const convertImageToWebP = async (image: File): Promise<File> => {
   return new Promise<File>((resolve, reject) => {
     const img = new Image();
+    const objectUrl = URL.createObjectURL(image);
     img.onload = () => {
+      URL.revokeObjectURL(objectUrl);
       const canvas = document.createElement("canvas");
       canvas.width = img.width;
       canvas.height = img.height;
@@ -139,7 +141,11 @@ export const convertImageToWebP = async (image: File): Promise<File> => {
         0.9,
       );
     };
-    img.src = URL.createObjectURL(image);
+    img.onerror = () => {
+      URL.revokeObjectURL(objectUrl);
+      reject(new Error("Failed to load image"));
+    };
+    img.src = objectUrl;
   });
 };
 

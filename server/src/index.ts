@@ -1,6 +1,4 @@
 import { zValidator } from "@hono/zod-validator";
-import { drizzleAdapter } from "better-auth/adapters/drizzle";
-import { betterAuth } from "better-auth/minimal";
 import { and, desc, eq, inArray } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
 import { Hono } from "hono";
@@ -18,8 +16,8 @@ import {
   roomIdSchema,
 } from "web-chat-share";
 import realtime from "./api/realtime";
-import { authConfig } from "./lib/auth";
-import { s3 } from "./lib/s3";
+import { getAuth } from "./lib/auth";
+import { createS3 } from "./lib/s3";
 import * as authSchema from "./lib/schema/auth";
 import { user } from "./lib/schema/auth";
 import * as d1Schema from "./lib/schema/d1";
@@ -27,14 +25,40 @@ import { favoriteRoomTable, roomTable } from "./lib/schema/d1";
 import { HONOInstance } from "./lib/types";
 export { Room } from "./do/room";
 
-const createAuth = (db: D1Database) => {
-  return betterAuth({
-    ...authConfig,
-    database: drizzleAdapter(drizzle(db), {
-      provider: "sqlite",
-      schema: authSchema,
-    }),
-  });
+const dbCache = new WeakMap<D1Database, ReturnType<typeof drizzle>>();
+const getDb = (db: D1Database) => {
+  let cached = dbCache.get(db);
+  if (!cached) {
+    cached = drizzle(db);
+    dbCache.set(db, cached);
+  }
+  return cached;
+};
+
+const d1DbCache = new WeakMap<
+  D1Database,
+  ReturnType<typeof drizzle<typeof d1Schema>>
+>();
+const getD1Db = (db: D1Database) => {
+  let cached = d1DbCache.get(db);
+  if (!cached) {
+    cached = drizzle(db, { schema: d1Schema });
+    d1DbCache.set(db, cached);
+  }
+  return cached;
+};
+
+const authDbCache = new WeakMap<
+  D1Database,
+  ReturnType<typeof drizzle<typeof authSchema>>
+>();
+const getAuthDb = (db: D1Database) => {
+  let cached = authDbCache.get(db);
+  if (!cached) {
+    cached = drizzle(db, { schema: authSchema });
+    authDbCache.set(db, cached);
+  }
+  return cached;
 };
 
 const app = new Hono<HONOInstance>();
@@ -60,7 +84,7 @@ app.use(
 );
 
 app.use("/room/*", async (c, next) => {
-  const a = createAuth(c.env.web_chat);
+  const a = getAuth(c.env.web_chat);
   const session = await a.api.getSession({ headers: c.req.raw.headers });
   if (!session) {
     throw new HTTPException(401, { message: "Unauthorized" });
@@ -71,14 +95,14 @@ app.use("/room/*", async (c, next) => {
 });
 
 app.on(["POST", "GET"], "/api/auth/*", (c) => {
-  const a = createAuth(c.env.web_chat);
+  const a = getAuth(c.env.web_chat);
   return a.handler(c.req.raw);
 });
 
 app.post("/room", zValidator("json", createRoomSchema), async (c) => {
   const { name, type } = c.req.valid("json");
   const user = c.get("user");
-  const db = drizzle(c.env.web_chat);
+  const db = getDb(c.env.web_chat);
   const roomCount = await db.$count(roomTable, eq(roomTable.userId, user.id));
   if (roomCount >= 10) {
     throw new HTTPException(400, { message: "Room limit reached" });
@@ -101,7 +125,7 @@ app.post("/room", zValidator("json", createRoomSchema), async (c) => {
 app.get("/room", zValidator("query", basePaginationSchema), async (c) => {
   const { limit, offset } = c.req.valid("query");
   const user = c.get("user");
-  const db = drizzle(c.env.web_chat, { schema: d1Schema });
+  const db = getD1Db(c.env.web_chat);
   const rooms = await db.query.roomTable.findMany({
     columns: {
       userId: false,
@@ -120,7 +144,7 @@ app.get(
   async (c) => {
     const { limit, offset } = c.req.valid("query");
     const user = c.get("user");
-    const db = drizzle(c.env.web_chat, { schema: d1Schema });
+    const db = getD1Db(c.env.web_chat);
     const rooms = await db
       .select({
         favorite_room: {
@@ -149,7 +173,7 @@ app.get(
 
 app.get("/room/:id/ws", zValidator("param", roomIdSchema), async (c) => {
   const { id } = c.req.valid("param");
-  const db = drizzle(c.env.web_chat);
+  const db = getDb(c.env.web_chat);
   const room = await db
     .select({
       id: roomTable.id,
@@ -172,7 +196,7 @@ app.get("/room/:id/ws", zValidator("param", roomIdSchema), async (c) => {
 app.delete("/room/:id", zValidator("param", roomIdSchema), async (c) => {
   const { id } = c.req.valid("param");
   const user = c.get("user");
-  const db = drizzle(c.env.web_chat);
+  const db = getDb(c.env.web_chat);
   const room_id = c.env.ROOM.idFromString(id);
   const stub = c.env.ROOM.get(room_id);
   const deletedRoom = await db
@@ -197,7 +221,7 @@ app.get(
   }),
   async (c) => {
     const { ids } = c.req.valid("query");
-    const db = drizzle(c.env.web_chat, { schema: authSchema });
+    const db = getAuthDb(c.env.web_chat);
     const users = await db.query.user.findMany({
       columns: {
         id: true,
@@ -212,7 +236,7 @@ app.get(
 
 app.get("/room/:id/info", zValidator("param", getRoomInfoSchema), async (c) => {
   const { id } = c.req.valid("param");
-  const db = drizzle(c.env.web_chat, { schema: d1Schema });
+  const db = getD1Db(c.env.web_chat);
   const info = await db
     .select({
       room: {
@@ -244,7 +268,7 @@ app.get("/room/:id/info", zValidator("param", getRoomInfoSchema), async (c) => {
 app.post("/room/:id/favorite", zValidator("param", roomIdSchema), async (c) => {
   const { id } = c.req.valid("param");
   const user = c.get("user");
-  const db = drizzle(c.env.web_chat, { schema: d1Schema });
+  const db = getD1Db(c.env.web_chat);
   const f = await db.query.favoriteRoomTable.findFirst({
     where: and(
       eq(d1Schema.favoriteRoomTable.roomId, id),
@@ -267,7 +291,7 @@ app.delete(
   async (c) => {
     const { id } = c.req.valid("param");
     const user = c.get("user");
-    const db = drizzle(c.env.web_chat, { schema: d1Schema });
+    const db = getD1Db(c.env.web_chat);
     await db
       .delete(favoriteRoomTable)
       .where(
@@ -297,9 +321,10 @@ app.post(
           };
         }
         const s3_url = new URL(
-          `https://${process.env.CLOUDFLARE_ACCOUNT_ID}.r2.cloudflarestorage.com/web-chat/${key}`,
+          `https://${c.env.CLOUDFLARE_ACCOUNT_ID}.r2.cloudflarestorage.com/web-chat/${key}`,
         );
         s3_url.searchParams.set("X-Amz-Expires", "60");
+        const s3 = createS3(c.env);
         const signed = await s3.sign(new Request(s3_url, { method: "PUT" }), {
           aws: { signQuery: true },
         });

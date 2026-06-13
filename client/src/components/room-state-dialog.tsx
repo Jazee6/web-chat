@@ -27,8 +27,11 @@ import { Fragment, useEffect, useMemo } from "react";
 import type { RoomStats } from "web-chat-share";
 
 export interface RoomInfo {
+  id: string;
   name: string;
-  isFavorite: number;
+  type: string;
+  createdAt: string;
+  isFavorite: boolean;
   userId: string;
 }
 

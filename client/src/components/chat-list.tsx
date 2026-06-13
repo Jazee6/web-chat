@@ -73,6 +73,16 @@ const isEmojiOnly = (content: string) => {
   return isEmojiRegex.test(content);
 };
 
+const localFileUrlCache = new WeakMap<File, string>();
+const getLocalFileUrl = (file: File) => {
+  let url = localFileUrlCache.get(file);
+  if (!url) {
+    url = URL.createObjectURL(file);
+    localFileUrlCache.set(file, url);
+  }
+  return url;
+};
+
 const ChatList = memo(
   ({
     chats,
@@ -212,7 +222,7 @@ const ChatList = memo(
                                         key={`${file.name}_${index}`}
                                       >
                                         <ChatImage
-                                          src={URL.createObjectURL(file)}
+                                          src={getLocalFileUrl(file)}
                                           alt={file.name}
                                         />
 

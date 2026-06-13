@@ -3,10 +3,11 @@ import { desc, lt } from "drizzle-orm";
 import { drizzle, DrizzleSqliteDODatabase } from "drizzle-orm/durable-sqlite";
 import { migrate } from "drizzle-orm/durable-sqlite/migrator";
 import {
-  ClientMessage,
+  clientMessageSchema,
   gm,
   RoomUser,
   ServerMessage,
+  type ClientMessage,
   type ServerRealtimeStatus,
 } from "web-chat-share";
 // @ts-ignore
@@ -121,12 +122,17 @@ export class Room extends DurableObject {
   }
 
   async webSocketMessage(ws: WebSocket, message: string) {
-    let clientMessage: ClientMessage;
-    try {
-      clientMessage = JSON.parse(message) as ClientMessage;
-    } catch {
-      return;
-    }
+    const parsed = clientMessageSchema.safeParse(
+      (() => {
+        try {
+          return JSON.parse(message);
+        } catch {
+          return null;
+        }
+      })(),
+    );
+    if (!parsed.success) return;
+    const clientMessage: ClientMessage = parsed.data;
 
     switch (clientMessage.type) {
       case "join": {

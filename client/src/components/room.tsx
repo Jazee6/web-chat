@@ -19,6 +19,8 @@ import { PictureInPicture } from "lucide-react";
 import { useRef, useState } from "react";
 import { useBeforeUnload } from "react-router";
 
+let realtimeKeyCounter = 0;
+
 const Room = ({
   id,
   user,
@@ -36,17 +38,14 @@ const Room = ({
   const [audioTrackMap, setAudioTrackMap] = useState<
     Record<string, MediaStreamTrack>
   >({});
+  const [realtimeKey, setRealtimeKey] = useState(0);
 
   const chatListRef = useRef<HTMLDivElement>(null);
   const loaderRef = useRef<HTMLDivElement>(null);
 
   const onOpen = () => {
     if (realtimeWindowOpen) {
-      setRealtimeWindowOpen(false);
-
-      setTimeout(() => {
-        setRealtimeWindowOpen(true);
-      }, 100);
+      setRealtimeKey(++realtimeKeyCounter);
     }
   };
 
@@ -117,7 +116,7 @@ const Room = ({
     <>
       <RoomContext value={roomContextValue}>
         {realtimeWindowOpen && (
-          <RealtimeProvider>
+          <RealtimeProvider key={realtimeKey}>
             <RealtimeWindow
               open={realtimeWindowOpen}
               onOpenChange={setRealtimeWindowOpen}
