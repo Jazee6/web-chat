@@ -25,7 +25,9 @@ export interface UIChatMessage extends ChatMessage {
   localFiles?: {
     file: File;
     isUploading: boolean;
+    error?: boolean;
   }[];
+  sendFailed?: boolean;
 }
 
 export interface RealtimeStatus {
