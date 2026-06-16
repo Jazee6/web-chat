@@ -131,6 +131,7 @@ export function useRoom({
     setChats: chat.setChats,
     sendMessage,
     readyState,
+    forceScrollRef: chat.forceScrollRef,
   });
 
   const notifications = useRoomNotifications({ users });

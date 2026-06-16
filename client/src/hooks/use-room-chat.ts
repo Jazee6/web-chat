@@ -38,6 +38,7 @@ type UseRoomChatReturn = {
   handleHistory: (data: ChatMessage[]) => void;
   handleMessage: (data: ChatMessage) => void;
   handleRoomStats: (data: RoomStats) => void;
+  forceScrollRef: RefObject<boolean>;
 };
 
 export function useRoomChat({
@@ -248,5 +249,6 @@ export function useRoomChat({
     handleHistory,
     handleMessage,
     handleRoomStats,
+    forceScrollRef,
   };
 }
