@@ -1,7 +1,7 @@
 import { Skeleton } from "@/components/ui/skeleton.tsx";
 import { useLinkPreview } from "@/hooks/use-link-preview.ts";
 import { cn } from "@/lib/utils.ts";
-import { FileText } from "lucide-react";
+import { FileText, ImageOff } from "lucide-react";
 import { useState } from "react";
 
 const CARD_WIDTH = "w-80";
@@ -44,7 +44,13 @@ const LinkCardSkeleton = () => (
 
 const Thumbnail = ({ src, alt }: { src: string; alt: string }) => {
   const [failed, setFailed] = useState(false);
-  if (failed) return null;
+  if (failed) {
+    return (
+      <div className="aspect-[1.91/1] w-full flex items-center justify-center bg-muted">
+        <ImageOff className="size-12 text-muted-foreground" strokeWidth={1.5} />
+      </div>
+    );
+  }
   return (
     <div className="aspect-[1.91/1] w-full bg-muted">
       <img
