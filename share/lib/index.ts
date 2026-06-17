@@ -30,6 +30,21 @@ export interface UIChatMessage extends ChatMessage {
   sendFailed?: boolean;
 }
 
+export type LinkPreviewContentType =
+  | "html"
+  | "image"
+  | "video"
+  | "pdf"
+  | "unknown";
+
+export interface LinkPreview {
+  title: string;
+  description: string;
+  image: string | null;
+  contentType: LinkPreviewContentType;
+  url: string;
+}
+
 export interface RealtimeStatus {
   sessionId?: string;
   audio?: {

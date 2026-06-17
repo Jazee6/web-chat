@@ -40,6 +40,14 @@ export const getImageSchema = z.object({
   key: z.hash("sha256", { enc: "base64url" }),
 });
 
+export const linkPreviewQuerySchema = z.object({
+  url: z
+    .url()
+    .refine((url) => url.startsWith("http://") || url.startsWith("https://"), {
+      message: "Only http/https URLs are allowed",
+    }),
+});
+
 export const userStatusSchema = z.object({
   user: z.enum(["active", "idle"]).optional(),
   screen: z.enum(["locked", "unlocked"]).optional(),

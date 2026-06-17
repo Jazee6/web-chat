@@ -13,10 +13,12 @@ import {
   getPresignedUrlSchema,
   getRoomInfoSchema,
   getUserInfoSchema,
+  linkPreviewQuerySchema,
   roomIdSchema,
 } from "web-chat-share";
 import realtime from "./api/realtime";
 import { getAuth } from "./lib/auth";
+import { fetchLinkPreview } from "./lib/preview";
 import { createS3 } from "./lib/s3";
 import * as authSchema from "./lib/schema/auth";
 import { user } from "./lib/schema/auth";
@@ -168,6 +170,20 @@ app.get(
         ...i.favorite_room,
       })),
     );
+  },
+);
+
+app.get(
+  "/room/preview",
+  zValidator("query", linkPreviewQuerySchema),
+  cache({
+    cacheName: "link-preview",
+    cacheControl: "max-age=86400",
+  }),
+  async (c) => {
+    const { url } = c.req.valid("query");
+    const preview = await fetchLinkPreview(url);
+    return c.json(preview);
   },
 );
 

@@ -1,3 +1,4 @@
+import { LinkCard } from "@/components/link-card.tsx";
 import {
   Avatar,
   AvatarBadge,
@@ -40,21 +41,48 @@ const ChatImage = ({ src, alt }: { src: string; alt: string }) => {
   );
 };
 
-const urlRegex = /(https?:\/\/\S+)/g;
+const urlPattern = "https?://[^\\s<>\\[\\]{}|^`]+";
+const urlRegex = new RegExp(`(${urlPattern})`, "g");
+const pureUrlRegex = new RegExp(`^${urlPattern}$`);
+
+const cleanUrl = (raw: string): string => {
+  let url = raw.replace(/[.,;:!?]+$/, "");
+  // Strip unmatched trailing close-parens, e.g. "(see https://x.com/foo)".
+  let depth = 0;
+  for (const ch of url) {
+    if (ch === "(") depth++;
+    else if (ch === ")") depth--;
+  }
+  while (depth < 0 && url.endsWith(")")) {
+    url = url.slice(0, -1);
+    depth++;
+  }
+  return url;
+};
+
+const isPureUrl = (content: string): string | null => {
+  const trimmed = content.trim();
+  if (!pureUrlRegex.test(trimmed)) return null;
+  return cleanUrl(trimmed);
+};
 
 const formatContent = (content: string) => {
   return content.split(urlRegex).map((part, i) => {
     if (i % 2 === 1) {
+      const href = cleanUrl(part);
+      const trailing = part.slice(href.length);
       return (
-        <a
-          key={i}
-          href={part}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="underline underline-offset-4"
-        >
-          {part}
-        </a>
+        <Fragment key={i}>
+          <a
+            href={href}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="underline underline-offset-4"
+          >
+            {href}
+          </a>
+          {trailing}
+        </Fragment>
       );
     }
     return part;
@@ -71,6 +99,23 @@ try {
 const isEmojiOnly = (content: string) => {
   if (!isEmojiRegex) return false;
   return isEmojiRegex.test(content);
+};
+
+const TextMessageContent = ({ content }: { content: string }) => {
+  const pureUrl = isPureUrl(content);
+  if (pureUrl) return <LinkCard url={pureUrl} />;
+  return (
+    <div
+      className={cn(
+        "rounded-md wrap-anywhere whitespace-pre-wrap hover:brightness-75 transition peer",
+        isEmojiOnly(content)
+          ? "bg-transparent text-5xl"
+          : "bg-secondary px-2 py-1",
+      )}
+    >
+      {formatContent(content)}
+    </div>
+  );
 };
 
 const localFileUrlCache = new WeakMap<File, string>();
@@ -200,16 +245,7 @@ const ChatList = memo(
                           )}
                         >
                           {c.type === "text" && (
-                            <div
-                              className={cn(
-                                "rounded-md wrap-anywhere whitespace-pre-wrap hover:brightness-75 transition peer",
-                                isEmojiOnly(c.content)
-                                  ? "bg-transparent text-5xl"
-                                  : "bg-secondary px-2 py-1",
-                              )}
-                            >
-                              {formatContent(c.content)}
-                            </div>
+                            <TextMessageContent content={c.content} />
                           )}
 
                           {c.type === "image" && (
