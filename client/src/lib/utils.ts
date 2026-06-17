@@ -111,6 +111,17 @@ export const getNotificationBody = (data: ChatMessage) => {
 };
 
 export const convertImageToWebP = async (image: File): Promise<File> => {
+  // Animated formats (GIF, animated WebP, APNG) must be preserved as their
+  // original bytes: canvas.drawImage + toBlob rasterizes only the first frame
+  // and destroys animation. APNG reports as image/png in browsers, so all PNGs
+  // are passed through (static PNG gives up the WebP size win to keep APNG).
+  if (
+    image.type === "image/gif" ||
+    image.type === "image/webp" ||
+    image.type === "image/png"
+  ) {
+    return image;
+  }
   return new Promise<File>((resolve, reject) => {
     const img = new Image();
     const objectUrl = URL.createObjectURL(image);

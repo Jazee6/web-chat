@@ -368,7 +368,11 @@ app.get(
     if (!object) {
       throw new HTTPException(404, { message: "Image not found" });
     }
-    return new Response(object.body);
+    return new Response(object.body, {
+      headers: {
+        "Content-Type": object.httpMetadata?.contentType ?? "image/webp",
+      },
+    });
   },
 );
 
