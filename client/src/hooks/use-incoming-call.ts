@@ -13,6 +13,13 @@ import { toast } from "sonner";
 export const useIncomingCall = () => {
   const { roomRealtime, uid, setRealtimeWindowOpen } = useRoomContext();
   const { users, fetchMissingUsers } = useUserInfo();
+  // Whether we've locked in the baseline snapshot yet. The baseline must be a
+  // *real* server snapshot, not the mount-time undefined — locking `[]` as the
+  // baseline and then gating on `seenRef.size === 0` silently swallows the
+  // very empty→non-empty transition an incoming call *is* (an empty Call going
+  // to one participant never clears size===0, so the joiner becomes the
+  // baseline instead of triggering a toast).
+  const initializedRef = useRef(false);
   // IDs we've already accounted for, so we only toast on *new* arrivals.
   const seenRef = useRef<Set<string>>(new Set());
   // Toast ids we've shown (matches the `incoming-call-${id}` form below), so
@@ -20,12 +27,17 @@ export const useIncomingCall = () => {
   const shownToastIdsRef = useRef<Set<string>>(new Set());
 
   useEffect(() => {
-    const ids = roomRealtime?.userIds ?? [];
+    // No server snapshot yet — wait for a real one before establishing the
+    // baseline. Don't lock `[]` on undefined.
+    if (!roomRealtime) return;
+
+    const ids = roomRealtime.userIds;
     const idSet = new Set(ids);
 
     // Establish the baseline on the first server snapshot — don't toast for
     // participants who were already in the Call before we connected.
-    if (seenRef.current.size === 0) {
+    if (!initializedRef.current) {
+      initializedRef.current = true;
       seenRef.current = idSet;
       return;
     }
