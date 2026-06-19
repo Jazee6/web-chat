@@ -25,7 +25,10 @@ export interface UIChatMessage extends ChatMessage {
   localFiles?: {
     file: File;
     isUploading: boolean;
-    error?: boolean;
+    // Per-file: WebP conversion or the PUT to object storage failed. The rest
+    // of the batch may still succeed. Distinct from `sendFailed` (per-message).
+    // See CONTEXT.md "Upload Failed" vs "Send Failed".
+    uploadFailed?: boolean;
   }[];
   sendFailed?: boolean;
 }

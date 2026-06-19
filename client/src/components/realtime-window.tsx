@@ -3,7 +3,9 @@ import EnsureOnline from "@/components/ensure-online.tsx";
 import EnsurePermissions from "@/components/ensure-permissions.tsx";
 import { LiveWaveform } from "@/components/ui/live-waveform.tsx";
 import { errorMessageMap } from "@/hooks/use-user-media.ts";
+import { useTalkingWhileMuted } from "@/hooks/use-talking-while-muted.ts";
 import { useRealtimeContext } from "@/lib/context.ts";
+import { cn } from "@/lib/utils.ts";
 import { Ban, CircleAlert, GlobeX, Mic, MicOff, PhoneOff } from "lucide-react";
 import {
   useEffect,
@@ -12,6 +14,27 @@ import {
   type MouseEvent as ReactMouseEvent,
 } from "react";
 import { Button } from "./ui/button";
+
+// Maps the raw RTCPeerConnectionState to a user-facing label. "connected"
+// is handled separately (it shows the call duration); these cover every other
+// state the user might land on.
+const iceStateLabel = (state: RTCPeerConnectionState): string => {
+  switch (state) {
+    case "connecting":
+    case "new":
+      return "Connecting…";
+    case "disconnected":
+    case "failed":
+      // "failed" is shown as Reconnecting too: partytracks' retryWithBackoff
+      // auto-rebuilds the session on ICE failure, so the user is still in a
+      // recovery flow — "Connection lost" would overstate it.
+      return "Reconnecting…";
+    case "closed":
+      return "Ended";
+    default:
+      return state;
+  }
+};
 
 const PhoneOffButton = ({ onClick }: { onClick?: () => void }) => {
   return (
@@ -44,6 +67,10 @@ const Content = ({
     turnMicOff,
     audioUnavailableReason,
   } = userMedia;
+  const talkingWhileMuted = useTalkingWhileMuted(
+    audioMonitorStreamTrack,
+    !audioEnabled,
+  );
 
   useEffect(() => {
     let interval: number;
@@ -103,14 +130,14 @@ const Content = ({
                 <div className="text-sm">Call</div>
 
                 <div className="text-xs text-secondary">
-                  {iceConnectionState !== "connected"
-                    ? iceConnectionState
-                    : `${Math.floor(duration / 60)
+                  {iceConnectionState === "connected"
+                    ? `${Math.floor(duration / 60)
                         .toString()
                         .padStart(
                           2,
                           "0",
-                        )}:${(duration % 60).toString().padStart(2, "0")}`}
+                        )}:${(duration % 60).toString().padStart(2, "0")}`
+                    : iceStateLabel(iceConnectionState)}
                 </div>
               </div>
 
@@ -128,7 +155,20 @@ const Content = ({
               <Button
                 size="icon"
                 variant={audioEnabled ? "default" : "secondary"}
-                className="rounded-full"
+                className={cn(
+                  "rounded-full",
+                  // Talking while muted: amber pulse on the mic button itself,
+                  // rather than a layout-shifting banner. The button already
+                  // occupies its space, so this is zero-CLS.
+                  !audioEnabled && talkingWhileMuted
+                    ? "ani-talking-muted-pulse text-amber-600 dark:text-amber-400"
+                    : "",
+                )}
+                title={
+                  !audioEnabled && talkingWhileMuted
+                    ? "You're muted — tap to unmute"
+                    : undefined
+                }
                 onClick={(e) => {
                   e.stopPropagation();
                   if (audioEnabled) {

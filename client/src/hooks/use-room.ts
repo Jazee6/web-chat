@@ -6,6 +6,7 @@ import { useRoomImages } from "@/hooks/use-room-images.ts";
 import { useRoomNotifications } from "@/hooks/use-room-notifications.ts";
 import useSettings from "@/hooks/use-settings.ts";
 import { useUserInfo } from "@/hooks/use-user-info.ts";
+import { getTabId } from "@/lib/tab-id.ts";
 import { api, appName } from "@/lib/utils.ts";
 import { useQuery } from "@tanstack/react-query";
 import { useWebSocket } from "ahooks";
@@ -60,7 +61,7 @@ export function useRoom({
     readyState,
     connect,
     webSocketIns: ws,
-  } = useWebSocket(`${import.meta.env.VITE_API_URL}/room/${id}/ws`, {
+  } = useWebSocket(`${import.meta.env.VITE_API_URL}/room/${id}/ws?tab_id=${getTabId()}`, {
     onOpen: (_, instance) => {
       if (pingIntervalRef.current) {
         clearInterval(pingIntervalRef.current);
@@ -205,6 +206,7 @@ export function useRoom({
 
   return {
     ws,
+    readyState,
     isLoading: chat.isLoading,
     hasMore: chat.hasMore,
     chats: chat.chats,

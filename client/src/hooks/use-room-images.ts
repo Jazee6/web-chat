@@ -69,7 +69,7 @@ export function useRoomImages({
                 ? {
                     ...c,
                     localFiles: c.localFiles?.map((f, idx) =>
-                      idx === i ? { ...f, isUploading: false, error: true } : f,
+                      idx === i ? { ...f, isUploading: false, uploadFailed: true } : f,
                     ),
                   }
                 : c,
@@ -148,7 +148,7 @@ export function useRoomImages({
             ? {
                 ...c,
                 localFiles: c.localFiles?.map((f) =>
-                  f.isUploading ? { ...f, isUploading: false, error: true } : f,
+                  f.isUploading ? { ...f, isUploading: false, uploadFailed: true } : f,
                 ),
               }
             : c,

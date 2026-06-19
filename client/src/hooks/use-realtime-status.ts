@@ -14,7 +14,7 @@ const useRealtimeStatus = ({
     id?: string;
   };
 }) => {
-  const { ws } = useRoomContext();
+  const { ws, wsReadyState: readyState } = useRoomContext();
 
   useEffect(() => {
     if (!ws || ws.readyState !== WebSocket.OPEN) {
@@ -28,13 +28,19 @@ const useRealtimeStatus = ({
     );
 
     return () => {
-      ws.send(
-        gm({
-          type: "realtimeLeave",
-        }),
-      );
+      // Only signal an explicit leave when the socket is still open. If the
+      // socket dropped (the user is hanging up at the same moment as a
+      // network blip, or the tab is closing), the server's grace window
+      // handles eviction — sending on a closed socket would throw.
+      if (ws.readyState === WebSocket.OPEN) {
+        ws.send(
+          gm({
+            type: "realtimeLeave",
+          }),
+        );
+      }
     };
-  }, [ws]);
+  }, [ws, readyState]);
 
   useEffect(() => {
     if (!ws || ws.readyState !== WebSocket.OPEN || !sessionId || !audio.id) {
@@ -53,7 +59,7 @@ const useRealtimeStatus = ({
         },
       }),
     );
-  }, [audio.id, sessionId, userMedia.audioEnabled, ws]);
+  }, [audio.id, sessionId, userMedia.audioEnabled, ws, readyState]);
 };
 
 export default useRealtimeStatus;

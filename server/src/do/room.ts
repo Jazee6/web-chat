@@ -19,12 +19,37 @@ type WsSession = RoomUser;
 
 interface WsAttachment {
   session: WsSession;
-  realtime: ServerRealtimeStatus;
+  realtime?: ServerRealtimeStatus;
+  tabId?: string;
+  // Set on a reconnecting socket whose Call entry was stolen by a later tab.
+  // realtimeJoin must then silently fail instead of evicting the active tab.
+  // See ADR 0001.
+  callStolen?: boolean;
+}
+
+// See docs/adr/0001-call-disconnect-grace.md.
+const DISCONNECT_GRACE_MS = 10_000;
+
+interface Tombstone {
+  tabId: string;
+  userId: string;
+  ws: WebSocket;
+  timeoutId: ReturnType<typeof setTimeout>;
+  // True when a later tab has taken over this entry via the "later tab kicks
+  // earlier" rule. The tombstone is kept (not deleted) so the original tab's
+  // reconnect can detect the takeover and silently fail its join instead of
+  // stealing the Call back from the active tab. See ADR 0001.
+  stolen?: boolean;
 }
 
 export class Room extends DurableObject {
   sessions = new Map<WebSocket, WsSession>();
   realtime = new Map<WebSocket, ServerRealtimeStatus>();
+  // Call entries whose WebSocket has dropped but are within the grace window.
+  // Keyed by tabId so a reconnecting tab can rebind transparently.
+  // Not persisted: a DO restart inside the grace window evicts these (peers
+  // will see Left on the next broadcast). Per the ADR this is accepted.
+  tombstones = new Map<string, Tombstone>();
   storage: DurableObjectStorage;
   db: DrizzleSqliteDODatabase;
 
@@ -71,14 +96,80 @@ export class Room extends DurableObject {
     this.realtime.set(ws, realtime);
   };
 
+  getTabId = (ws: WebSocket): string | undefined => {
+    return (ws.deserializeAttachment() as WsAttachment | null)?.tabId;
+  };
+
+  // Drop any Call entries (live or tombstoned) belonging to this userId
+  // except for `keepWs`. Used to enforce "later tab kicks earlier" when a
+  // fresh realtimeJoin arrives for a userId that already has a Participant.
+  evictOtherEntriesForUser = (userId: string, keepWs: WebSocket | null) => {
+    for (const [tid, tomb] of this.tombstones) {
+      if (tomb.userId === userId && tomb.ws !== keepWs) {
+        clearTimeout(tomb.timeoutId);
+        this.realtime.delete(tomb.ws);
+        // Mark stolen rather than delete: if the original tab reconnects
+        // within the grace window, it must learn its entry was taken over so
+        // its join can silently fail (keeping the active tab's Call). Re-arm
+        // the grace timeout so the stolen marker self-cleans — a reconnect
+        // past the window is indistinguishable from a fresh tab anyway.
+        tomb.stolen = true;
+        tomb.timeoutId = setTimeout(() => {
+          this.tombstones.delete(tid);
+        }, DISCONNECT_GRACE_MS);
+      }
+    }
+    for (const [otherWs, r] of this.realtime) {
+      if (otherWs === keepWs) continue;
+      if (r.userId !== userId) continue;
+      this.realtime.delete(otherWs);
+      const a = (otherWs.deserializeAttachment() ?? {}) as WsAttachment;
+      otherWs.serializeAttachment({ ...a, realtime: undefined });
+    }
+  };
+
   async fetch(request: Request): Promise<Response> {
-    const userId = new URL(request.url).searchParams.get("user_id");
-    if (!userId) return new Response(null, { status: 400 });
+    const url = new URL(request.url);
+    const userId = url.searchParams.get("user_id");
+    const tabId = url.searchParams.get("tab_id");
+    if (!userId || !tabId) return new Response(null, { status: 400 });
 
     const { 0: client, 1: server } = new WebSocketPair();
     this.ctx.acceptWebSocket(server);
     const session = { id: userId };
-    server.serializeAttachment({ session });
+
+    // If this tab had a Call entry that's currently in the grace window,
+    // rebind it to the new socket without surfacing a Joined/Left blip.
+    // A stolen tombstone means a later tab already took this entry over —
+    // don't rebind; let this socket get a clean session and silently fail
+    // its realtimeJoin (the active tab keeps the Call). See ADR 0001.
+    const tomb = this.tombstones.get(tabId);
+    if (tomb && tomb.userId === userId && !tomb.stolen) {
+      clearTimeout(tomb.timeoutId);
+      this.tombstones.delete(tabId);
+      const carriedRealtime = this.realtime.get(tomb.ws);
+      this.realtime.delete(tomb.ws);
+      if (carriedRealtime) this.realtime.set(server, carriedRealtime);
+      server.serializeAttachment({
+        session,
+        realtime: carriedRealtime,
+        tabId,
+      } satisfies WsAttachment);
+    } else {
+      // A stolen tombstone for this tab is now spent — clean it up so it
+      // doesn't outlive the reconnect it was waiting for. Flag the socket so
+      // its realtimeJoin can silently fail rather than steal the Call back.
+      if (tomb?.stolen) {
+        this.tombstones.delete(tabId);
+        server.serializeAttachment({
+          session,
+          tabId,
+          callStolen: true,
+        } satisfies WsAttachment);
+      } else {
+        server.serializeAttachment({ session, tabId } satisfies WsAttachment);
+      }
+    }
     this.sessions.set(server, session);
 
     return new Response(null, { status: 101, webSocket: client });
@@ -107,7 +198,12 @@ export class Room extends DurableObject {
       data: Array.from(this.realtime.values()),
     });
     this.realtime.forEach((_, ws) => {
-      if (!excludeWs?.includes(ws)) ws.send(msg);
+      if (excludeWs?.includes(ws)) return;
+      // A tombstoned WebSocket is intentionally still in this.realtime so
+      // its entry stays visible to peers during the grace window — but it's
+      // closed, so don't try to send to it.
+      if (ws.readyState !== WebSocket.OPEN) return;
+      ws.send(msg);
     });
   }
 
@@ -138,6 +234,16 @@ export class Room extends DurableObject {
       case "join": {
         this.broadcastRoomStats();
         this.broadcastRoomRealTime();
+
+        // Catch this socket up to the current Call state. New visitors and
+        // tabs that just rebound from a tombstone both come through here, so
+        // they can render Participants without waiting for the next change.
+        ws.send(
+          gm({
+            type: "realtimeStatus",
+            data: Array.from(this.realtime.values()),
+          }),
+        );
 
         const history = await this.db
           .select()
@@ -225,7 +331,22 @@ export class Room extends DurableObject {
           this.handleDisconnect(ws);
           return;
         }
-        const realtime = {
+        // This socket's entry was stolen by a later tab — silently fail the
+        // join so the active tab keeps the Call. The reconnecting tab learns
+        // it's absent from realtimeStatus and exits via its kicked-tab
+        // watcher. See ADR 0001.
+        const attachment = (ws.deserializeAttachment() ?? {}) as WsAttachment;
+        if (attachment.callStolen) {
+          return;
+        }
+        // Later tab kicks earlier — drop any other entry for this user
+        // before recording the new one.
+        this.evictOtherEntriesForUser(session.id, ws);
+        // If a tombstone-rebind in fetch() already carried over an entry for
+        // this socket, preserve its audio.id rather than clobbering it.
+        const existing = this.realtime.get(ws);
+        const realtime: ServerRealtimeStatus = {
+          ...existing,
           userId: session.id,
         };
         this.storeRealtime(ws, realtime);
@@ -259,10 +380,45 @@ export class Room extends DurableObject {
   }
 
   async webSocketClose(ws: WebSocket) {
-    this.handleDisconnect(ws);
+    this.handleSocketDrop(ws);
   }
 
   async webSocketError(ws: WebSocket) {
+    this.handleSocketDrop(ws);
+  }
+
+  // The socket dropped — could be a tab close, a network blip, or anything
+  // in between. If it held a Call entry, give the tab `DISCONNECT_GRACE_MS`
+  // to come back before evicting and broadcasting Left. Otherwise this
+  // collapses to the same cleanup the old handleDisconnect did.
+  handleSocketDrop(ws: WebSocket) {
+    const tabId = this.getTabId(ws);
+    const realtime = this.realtime.get(ws);
+
+    if (tabId && realtime) {
+      const timeoutId = setTimeout(() => {
+        const t = this.tombstones.get(tabId);
+        if (!t) return; // already rebound or evicted by a kick
+        this.tombstones.delete(tabId);
+        this.realtime.delete(t.ws);
+        this.broadcastRealtime();
+        this.broadcastRoomRealTime();
+      }, DISCONNECT_GRACE_MS);
+      this.tombstones.set(tabId, {
+        tabId,
+        userId: realtime.userId,
+        ws,
+        timeoutId,
+      });
+      // Intentionally do NOT broadcast realtime/roomRealtime — peers should
+      // not see a leave during the grace window.
+      this.sessions.delete(ws);
+      this.broadcastRoomStats();
+      ws.close();
+      return;
+    }
+
+    // No Call entry to preserve — proceed with the original cleanup.
     this.handleDisconnect(ws);
   }
 

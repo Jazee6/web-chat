@@ -140,3 +140,21 @@
 .ani-slide-top {
     animation: slide-top 0.25s cubic-bezier(0.25, 0.46, 0.45, 0.94) forwards;
 }
+
+/* Amber glow used on the mic button when the user is talking while muted —
+   a non-disruptive hint that no one can hear them. Distinct from a layout-
+   shifting banner; the button it animates already occupies its space. */
+@keyframes talking-muted-pulse {
+    0%,
+    100% {
+        box-shadow: 0 0 0 0 rgb(245 158 11 / 0.6);
+    }
+
+    50% {
+        box-shadow: 0 0 0 4px rgb(245 158 11 / 0);
+    }
+}
+
+.ani-talking-muted-pulse {
+    animation: talking-muted-pulse 1s ease-in-out infinite;
+}

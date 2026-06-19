@@ -9,6 +9,7 @@ import { Skeleton } from "@/components/ui/skeleton.tsx";
 import { Spinner } from "@/components/ui/spinner.tsx";
 import type { User } from "@/lib/auth-client.ts";
 import { cn, formatChatListTime } from "@/lib/utils.ts";
+import { TriangleAlert, CircleAlert } from "lucide-react";
 import { Fragment, memo, useMemo, useState } from "react";
 import Zoom from "react-medium-image-zoom";
 import "react-medium-image-zoom/dist/styles.css";
@@ -249,37 +250,55 @@ const ChatList = memo(
                           )}
 
                           {c.type === "image" && (
-                            <div className="flex overflow-x-auto scrollbar gap-1 peer">
-                              {c.localFiles?.length
-                                ? c.localFiles.map(
-                                    ({ file, isUploading }, index) => (
-                                      <div
-                                        className="relative shrink-0"
-                                        key={`${file.name}_${index}`}
-                                      >
-                                        <ChatImage
-                                          src={getLocalFileUrl(file)}
-                                          alt={file.name}
-                                        />
+                            <div className="flex flex-col gap-1 peer">
+                              <div className="flex overflow-x-auto scrollbar gap-1">
+                                {c.localFiles?.length
+                                  ? c.localFiles.map(
+                                      (
+                                        { file, isUploading, uploadFailed },
+                                        index,
+                                      ) => (
+                                        <div
+                                          className="relative shrink-0"
+                                          key={`${file.name}_${index}`}
+                                        >
+                                          <ChatImage
+                                            src={getLocalFileUrl(file)}
+                                            alt={file.name}
+                                          />
 
-                                        {isUploading && (
-                                          <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
-                                            <Spinner />
-                                          </div>
-                                        )}
-                                      </div>
-                                    ),
-                                  )
-                                : (JSON.parse(c.content) as string[]).map(
-                                    (i, index) => (
-                                      <div className="shrink-0" key={i}>
-                                        <ChatImage
-                                          src={`${import.meta.env.VITE_API_URL}/room/images/${i}`}
-                                          alt={`image_${index}`}
-                                        />
-                                      </div>
-                                    ),
-                                  )}
+                                          {isUploading && (
+                                            <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
+                                              <Spinner />
+                                            </div>
+                                          )}
+
+                                          {uploadFailed && (
+                                            <div className="absolute inset-0 bg-amber-500/30 flex items-center justify-center">
+                                              <TriangleAlert className="text-amber-500" />
+                                            </div>
+                                          )}
+                                        </div>
+                                      ),
+                                    )
+                                  : (JSON.parse(c.content) as string[]).map(
+                                      (i, index) => (
+                                        <div className="shrink-0" key={i}>
+                                          <ChatImage
+                                            src={`${import.meta.env.VITE_API_URL}/room/images/${i}`}
+                                            alt={`image_${index}`}
+                                          />
+                                        </div>
+                                      ),
+                                    )}
+                              </div>
+
+                              {c.sendFailed && (
+                                <div className="flex items-center gap-1 self-end text-xs text-destructive">
+                                  <CircleAlert className="size-3.5 shrink-0" />
+                                  <span>未送达</span>
+                                </div>
+                              )}
                             </div>
                           )}
 

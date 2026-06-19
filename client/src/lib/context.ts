@@ -5,6 +5,12 @@ import type { RoomRealtime, ServerRealtimeStatus } from "web-chat-share";
 
 export interface RoomContextType {
   ws?: WebSocket;
+  // WebSocket readyState — the reconnect signal. ahooks creates a new
+  // WebSocket instance on each reconnect, but the new instance isn't assigned
+  // until the next render; readyState transitions (e.g. CONNECTING → OPEN)
+  // fire even during that creation moment, so it's the dependable trigger for
+  // re-establishing Call state after a reconnect.
+  wsReadyState?: number;
   uid: string;
   roomRealtime?: RoomRealtime;
   realtimeStatus?: ServerRealtimeStatus[];

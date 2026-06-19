@@ -11,15 +11,31 @@ import ShareButton from "@/components/share-button.tsx";
 import { Button } from "@/components/ui/button.tsx";
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar.tsx";
 import { Spinner } from "@/components/ui/spinner.tsx";
+import { useIncomingCall } from "@/hooks/use-incoming-call.ts";
+import { useKickedTabWatcher } from "@/hooks/use-kicked-tab-watcher.ts";
 import { useRoom } from "@/hooks/use-room.ts";
 import { RoomContext, type RoomContextType } from "@/lib/context.ts";
 import { appName } from "@/lib/utils.ts";
 import type { User } from "better-auth";
 import { PictureInPicture } from "lucide-react";
-import { useRef, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import { useBeforeUnload } from "react-router";
 
 let realtimeKeyCounter = 0;
+
+// Lives inside RoomContext + UserInfoProvider, so it can react to Call
+// arrivals and surface the incoming-call toast + chime.
+const RoomEffects = () => {
+  useIncomingCall();
+  return null;
+};
+
+// Lives inside RealtimeProvider + RoomContext: watches for this tab being
+// kicked from the Call (same user joined elsewhere) and self-exits.
+const CallWatcher = () => {
+  useKickedTabWatcher();
+  return null;
+};
 
 const Room = ({
   id,
@@ -51,6 +67,7 @@ const Room = ({
 
   const {
     ws,
+    readyState,
     isLoading,
     hasMore,
     chats,
@@ -90,6 +107,7 @@ const Room = ({
 
   const roomContextValue: RoomContextType = {
     ws,
+    wsReadyState: readyState,
     uid: user.id,
     roomRealtime,
     realtimeStatus,
@@ -98,25 +116,33 @@ const Room = ({
     audioTrackMap,
   };
 
-  const onTrackAdded = (uid: string, track: MediaStreamTrack) =>
+  // Stable identities: these feed AudioTrack's effect deps. Without memo,
+  // every Room re-render makes new function refs and the effect tears down +
+  // re-subscribes every pull — which re-creates transceivers and fires a
+  // fresh tracks/new + renegotiate round-trip per peer, even when nothing
+  // about the tracks actually changed.
+  const onTrackAdded = useCallback((uid: string, track: MediaStreamTrack) => {
     setAudioTrackMap((previous) => ({
       ...previous,
       [uid]: track,
     }));
+  }, []);
 
-  const onTrackRemoved = (uid: string) => {
+  const onTrackRemoved = useCallback((uid: string) => {
     setAudioTrackMap((previous) => {
       const update = { ...previous };
       delete update[uid];
       return update;
     });
-  };
+  }, []);
 
   return (
     <>
       <RoomContext value={roomContextValue}>
+        <RoomEffects />
         {realtimeWindowOpen && (
           <RealtimeProvider key={realtimeKey}>
+            <CallWatcher />
             <RealtimeWindow
               open={realtimeWindowOpen}
               onOpenChange={setRealtimeWindowOpen}
