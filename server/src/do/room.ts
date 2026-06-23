@@ -316,9 +316,13 @@ export class Room extends DurableObject {
           this.handleDisconnect(ws);
           return;
         }
+        // Merge, not replace: typing is sent by an independent effect that
+        // emits a partial {typing}, while presence emits a partial {user,
+        // screen}. Replacing would let one clobber the other — e.g. a typing
+        // update would blank the avatar's idle/locked badge. See ADR 0002.
         const s = {
           ...currentSession,
-          status: clientMessage.data,
+          status: { ...currentSession.status, ...clientMessage.data },
         };
         this.storeSession(ws, s);
 

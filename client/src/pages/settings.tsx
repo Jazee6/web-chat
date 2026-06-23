@@ -54,6 +54,25 @@ const Settings = () => {
               }}
             />
           </Field>
+
+          <Field>
+            <FieldLabel htmlFor="typing">Show typing indicator</FieldLabel>
+
+            <FieldDescription>
+              When enabled, room members will see a typing indicator while you
+              type. Receiving others' indicator is unaffected by this setting.
+            </FieldDescription>
+
+            <Switch
+              id="typing"
+              checked={settings?.showTyping}
+              onCheckedChange={(checked) => {
+                setNewSettings({
+                  showTyping: checked,
+                });
+              }}
+            />
+          </Field>
         </FieldGroup>
       </FieldSet>
     </div>

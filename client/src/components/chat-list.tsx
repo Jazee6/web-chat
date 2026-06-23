@@ -3,13 +3,15 @@ import {
   Avatar,
   AvatarBadge,
   AvatarFallback,
+  AvatarGroup,
+  AvatarGroupCount,
   AvatarImage,
 } from "@/components/ui/avatar.tsx";
 import { Skeleton } from "@/components/ui/skeleton.tsx";
 import { Spinner } from "@/components/ui/spinner.tsx";
 import type { User } from "@/lib/auth-client.ts";
 import { cn, formatChatListTime } from "@/lib/utils.ts";
-import { TriangleAlert, CircleAlert } from "lucide-react";
+import { CircleAlert, TriangleAlert } from "lucide-react";
 import { Fragment, memo, useMemo, useState } from "react";
 import Zoom from "react-medium-image-zoom";
 import "react-medium-image-zoom/dist/styles.css";
@@ -186,6 +188,16 @@ const ChatList = memo(
       return map;
     }, [roomStats?.users]);
 
+    // Who besides me is typing right now. Never includes the local user — we
+    // never render our own typing. Drives the trailing indicator <li>. See
+    // ADR 0002: cleared by disconnect, so this is just a read of roomStats.
+    const typingUsers = useMemo(
+      () =>
+        roomStats?.users.filter((u) => u.id !== userId && u.status?.typing) ??
+        [],
+      [roomStats?.users, userId],
+    );
+
     return (
       <ul className={cn("space-y-2", className)}>
         {groups.map((group) => {
@@ -322,6 +334,44 @@ const ChatList = memo(
             </Fragment>
           );
         })}
+
+        {typingUsers.length > 0 && (
+          <li
+            key="typing"
+            className="max-w-3xl mx-auto w-full flex ani-slide-top"
+          >
+            <div className="flex gap-1 max-w-[90%]">
+              <AvatarGroup className="self-end shrink-0">
+                {typingUsers.slice(0, 5).map((u) => {
+                  const user = users[u.id];
+                  return (
+                    <Avatar key={u.id}>
+                      <AvatarImage
+                        src={user?.image ?? ""}
+                        alt={user?.name || "Avatar"}
+                      />
+                      <AvatarFallback>{user?.name.slice(0, 2)}</AvatarFallback>
+                    </Avatar>
+                  );
+                })}
+
+                {typingUsers.length > 5 && (
+                  <AvatarGroupCount>+{typingUsers.length - 5}</AvatarGroupCount>
+                )}
+              </AvatarGroup>
+
+              <div className="h-8 bg-secondary px-2 py-1.5 rounded-md flex items-center gap-1 self-end">
+                {[0, 1, 2].map((i) => (
+                  <span
+                    key={i}
+                    className="typing-dot size-1.5 rounded-full bg-muted-foreground"
+                    style={{ animationDelay: `${i * 0.2}s` }}
+                  />
+                ))}
+              </div>
+            </div>
+          </li>
+        )}
       </ul>
     );
   },

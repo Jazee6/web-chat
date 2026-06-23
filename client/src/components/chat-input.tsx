@@ -27,6 +27,7 @@ const ChatInput = ({
   onCall,
   isLoading,
   className,
+  onTypingChange,
 }: {
   onSend: (
     data: z.infer<typeof sendMessageSchema> & {
@@ -36,17 +37,49 @@ const ChatInput = ({
   onCall?: () => void;
   isLoading: boolean;
   className?: string;
+  onTypingChange?: (typing: boolean) => void;
 }) => {
   const [images, setImages] = useState<File[]>([]);
   const [isSending, setIsSending] = useState(false);
   const imageInputRef = useRef<HTMLInputElement>(null);
   const imagePreviewUrls = useRef(new Map<File, string>());
 
+  // Edge-triggered typing: fire onTypingChange only on true↔false transitions,
+  // so a typing session is at most two broadcasts. 2s of inactivity ⇒ stop.
+  // See ADR 0002.
+  const typingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const isTypingRef = useRef(false);
+
+  const updateTyping = (next: boolean) => {
+    if (isTypingRef.current === next) return;
+    isTypingRef.current = next;
+    onTypingChange?.(next);
+  };
+
+  const stopTyping = () => {
+    if (typingTimerRef.current) {
+      clearTimeout(typingTimerRef.current);
+      typingTimerRef.current = null;
+    }
+    updateTyping(false);
+  };
+
+  const handleTypingKeystroke = () => {
+    if (!onTypingChange) return;
+    updateTyping(true);
+    if (typingTimerRef.current) clearTimeout(typingTimerRef.current);
+    typingTimerRef.current = setTimeout(() => {
+      updateTyping(false);
+      typingTimerRef.current = null;
+    }, 2000);
+  };
+
   useEffect(() => {
     const urls = imagePreviewUrls.current;
     return () => {
       urls.forEach((url) => URL.revokeObjectURL(url));
       urls.clear();
+      if (typingTimerRef.current) clearTimeout(typingTimerRef.current);
     };
   }, []);
 
@@ -80,6 +113,7 @@ const ChatInput = ({
   });
 
   const onSubmit = async (data: z.infer<typeof sendMessageSchema>) => {
+    stopTyping();
     setIsSending(true);
     imagePreviewUrls.current.forEach((url) => URL.revokeObjectURL(url));
     imagePreviewUrls.current.clear();
@@ -183,6 +217,14 @@ const ChatInput = ({
                 maxLength={2048}
                 minLength={1}
                 {...field}
+                onChange={(e) => {
+                  field.onChange(e);
+                  handleTypingKeystroke();
+                }}
+                onBlur={() => {
+                  field.onBlur();
+                  stopTyping();
+                }}
               />
               {images.length > 0 && (
                 <InputGroupAddon align="block-start">

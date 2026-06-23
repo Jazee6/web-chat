@@ -78,6 +78,7 @@ const Room = ({
     roomRealtime,
     realtimeStatus,
     onSend,
+    setTyping,
     stickToBottom,
     unreadCount,
     scrollToBottom,
@@ -258,6 +259,7 @@ const Room = ({
                 onSend={onSend}
                 isLoading={isLoading}
                 onCall={onCall}
+                onTypingChange={setTyping}
               />
             </div>
           </SidebarInset>

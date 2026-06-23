@@ -54,3 +54,11 @@ The two Participant lifecycle transitions visible to peers. `Joined` fires when 
 fires either when they explicitly hang up, or when their WebSocket has been gone past the grace window. A WebSocket
 reconnect inside the grace window is **not** a Left → Joined cycle; it's invisible to peers.
 _Avoid_: connect/disconnect (WebSocket-level events, not Call-level)
+
+### Presence
+
+**User Status**:
+A room member's transient, peer-visible state: activity (`active`/`idle`), screen (`locked`/`unlocked`), and whether they
+are typing. Exists only while the member's session is live; not persisted, not part of message history. Distinct from the
+Call's realtime status.
+_Avoid_: presence, online state

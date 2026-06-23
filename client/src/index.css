@@ -159,6 +159,31 @@
     animation: talking-muted-pulse 1s ease-in-out infinite;
 }
 
+/* Typing indicator dots — iMessage-style staggered bounce. Each dot lifts and
+   brightens out of phase; the per-dot `animationDelay` stagger is set inline. */
+@keyframes typing-dot {
+    0%, 60%, 100% {
+        opacity: 0.3;
+        transform: translateY(0);
+    }
+
+    30% {
+        opacity: 1;
+        transform: translateY(-3px);
+    }
+}
+
+.typing-dot {
+    animation: typing-dot 1.2s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .typing-dot {
+        animation: none;
+        opacity: 0.6;
+    }
+}
+
 @layer utilities {
     .app-blur {
         @apply bg-background/80 backdrop-blur-[20px] backdrop-saturate-180;

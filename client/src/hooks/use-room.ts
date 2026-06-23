@@ -43,6 +43,11 @@ export function useRoom({
   const [roomRealtime, setRoomRealtime] = useState<RoomRealtime>();
   const [realtimeStatus, setRealtimeStatus] =
     useState<ServerRealtimeStatus[]>();
+  // Intended typing state, edge-triggered by ChatInput (start on first keystroke
+  // after idle, stop after 2s of inactivity / on submit / blur). State-driven so
+  // the effect below re-sends it on WS reconnect — mirroring the presence effect.
+  // See ADR 0002: no heartbeat; cleared by disconnect, not by a timeout.
+  const [typing, setTyping] = useState(false);
 
   const pingIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const roomRealtimeTotalRef = useRef(0);
@@ -140,6 +145,23 @@ export function useRoom({
 
   const notifications = useRoomNotifications({ users });
 
+  const roomStats = chat.roomStats;
+
+  // Typing users arrive in roomStats as {id, status} only — no avatar/name.
+  // Those come from the users map, fetched on demand. Message senders are
+  // fetched in handleMessage, but a user can type without ever having sent a
+  // visible message, so fetch them here or the indicator falls back to a raw
+  // ID. fetchMissingUsers dedups, so this is a no-op once a user is known —
+  // mirrors RoomStateDialog's on-demand fetch when it opens.
+  useEffect(() => {
+    const typingIds = (roomStats?.users ?? [])
+      .filter((u) => u.id !== user.id && u.status?.typing)
+      .map((u) => u.id);
+    if (typingIds.length > 0) {
+      fetchMissingUsers(typingIds);
+    }
+  }, [roomStats, user.id, fetchMissingUsers]);
+
   useEffect(() => {
     if (settings?.showStatus) {
       void start();
@@ -161,6 +183,24 @@ export function useRoom({
       }),
     );
   }, [screenState, settings.showStatus, userState, readyState, sendMessage]);
+
+  // Broadcast typing only when showTyping is on (defaults on). Sends a partial
+  // {typing}; the server merges it onto presence (ADR 0002). Computing
+  // `effective = showTyping && typing` (rather than gating the whole send) means
+  // toggling showTyping off mid-typing sends a clearing `false`, and a WS
+  // reconnect re-broadcasts the current value — no stuck indicator.
+  useEffect(() => {
+    if (readyState !== WebSocket.OPEN) return;
+    const effective = settings?.showTyping && typing;
+    sendMessage(
+      gm({
+        type: "userStatus",
+        data: {
+          typing: effective,
+        },
+      }),
+    );
+  }, [typing, settings?.showTyping, readyState, sendMessage]);
 
   useEffect(() => {
     const handleVisibilityChange = () => {
@@ -214,11 +254,12 @@ export function useRoom({
     hasMore: chat.hasMore,
     chats: chat.chats,
     users,
-    roomStats: chat.roomStats,
+    roomStats,
     roomInfo,
     roomRealtime,
     realtimeStatus,
     onSend,
+    setTyping,
     stickToBottom: chat.stickToBottom,
     unreadCount: chat.unreadCount,
     scrollToBottom: chat.scrollToBottom,
