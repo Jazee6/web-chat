@@ -5,7 +5,6 @@ import {
   useCallback,
   useEffect,
   useEffectEvent,
-  useLayoutEffect,
   useRef,
   useState,
 } from "react";
@@ -15,9 +14,13 @@ import {
   type RoomStats,
   type UIChatMessage,
 } from "web-chat-share";
+import { decideScrollAction } from "@/lib/decide-scroll-action.ts";
+
+const STICK_THRESHOLD_PX = 64;
 
 type UseRoomChatParams = {
   chatListRef: RefObject<HTMLDivElement | null>;
+  contentRef: RefObject<HTMLDivElement | null>;
   loaderRef: RefObject<HTMLDivElement | null>;
   userId: string;
   sendMessage: (msg: string) => void;
@@ -38,11 +41,15 @@ type UseRoomChatReturn = {
   handleHistory: (data: ChatMessage[]) => void;
   handleMessage: (data: ChatMessage) => void;
   handleRoomStats: (data: RoomStats) => void;
-  forceScrollRef: RefObject<boolean>;
+  stickToBottom: boolean;
+  unreadCount: number;
+  scrollToBottom: () => void;
+  requestStickToBottom: () => void;
 };
 
 export function useRoomChat({
   chatListRef,
+  contentRef,
   loaderRef,
   userId,
   sendMessage,
@@ -52,24 +59,39 @@ export function useRoomChat({
   const [roomStats, setRoomStats] = useState<RoomStats>();
   const [chats, setChats] = useState<UIChatMessage[]>([]);
   const [hasMore, setHasMore] = useState(true);
+  const [stickToBottom, setStickToBottom] = useState(true);
+  const [unreadCount, setUnreadCount] = useState(0);
 
   const oldestChatTimeRef = useRef<string | null>(null);
   const previousScrollHeightRef = useRef<number>(0);
   const isLoadingHistoryRef = useRef(false);
-  const forceScrollRef = useRef(false);
+  const stickToBottomRef = useRef(true);
+  const unreadCountRef = useRef(0);
   const pendingUserIdsRef = useRef<Set<string>>(new Set());
   const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  const setStick = useEffectEvent((next: boolean) => {
+    if (stickToBottomRef.current === next) return;
+    stickToBottomRef.current = next;
+    setStickToBottom(next);
+    if (next && unreadCountRef.current !== 0) {
+      unreadCountRef.current = 0;
+      setUnreadCount(0);
+    }
+  });
+
   const scrollToBottom = useEffectEvent(
     (behavior: ScrollBehavior = "smooth") => {
-      if (chatListRef.current) {
-        chatListRef.current.scrollTo({
-          top: chatListRef.current.scrollHeight,
-          behavior,
-        });
-      }
+      const el = chatListRef.current;
+      if (!el) return;
+      el.scrollTo({ top: el.scrollHeight, behavior });
+      setStick(true);
     },
   );
+
+  const requestStickToBottom = useCallback(() => {
+    setStick(true);
+  }, []);
 
   // Debounced fetchMissingUsers
   const debouncedFetchMissingUsers = useCallback(
@@ -144,38 +166,63 @@ export function useRoomChat({
     (data: ChatMessage) => {
       setChats((chats) => [...chats, data]);
       debouncedFetchMissingUsers([data.userId]);
+      if (!stickToBottomRef.current) {
+        unreadCountRef.current += 1;
+        setUnreadCount(unreadCountRef.current);
+      }
     },
     [debouncedFetchMissingUsers],
   );
 
-  // Scroll to bottom on initial load
+  // Initial scroll to bottom once history loaded
   useEffect(() => {
-    if (isLoading) {
-      return;
-    }
+    if (isLoading) return;
+    const el = chatListRef.current;
+    if (!el) return;
+    el.scrollTo({ top: el.scrollHeight, behavior: "instant" });
+  }, [isLoading, chatListRef]);
 
-    scrollToBottom("instant");
-  }, [isLoading]);
+  // Scroll listener: track user intent (stick vs free)
+  useEffect(() => {
+    const el = chatListRef.current;
+    if (!el || isLoading) return;
 
-  // Scroll logic: post-render scroll decision
-  useLayoutEffect(() => {
-    if (!chatListRef.current) return;
+    const onScroll = () => {
+      const stick =
+        el.scrollTop + el.clientHeight >= el.scrollHeight - STICK_THRESHOLD_PX;
+      setStick(stick);
+    };
 
-    if (isLoadingHistoryRef.current) {
-      const newScrollHeight = chatListRef.current.scrollHeight;
-      const diff = newScrollHeight - previousScrollHeightRef.current;
-      chatListRef.current.scrollTop += diff;
-      isLoadingHistoryRef.current = false;
-    } else if (forceScrollRef.current) {
-      scrollToBottom();
-      forceScrollRef.current = false;
-    } else {
-      const { scrollTop, scrollHeight, clientHeight } = chatListRef.current;
-      if (scrollTop + clientHeight >= scrollHeight - 100) {
-        scrollToBottom();
+    el.addEventListener("scroll", onScroll, { passive: true });
+    return () => el.removeEventListener("scroll", onScroll);
+  }, [chatListRef, isLoading]);
+
+  // ResizeObserver on the inner content (its height tracks content growth;
+  // the scroll container's box stays the same size).
+  useEffect(() => {
+    const el = chatListRef.current;
+    const content = contentRef.current;
+    if (!el || !content || isLoading) return;
+
+    const observer = new ResizeObserver(() => {
+      const action = decideScrollAction({
+        scrollHeight: el.scrollHeight,
+        prevScrollHeight: previousScrollHeightRef.current,
+        isLoadingHistory: isLoadingHistoryRef.current,
+        isStick: stickToBottomRef.current,
+      });
+
+      if (action.kind === "history-compensate") {
+        el.scrollTop += action.diff;
+        isLoadingHistoryRef.current = false;
+      } else if (action.kind === "stick-to-bottom") {
+        el.scrollTo({ top: el.scrollHeight, behavior: "instant" });
       }
-    }
-  }, [chats, chatListRef]);
+    });
+
+    observer.observe(content);
+    return () => observer.disconnect();
+  }, [chatListRef, contentRef, isLoading]);
 
   // Infinite scroll: load history when loader is visible
   useEffect(() => {
@@ -210,7 +257,7 @@ export function useRoomChat({
 
   const addChatMessage = useCallback(
     (msg: Omit<UIChatMessage, "id" | "userId" | "createdAt">) => {
-      forceScrollRef.current = true;
+      setStick(true);
       setChats((prev) => [
         ...prev,
         {
@@ -237,6 +284,10 @@ export function useRoomChat({
     [addChatMessage, sendMessage],
   );
 
+  const scrollToBottomSmooth = useCallback(() => {
+    scrollToBottom("smooth");
+  }, []);
+
   return {
     chats,
     isLoading,
@@ -249,6 +300,9 @@ export function useRoomChat({
     handleHistory,
     handleMessage,
     handleRoomStats,
-    forceScrollRef,
+    stickToBottom,
+    unreadCount,
+    scrollToBottom: scrollToBottomSmooth,
+    requestStickToBottom,
   };
 }

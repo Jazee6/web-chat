@@ -158,3 +158,9 @@
 .ani-talking-muted-pulse {
     animation: talking-muted-pulse 1s ease-in-out infinite;
 }
+
+@layer utilities {
+    .app-blur {
+        @apply bg-background/80 backdrop-blur-[20px] backdrop-saturate-180;
+    }
+}

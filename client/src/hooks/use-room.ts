@@ -25,12 +25,14 @@ export function useRoom({
   id,
   user,
   chatListRef,
+  contentRef,
   loaderRef,
   onOpen,
 }: {
   id: string;
   user: User;
   chatListRef: RefObject<HTMLDivElement | null>;
+  contentRef: RefObject<HTMLDivElement | null>;
   loaderRef: RefObject<HTMLDivElement | null>;
   onOpen?: () => void;
 }) {
@@ -121,6 +123,7 @@ export function useRoom({
 
   const chat = useRoomChat({
     chatListRef,
+    contentRef,
     loaderRef,
     userId: user.id,
     sendMessage,
@@ -132,7 +135,7 @@ export function useRoom({
     setChats: chat.setChats,
     sendMessage,
     readyState,
-    forceScrollRef: chat.forceScrollRef,
+    requestStickToBottom: chat.requestStickToBottom,
   });
 
   const notifications = useRoomNotifications({ users });
@@ -216,5 +219,8 @@ export function useRoom({
     roomRealtime,
     realtimeStatus,
     onSend,
+    stickToBottom: chat.stickToBottom,
+    unreadCount: chat.unreadCount,
+    scrollToBottom: chat.scrollToBottom,
   };
 }

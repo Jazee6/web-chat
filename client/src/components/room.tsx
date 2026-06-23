@@ -17,7 +17,7 @@ import { useRoom } from "@/hooks/use-room.ts";
 import { RoomContext, type RoomContextType } from "@/lib/context.ts";
 import { appName } from "@/lib/utils.ts";
 import type { User } from "better-auth";
-import { PictureInPicture } from "lucide-react";
+import { ChevronDown, PictureInPicture } from "lucide-react";
 import { useCallback, useRef, useState } from "react";
 import { useBeforeUnload } from "react-router";
 
@@ -57,6 +57,7 @@ const Room = ({
   const [realtimeKey, setRealtimeKey] = useState(0);
 
   const chatListRef = useRef<HTMLDivElement>(null);
+  const contentRef = useRef<HTMLDivElement>(null);
   const loaderRef = useRef<HTMLDivElement>(null);
 
   const onOpen = () => {
@@ -77,10 +78,14 @@ const Room = ({
     roomRealtime,
     realtimeStatus,
     onSend,
+    stickToBottom,
+    unreadCount,
+    scrollToBottom,
   } = useRoom({
     id,
     user,
     chatListRef,
+    contentRef,
     loaderRef,
     onOpen,
   });
@@ -160,7 +165,7 @@ const Room = ({
           onOpenChange={setRealtimeSidebarOpen}
         >
           <SidebarInset>
-            <header className="h-16 absolute top-0 w-full z-10 bg-linear-to-b from-background to-transparent rounded-t-xl backdrop-blur-xl">
+            <header className="h-16 absolute top-0 w-full z-10 rounded-t-xl app-blur">
               {roomStats && (
                 <div className="max-w-3xl max-md:px-2 mx-auto h-full flex items-center justify-between relative">
                   <div className="max-[1080px]:ml-12">{roomInfo?.name}</div>
@@ -211,27 +216,41 @@ const Room = ({
               )}
             </header>
 
-            <div className="h-dvh flex flex-col">
+            <div className="h-dvh flex flex-col relative">
               {chats && (
                 <div
                   style={{ scrollbarGutter: "stable both-edges" }}
                   className="overflow-y-auto scrollbar pt-16 max-md:px-2"
                   ref={chatListRef}
                 >
-                  {hasMore && !isLoading && (
-                    <div ref={loaderRef} className="flex justify-center py-4">
-                      <Spinner />
-                    </div>
-                  )}
+                  <div ref={contentRef}>
+                    {hasMore && !isLoading && (
+                      <div ref={loaderRef} className="flex justify-center py-4">
+                        <Spinner />
+                      </div>
+                    )}
 
-                  <ChatList
-                    className="pb-32"
-                    chats={chats}
-                    userId={user.id}
-                    users={users}
-                    roomStats={roomStats}
-                  />
+                    <ChatList
+                      className="pb-32"
+                      chats={chats}
+                      userId={user.id}
+                      users={users}
+                      roomStats={roomStats}
+                    />
+                  </div>
                 </div>
+              )}
+
+              {!isLoading && !stickToBottom && (
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={scrollToBottom}
+                  className="absolute left-1/2 -translate-x-1/2 bottom-36 z-10 rounded-full shadow-md backdrop-blur-[20px] backdrop-saturate-180"
+                >
+                  <ChevronDown className="size-4" />
+                  {unreadCount > 0 && <span>{unreadCount}</span>}
+                </Button>
               )}
 
               <ChatInput

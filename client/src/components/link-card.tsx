@@ -42,9 +42,9 @@ const LinkCardSkeleton = () => (
   </div>
 );
 
-const Thumbnail = ({ src, alt }: { src: string; alt: string }) => {
+const Thumbnail = ({ src, alt }: { src: string | null; alt: string }) => {
   const [failed, setFailed] = useState(false);
-  if (failed) {
+  if (failed || !src) {
     return (
       <div className="aspect-[1.91/1] w-full flex items-center justify-center bg-muted">
         <ImageOff className="size-12 text-muted-foreground" strokeWidth={1.5} />
@@ -131,7 +131,7 @@ export const LinkCard = ({ url }: { url: string }) => {
       rel="noopener noreferrer"
       className={cn(SHELL, CARD_WIDTH, "peer")}
     >
-      {data.image && <Thumbnail src={data.image} alt={data.title} />}
+      <Thumbnail src={data.image} alt={data.title} />
       <div className="px-2.5 py-1.5">
         <div className="text-sm truncate">{data.title || domain}</div>
         <div className="text-xs text-muted-foreground">{domain}</div>

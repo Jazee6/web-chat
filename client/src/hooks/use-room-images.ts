@@ -1,6 +1,6 @@
 import { api, calculateSHA256, convertImageToWebP } from "@/lib/utils.ts";
 import ky from "ky";
-import { type Dispatch, type RefObject, type SetStateAction } from "react";
+import { type Dispatch, type SetStateAction } from "react";
 import { gm, type UIChatMessage } from "web-chat-share";
 
 type UseRoomImagesParams = {
@@ -8,7 +8,7 @@ type UseRoomImagesParams = {
   setChats: Dispatch<SetStateAction<UIChatMessage[]>>;
   sendMessage: (msg: string) => void;
   readyState: number;
-  forceScrollRef: RefObject<boolean>;
+  requestStickToBottom: () => void;
 };
 
 type UseRoomImagesReturn = {
@@ -20,12 +20,12 @@ export function useRoomImages({
   setChats,
   sendMessage,
   readyState,
-  forceScrollRef,
+  requestStickToBottom,
 }: UseRoomImagesParams): UseRoomImagesReturn {
   const sendImages = async (rawImages: File[], textMessage?: string) => {
     const messageId = crypto.randomUUID();
 
-    forceScrollRef.current = true;
+    requestStickToBottom();
     setChats((prev) => {
       const next = [
         ...prev,
