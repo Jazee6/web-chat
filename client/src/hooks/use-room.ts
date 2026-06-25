@@ -68,63 +68,66 @@ export function useRoom({
     readyState,
     connect,
     webSocketIns: ws,
-  } = useWebSocket(`${import.meta.env.VITE_API_URL}/room/${id}/ws?tab_id=${getTabId()}`, {
-    onOpen: (_, instance) => {
-      if (pingIntervalRef.current) {
-        clearInterval(pingIntervalRef.current);
-      }
-      instance.send(
-        gm({
-          type: "join",
-        }),
-      );
-      pingIntervalRef.current = setInterval(() => {
+  } = useWebSocket(
+    `${import.meta.env.VITE_API_URL}/room/${id}/ws?tab_id=${getTabId()}`,
+    {
+      onOpen: (_, instance) => {
+        if (pingIntervalRef.current) {
+          clearInterval(pingIntervalRef.current);
+        }
         instance.send(
           gm({
-            type: "ping",
+            type: "join",
           }),
         );
-      }, 1000 * 5);
-      onOpen?.();
+        pingIntervalRef.current = setInterval(() => {
+          instance.send(
+            gm({
+              type: "ping",
+            }),
+          );
+        }, 1000 * 5);
+        onOpen?.();
+      },
+      onClose: () => {
+        if (pingIntervalRef.current) {
+          clearInterval(pingIntervalRef.current);
+        }
+      },
+      onMessage: (message) => {
+        const m = JSON.parse(message.data) as ServerMessage;
+        switch (m.type) {
+          case "roomStats": {
+            chat.handleRoomStats(m.data);
+            break;
+          }
+          case "initHistory": {
+            chat.handleInitHistory(m.data);
+            break;
+          }
+          case "history": {
+            chat.handleHistory(m.data);
+            break;
+          }
+          case "message": {
+            chat.handleMessage(m.data);
+            notifications.notifyOnMessage(m.data);
+            break;
+          }
+          case "roomRealtime": {
+            roomRealtimeTotalRef.current = m.data.total;
+            setRoomRealtime(m.data);
+            setFaviconState({ hasRealtime: m.data.total > 0 });
+            break;
+          }
+          case "realtimeStatus": {
+            setRealtimeStatus(m.data);
+            break;
+          }
+        }
+      },
     },
-    onClose: () => {
-      if (pingIntervalRef.current) {
-        clearInterval(pingIntervalRef.current);
-      }
-    },
-    onMessage: (message) => {
-      const m = JSON.parse(message.data) as ServerMessage;
-      switch (m.type) {
-        case "roomStats": {
-          chat.handleRoomStats(m.data);
-          break;
-        }
-        case "initHistory": {
-          chat.handleInitHistory(m.data);
-          break;
-        }
-        case "history": {
-          chat.handleHistory(m.data);
-          break;
-        }
-        case "message": {
-          chat.handleMessage(m.data);
-          notifications.notifyOnMessage(m.data);
-          break;
-        }
-        case "roomRealtime": {
-          roomRealtimeTotalRef.current = m.data.total;
-          setRoomRealtime(m.data);
-          setFaviconState({ hasRealtime: m.data.total > 0 });
-          break;
-        }
-        case "realtimeStatus": {
-          setRealtimeStatus(m.data);
-          break;
-        }
-      }
-    },
-  });
+  );
 
   const chat = useRoomChat({
     chatListRef,
@@ -184,19 +187,24 @@ export function useRoom({
     );
   }, [screenState, settings.showStatus, userState, readyState, sendMessage]);
 
-  // Broadcast typing only when showTyping is on (defaults on). Sends a partial
-  // {typing}; the server merges it onto presence (ADR 0002). Computing
-  // `effective = showTyping && typing` (rather than gating the whole send) means
-  // toggling showTyping off mid-typing sends a clearing `false`, and a WS
-  // reconnect re-broadcasts the current value — no stuck indicator.
+  // Broadcast typing. Defaults on: new users via the settings defaultValue,
+  // existing users (whose stored settings predate the field and see `undefined`,
+  // since useLocalStorageState doesn't backfill defaults) via the `=== false`
+  // check below — only an explicit opt-out suppresses. When opted out, send
+  // nothing at all (not even a clearing false): toggling the setting requires
+  // leaving the chat for the Settings route, which blurs the textarea and fires
+  // stopTyping first, so there's no in-flight typing:true to clear. On a WS
+  // reconnect while opted in, readyState flips OPEN and this re-sends the
+  // current value. Sends a partial {typing}; the server merges it onto presence
+  // (ADR 0002).
   useEffect(() => {
     if (readyState !== WebSocket.OPEN) return;
-    const effective = settings?.showTyping && typing;
+    if (!settings?.showTyping) return;
     sendMessage(
       gm({
         type: "userStatus",
         data: {
-          typing: effective,
+          typing,
         },
       }),
     );

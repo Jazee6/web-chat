@@ -232,7 +232,7 @@ const Room = ({
                     )}
 
                     <ChatList
-                      className="pb-32"
+                      className="pb-24"
                       chats={chats}
                       userId={user.id}
                       users={users}

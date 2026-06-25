@@ -65,7 +65,8 @@ const Settings = () => {
 
             <Switch
               id="typing"
-              checked={settings?.showTyping}
+              // Default on for users whose stored settings predate this field.
+              checked={settings?.showTyping ?? true}
               onCheckedChange={(checked) => {
                 setNewSettings({
                   showTyping: checked,

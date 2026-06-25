@@ -335,12 +335,20 @@ const ChatList = memo(
           );
         })}
 
-        {typingUsers.length > 0 && (
-          <li
-            key="typing"
-            className="max-w-3xl mx-auto w-full flex ani-slide-top"
-          >
-            <div className="flex gap-1 max-w-[90%]">
+        {/* Always mounted at a fixed height so a typist appearing/disappearing
+            never changes content height — which would otherwise shift the
+            message list (a smooth-glide on appear via the stick-to-bottom
+            ResizeObserver, and a browser scrollTop-clamp jump on disappear).
+            Only the inner content toggles, so ani-slide-top still plays on
+            entry. The <ul>'s bottom padding is reduced (pb-24 in room.tsx) to
+            keep total bottom clearance unchanged. */}
+        <li
+          key="typing"
+          className="max-w-3xl mx-auto w-full flex -mt-1 h-8 items-end"
+          aria-hidden={typingUsers.length === 0}
+        >
+          {typingUsers.length > 0 && (
+            <div className="flex gap-1 max-w-[90%] ani-slide-top">
               <AvatarGroup className="self-end shrink-0">
                 {typingUsers.slice(0, 5).map((u) => {
                   const user = users[u.id];
@@ -354,7 +362,6 @@ const ChatList = memo(
                     </Avatar>
                   );
                 })}
-
                 {typingUsers.length > 5 && (
                   <AvatarGroupCount>+{typingUsers.length - 5}</AvatarGroupCount>
                 )}
@@ -370,8 +377,8 @@ const ChatList = memo(
                 ))}
               </div>
             </div>
-          </li>
-        )}
+          )}
+        </li>
       </ul>
     );
   },

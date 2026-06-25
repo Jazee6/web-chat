@@ -216,7 +216,13 @@ export function useRoomChat({
         el.scrollTop += action.diff;
         isLoadingHistoryRef.current = false;
       } else if (action.kind === "stick-to-bottom") {
-        el.scrollTo({ top: el.scrollHeight, behavior: "instant" });
+        // New message arrived while pinned to the bottom — glide down to keep
+        // the latest in view. History pagination (above) and the initial load
+        // scroll jump instantly. The typing indicator no longer reaches here:
+        // it's a fixed-height always-present slot in ChatList, so a typist
+        // appearing/disappearing doesn't change content height and never fires
+        // this observer.
+        el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
       }
     });
 
