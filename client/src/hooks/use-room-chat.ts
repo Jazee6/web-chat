@@ -1,3 +1,4 @@
+import { decideScrollAction } from "@/lib/decide-scroll-action.ts";
 import {
   type Dispatch,
   type RefObject,
@@ -14,9 +15,8 @@ import {
   type RoomStats,
   type UIChatMessage,
 } from "web-chat-share";
-import { decideScrollAction } from "@/lib/decide-scroll-action.ts";
 
-const STICK_THRESHOLD_PX = 64;
+const STICK_THRESHOLD_PX = 256;
 
 type UseRoomChatParams = {
   chatListRef: RefObject<HTMLDivElement | null>;

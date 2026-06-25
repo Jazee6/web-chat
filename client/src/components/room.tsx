@@ -244,7 +244,6 @@ const Room = ({
 
               {!isLoading && !stickToBottom && (
                 <Button
-                  variant="secondary"
                   size="sm"
                   onClick={scrollToBottom}
                   className="absolute left-1/2 -translate-x-1/2 bottom-36 z-10 rounded-full shadow-md backdrop-blur-[20px] backdrop-saturate-180"
