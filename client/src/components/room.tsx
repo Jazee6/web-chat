@@ -220,8 +220,7 @@ const Room = ({
             <div className="h-dvh flex flex-col relative">
               {chats && (
                 <div
-                  style={{ scrollbarGutter: "stable both-edges" }}
-                  className="overflow-y-auto scrollbar pt-16 max-md:px-2"
+                  className="overflow-y-auto scrollbar pt-16 max-md:px-2 scrollbar-gutter-both"
                   ref={chatListRef}
                 >
                   <div ref={contentRef}>

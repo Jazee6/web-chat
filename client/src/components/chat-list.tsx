@@ -314,7 +314,7 @@ const ChatList = memo(
                             </div>
                           )}
 
-                          <div className="text-muted text-xs self-end opacity-0 peer-hover:opacity-100 transition-opacity">
+                          <div className="text-muted-foreground brightness-75 text-xs self-end opacity-0 peer-hover:opacity-100 transition-opacity">
                             {new Date(c.createdAt)
                               .getHours()
                               .toString()
