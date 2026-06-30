@@ -25,6 +25,15 @@ export const sendMessageSchema = z.object({
   message: z.string().trim().max(2048),
 });
 
+// Mirrors ReplyRef in share/lib/index.ts. Stored as an opaque JSON blob on the
+// message row; the server never reads into it. See ADR 0003.
+export const replyRefSchema = z.object({
+  id: z.string().min(1),
+  userId: z.string().min(1),
+  type: z.enum(["text", "image"]),
+  snippet: z.string().max(100),
+});
+
 export const getRoomInfoSchema = z.object({
   id: z.string().min(1),
 });
@@ -72,6 +81,7 @@ export const clientMessageSchema = z.discriminatedUnion("type", [
     data: z.object({
       type: z.enum(["text", "image"]),
       content: z.string(),
+      replyTo: replyRefSchema.optional(),
     }),
   }),
   z.object({

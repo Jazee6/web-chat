@@ -14,6 +14,7 @@ import type { User } from "better-auth";
 import { type RefObject, useEffect, useRef, useState } from "react";
 import {
   gm,
+  type ReplyRef,
   type RoomRealtime,
   sendMessageSchema,
   type ServerMessage,
@@ -240,18 +241,19 @@ export function useRoom({
   const onSend = async (
     data: z.infer<typeof sendMessageSchema> & {
       images: File[];
+      replyTo?: ReplyRef;
     },
   ) => {
     if ("Notification" in window && Notification.permission === "default") {
       await Notification.requestPermission();
     }
 
-    const { message, images: rawImages } = data;
+    const { message, images: rawImages, replyTo } = data;
 
     if (rawImages.length > 0) {
-      await sendImages(rawImages, message || undefined);
+      await sendImages(rawImages, message || undefined, replyTo);
     } else if (message) {
-      chat.sendText(message);
+      chat.sendText(message, replyTo);
     }
   };
 

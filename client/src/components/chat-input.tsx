@@ -1,4 +1,5 @@
 import Footer from "@/components/footer.tsx";
+import { Button } from "@/components/ui/button.tsx";
 import {
   InputGroup,
   InputGroupAddon,
@@ -6,9 +7,10 @@ import {
   InputGroupTextarea,
 } from "@/components/ui/input-group.tsx";
 import { Spinner } from "@/components/ui/spinner.tsx";
+import type { User } from "@/lib/auth-client.ts";
 import { cn } from "@/lib/utils.ts";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { ArrowUpIcon, ImagePlus, PhoneCall, X } from "lucide-react";
+import { ArrowUpIcon, ImagePlus, PhoneCall, Reply, X } from "lucide-react";
 import {
   type ChangeEvent,
   type ClipboardEvent,
@@ -19,7 +21,7 @@ import {
 import { Controller, useForm } from "react-hook-form";
 import Zoom from "react-medium-image-zoom";
 import { toast } from "sonner";
-import { sendMessageSchema } from "web-chat-share";
+import { type ReplyRef, sendMessageSchema } from "web-chat-share";
 import { z } from "zod";
 
 const ChatInput = ({
@@ -28,16 +30,23 @@ const ChatInput = ({
   isLoading,
   className,
   onTypingChange,
+  replyTarget,
+  users,
+  onCancelReply,
 }: {
   onSend: (
     data: z.infer<typeof sendMessageSchema> & {
       images: File[];
+      replyTo?: ReplyRef;
     },
   ) => Promise<void>;
   onCall?: () => void;
   isLoading: boolean;
   className?: string;
   onTypingChange?: (typing: boolean) => void;
+  replyTarget: ReplyRef | null;
+  users: Record<string, User>;
+  onCancelReply: () => void;
 }) => {
   const [images, setImages] = useState<File[]>([]);
   const [isSending, setIsSending] = useState(false);
@@ -113,16 +122,21 @@ const ChatInput = ({
   });
 
   const onSubmit = async (data: z.infer<typeof sendMessageSchema>) => {
+    // Capture before clearing — onCancelReply runs before the await, matching
+    // how images/input are reset pre-send (a failed send doesn't restore them).
+    const replyTo = replyTarget ?? undefined;
     stopTyping();
     setIsSending(true);
     imagePreviewUrls.current.forEach((url) => URL.revokeObjectURL(url));
     imagePreviewUrls.current.clear();
     form.reset();
     setImages([]);
+    onCancelReply();
 
     await onSend({
       message: data.message,
       images: images,
+      replyTo,
     });
 
     setIsSending(false);
@@ -186,6 +200,30 @@ const ChatInput = ({
       )}
       onSubmit={(e) => form.handleSubmit(onSubmit)(e)}
     >
+      {replyTarget && (
+        <div className="max-w-3xl mx-auto mb-1 flex items-center gap-2 rounded-md border border-border bg-secondary/60 px-2 py-1">
+          <Reply className="size-3.5 shrink-0 text-muted-foreground" />
+          <div className="flex min-w-0 flex-col">
+            <span className="text-xs font-medium text-primary line-clamp-1">
+              {users[replyTarget.userId]?.name ||
+                replyTarget.userId.slice(0, 2)}
+            </span>
+            <span className="text-xs text-muted-foreground line-clamp-1 wrap-anywhere">
+              {replyTarget.snippet}
+            </span>
+          </div>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon-xs"
+            onClick={onCancelReply}
+            className="ml-auto shrink-0 text-muted-foreground"
+          >
+            <X className="size-4" />
+            <span className="sr-only">取消回复</span>
+          </Button>
+        </div>
+      )}
       <InputGroup className="max-w-3xl mx-auto max-h-64">
         <Controller
           name="message"

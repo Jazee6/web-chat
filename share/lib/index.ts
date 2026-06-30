@@ -13,12 +13,25 @@ export interface RoomStats {
   users: RoomUser[];
 }
 
+// A denormalized snapshot of a message being replied to. The id is for
+// click-Quote-to-jump; the rest renders the Quote even when the antecedent
+// isn't in the local paginated history. See ADR 0003 and CONTEXT.md "Reply".
+export interface ReplyRef {
+  id: string;
+  userId: string;
+  type: "text" | "image";
+  // text message → its content truncated; image message → the literal
+  // "[图片]" label (image `content` is a JSON id-array with no usable text).
+  snippet: string;
+}
+
 export interface ChatMessage {
   id: string;
   userId: string;
   type: "text" | "image";
   content: string;
   createdAt: string;
+  replyTo?: ReplyRef;
 }
 
 export interface UIChatMessage extends ChatMessage {
@@ -106,6 +119,7 @@ export type ClientMessage =
       data: {
         type: "text" | "image";
         content: string;
+        replyTo?: ReplyRef;
       };
     }
   | {

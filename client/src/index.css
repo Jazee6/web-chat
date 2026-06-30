@@ -141,6 +141,24 @@
     animation: slide-top 0.25s cubic-bezier(0.25, 0.46, 0.45, 0.94) forwards;
 }
 
+/* One-shot highlight when jumping to a message via its Quote. The class is
+   added then removed on animationend (with a setTimeout backstop); see
+   flashMessage in chat-list.tsx. */
+@keyframes reply-flash {
+    0% {
+        background-color: color-mix(in oklch, var(--primary) 18%, transparent);
+    }
+
+    100% {
+        background-color: transparent;
+    }
+}
+
+.reply-flash {
+    animation: reply-flash 1.5s ease-out;
+    border-radius: var(--radius-md);
+}
+
 /* Amber glow used on the mic button when the user is talking while muted —
    a non-disruptive hint that no one can hear them. Distinct from a layout-
    shifting banner; the button it animates already occupies its space. */

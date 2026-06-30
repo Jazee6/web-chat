@@ -15,11 +15,13 @@ import { useIncomingCall } from "@/hooks/use-incoming-call.ts";
 import { useKickedTabWatcher } from "@/hooks/use-kicked-tab-watcher.ts";
 import { useRoom } from "@/hooks/use-room.ts";
 import { RoomContext, type RoomContextType } from "@/lib/context.ts";
+import { toReplyRef } from "@/lib/reply.ts";
 import { appName } from "@/lib/utils.ts";
 import type { User } from "better-auth";
 import { ChevronDown, PictureInPicture } from "lucide-react";
 import { useCallback, useRef, useState } from "react";
 import { useBeforeUnload } from "react-router";
+import type { ReplyRef, UIChatMessage } from "web-chat-share";
 
 let realtimeKeyCounter = 0;
 
@@ -55,6 +57,10 @@ const Room = ({
     Record<string, MediaStreamTrack>
   >({});
   const [realtimeKey, setRealtimeKey] = useState(0);
+  // The message being replied to, captured as a denormalized snapshot the
+  // moment the user picks "回复". Lives here so both ChatList (source) and
+  // ChatInput (preview + send) share one source of truth. See ADR 0003.
+  const [replyTarget, setReplyTarget] = useState<ReplyRef | null>(null);
 
   const chatListRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
@@ -236,6 +242,9 @@ const Room = ({
                       userId={user.id}
                       users={users}
                       roomStats={roomStats}
+                      onReply={(message: UIChatMessage) =>
+                        setReplyTarget(toReplyRef(message))
+                      }
                     />
                   </div>
                 </div>
@@ -258,6 +267,9 @@ const Room = ({
                 isLoading={isLoading}
                 onCall={onCall}
                 onTypingChange={setTyping}
+                replyTarget={replyTarget}
+                users={users}
+                onCancelReply={() => setReplyTarget(null)}
               />
             </div>
           </SidebarInset>

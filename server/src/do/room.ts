@@ -7,6 +7,7 @@ import {
   gm,
   RoomUser,
   ServerMessage,
+  type ChatMessage,
   type ClientMessage,
   type ServerRealtimeStatus,
 } from "web-chat-share";
@@ -16,6 +17,20 @@ import { messageTable } from "../lib/schema/room";
 import Env = Cloudflare.Env;
 
 type WsSession = RoomUser;
+
+type MessageRow = typeof messageTable.$inferSelect;
+
+// Maps a message row to the wire ChatMessage shape. The replyTo column is
+// JSON-mode, so drizzle already parsed it into a ReplyRef (or null) — coerce
+// null→undefined for the wire shape. See ADR 0003.
+const toClientMessage = (row: MessageRow): ChatMessage => ({
+  id: row.id,
+  userId: row.userId,
+  type: row.type,
+  content: row.content,
+  createdAt: row.createdAt.toISOString(),
+  replyTo: row.replyTo ?? undefined,
+});
 
 interface WsAttachment {
   session: WsSession;
@@ -253,9 +268,7 @@ export class Room extends DurableObject {
         ws.send(
           gm({
             type: "initHistory",
-            data: history
-              .reverse()
-              .map((i) => ({ ...i, createdAt: i.createdAt.toISOString() })),
+            data: history.reverse().map(toClientMessage),
           }),
         );
         break;
@@ -266,23 +279,21 @@ export class Room extends DurableObject {
           this.handleDisconnect(ws);
           return;
         }
-        const { type, content } = clientMessage.data;
+        const { type, content, replyTo } = clientMessage.data;
         const data = await this.db
           .insert(messageTable)
           .values({
             type,
             content,
             userId: meta.id,
+            replyTo,
           })
           .returning()
           .then((i) => i[0]);
         this.broadcast(
           {
             type: "message",
-            data: {
-              ...data,
-              createdAt: data.createdAt.toISOString(),
-            },
+            data: toClientMessage(data),
           },
           [ws],
         );
@@ -303,9 +314,7 @@ export class Room extends DurableObject {
         ws.send(
           gm({
             type: "history",
-            data: moreHistory
-              .reverse()
-              .map((i) => ({ ...i, createdAt: i.createdAt.toISOString() })),
+            data: moreHistory.reverse().map(toClientMessage),
           }),
         );
         break;

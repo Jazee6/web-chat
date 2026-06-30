@@ -16,6 +16,19 @@ Image `File` objects held in client memory after the user has selected them but 
 Surfaced via `UIChatMessage.localFiles`.
 _Avoid_: attachments, drafts
 
+**Reply**:
+A Chat Message that explicitly references an earlier Chat Message as its antecedent. The antecedent is captured as
+a snapshot at send time (author, type, and a content snippet), so the quote renders on every client even when the
+antecedent has scrolled out of the local paginated history window. The reference is denormalized — an id-only lookup
+would fail whenever the antecedent isn't in local state, which is the common case under 25-per-page pagination.
+_Avoid_: quote (that is the rendered block, not the relationship), thread
+
+**Quote**:
+The rendered preview of a Reply's antecedent, shown above the Reply's own bubble. Distinct from the Reply relationship
+itself: every Reply carries a Quote, and clicking the Quote jumps to the antecedent. For an image antecedent the Quote
+is a `[图片]` text label, or `[图片] x N` for a multi-image antecedent — never the image itself.
+_Avoid_: reply (the relationship), citation
+
 ### Image lifecycle states
 
 These are three distinct states. Calling all of them "上传失败" causes confusion — pick the right one.

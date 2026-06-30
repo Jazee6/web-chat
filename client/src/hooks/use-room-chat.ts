@@ -12,6 +12,7 @@ import {
 import {
   type ChatMessage,
   gm,
+  type ReplyRef,
   type RoomStats,
   type UIChatMessage,
 } from "web-chat-share";
@@ -36,7 +37,7 @@ type UseRoomChatReturn = {
   addChatMessage: (
     msg: Omit<UIChatMessage, "id" | "userId" | "createdAt">,
   ) => void;
-  sendText: (content: string) => void;
+  sendText: (content: string, replyTo?: ReplyRef) => void;
   handleInitHistory: (data: ChatMessage[]) => void;
   handleHistory: (data: ChatMessage[]) => void;
   handleMessage: (data: ChatMessage) => void;
@@ -278,12 +279,12 @@ export function useRoomChat({
   );
 
   const sendText = useCallback(
-    (content: string) => {
-      addChatMessage({ type: "text", content });
+    (content: string, replyTo?: ReplyRef) => {
+      addChatMessage({ type: "text", content, replyTo });
       sendMessage(
         gm({
           type: "send",
-          data: { type: "text", content },
+          data: { type: "text", content, replyTo },
         }),
       );
     },

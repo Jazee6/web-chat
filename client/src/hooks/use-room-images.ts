@@ -1,7 +1,7 @@
 import { api, calculateSHA256, convertImageToWebP } from "@/lib/utils.ts";
 import ky from "ky";
 import { type Dispatch, type SetStateAction } from "react";
-import { gm, type UIChatMessage } from "web-chat-share";
+import { gm, type ReplyRef, type UIChatMessage } from "web-chat-share";
 
 type UseRoomImagesParams = {
   userId: string;
@@ -12,7 +12,11 @@ type UseRoomImagesParams = {
 };
 
 type UseRoomImagesReturn = {
-  sendImages: (rawImages: File[], textMessage?: string) => Promise<void>;
+  sendImages: (
+    rawImages: File[],
+    textMessage?: string,
+    replyTo?: ReplyRef,
+  ) => Promise<void>;
 };
 
 export function useRoomImages({
@@ -22,8 +26,16 @@ export function useRoomImages({
   readyState,
   requestStickToBottom,
 }: UseRoomImagesParams): UseRoomImagesReturn {
-  const sendImages = async (rawImages: File[], textMessage?: string) => {
+  // A reply attaches to exactly one message: the text caption if present,
+  // otherwise the image. Both the optimistic local entry and the wire send
+  // carry it, so the sender sees the Quote immediately. See ADR 0003.
+  const sendImages = async (
+    rawImages: File[],
+    textMessage?: string,
+    replyTo?: ReplyRef,
+  ) => {
     const messageId = crypto.randomUUID();
+    const replyOnText = !!textMessage;
 
     requestStickToBottom();
     setChats((prev) => {
@@ -38,6 +50,7 @@ export function useRoomImages({
             file,
             isUploading: true,
           })),
+          replyTo: replyOnText ? undefined : replyTo,
           createdAt: new Date().toISOString(),
         },
       ];
@@ -47,6 +60,7 @@ export function useRoomImages({
           userId,
           type: "text" as const,
           content: textMessage,
+          replyTo,
           createdAt: new Date().toISOString(),
         });
       }
@@ -126,6 +140,7 @@ export function useRoomImages({
           data: {
             type: "image",
             content: JSON.stringify(sha256List),
+            replyTo: replyOnText ? undefined : replyTo,
           },
         }),
       );
@@ -137,6 +152,7 @@ export function useRoomImages({
             data: {
               type: "text",
               content: textMessage,
+              replyTo,
             },
           }),
         );
