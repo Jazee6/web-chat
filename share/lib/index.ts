@@ -42,8 +42,23 @@ export interface UIChatMessage extends ChatMessage {
     // of the batch may still succeed. Distinct from `sendFailed` (per-message).
     // See CONTEXT.md "Upload Failed" vs "Send Failed".
     uploadFailed?: boolean;
+    // The storage key (sha256) once the upload has landed. Present only after a
+    // successful PUT — lets the sender favorite/copy their own just-sent image
+    // even though the optimistic message's `content` stays empty (the server
+    // doesn't echo back to the sender). See ADR 0004.
+    key?: string;
   }[];
   sendFailed?: boolean;
+}
+
+// A Sticker is an image a user has favorited from chat for quick reuse. It
+// references the same storage key as its source image message — the bytes live
+// in object storage once and are sent by key reference, never re-uploaded. See
+// CONTEXT.md "Stickers" and ADR 0004.
+export interface Sticker {
+  id: string;
+  key: string;
+  createdAt: string;
 }
 
 export type LinkPreviewContentType =

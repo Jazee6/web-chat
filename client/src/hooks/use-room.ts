@@ -139,7 +139,7 @@ export function useRoom({
     fetchMissingUsers,
   });
 
-  const { sendImages } = useRoomImages({
+  const { sendImages, sendSticker } = useRoomImages({
     userId: user.id,
     setChats: chat.setChats,
     sendMessage,
@@ -270,6 +270,7 @@ export function useRoom({
     realtimeStatus,
     onSend,
     setTyping,
+    sendSticker,
     stickToBottom: chat.stickToBottom,
     unreadCount: chat.unreadCount,
     scrollToBottom: chat.scrollToBottom,

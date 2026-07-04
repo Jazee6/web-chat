@@ -15,12 +15,20 @@ import {
 } from "@/components/ui/context-menu.tsx";
 import { Skeleton } from "@/components/ui/skeleton.tsx";
 import { Spinner } from "@/components/ui/spinner.tsx";
+import { useFavoriteSticker } from "@/hooks/use-stickers.ts";
 import type { User } from "@/lib/auth-client.ts";
 import { cn, formatChatListTime } from "@/lib/utils.ts";
-import { CircleAlert, Copy, Reply, TriangleAlert } from "lucide-react";
-import { Fragment, memo, useMemo, useState } from "react";
+import {
+  CircleAlert,
+  Copy,
+  HeartPlus,
+  Reply,
+  TriangleAlert,
+} from "lucide-react";
+import { type ReactNode, Fragment, memo, useMemo, useState } from "react";
 import Zoom from "react-medium-image-zoom";
 import "react-medium-image-zoom/dist/styles.css";
+import { toast } from "sonner";
 import type { ReplyRef, RoomStats, UIChatMessage } from "web-chat-share";
 
 const ChatImage = ({ src, alt }: { src: string; alt: string }) => {
@@ -49,6 +57,33 @@ const ChatImage = ({ src, alt }: { src: string; alt: string }) => {
     </>
   );
 };
+
+// Wraps an image in a per-image context menu: 收藏到表情 (favorite as a Sticker)
+// and 复制 (copy this image's bytes). Used both for sent images (keyed by their
+// storage key) and for the sender's just-uploaded local files (keyed once the
+// PUT lands — see ADR 0004). Local/uploading/failed files have no key and
+// aren't wrapped. See CONTEXT.md "Stickers".
+const ImageWithFavorite = ({
+  storageKey,
+  onFavorite,
+  children,
+}: {
+  storageKey: string;
+  onFavorite: (key: string) => void;
+  children: ReactNode;
+}) => (
+  <ContextMenu>
+    <ContextMenuTrigger render={<div className="shrink-0" />}>
+      {children}
+    </ContextMenuTrigger>
+    <ContextMenuContent>
+      <ContextMenuItem onClick={() => onFavorite(storageKey)}>
+        <HeartPlus />
+        <span>Save to stickers</span>
+      </ContextMenuItem>
+    </ContextMenuContent>
+  </ContextMenu>
+);
 
 const urlPattern = "https?://[^\\s<>\\[\\]{}|^`]+";
 const urlRegex = new RegExp(`(${urlPattern})`, "g");
@@ -154,44 +189,19 @@ const flashMessage = (id: string) => {
 };
 
 // Silent copy (Q2: no toast). Text → the user's current selection if it lives
-// inside this message, else the whole message text; image → first image's
-// bytes via the ClipboardItem API, falling back to the image URL when the
-// type isn't accepted (e.g. webp on browsers that only allow png). Image copy
-// is gated to fully-sent messages at the call site.
+// inside this message, else the whole message text. Image messages have no
+// copy affordance — per-image copy was removed in favor of favoriting as a
+// Sticker. See CONTEXT.md "Stickers".
 const copyMessage = async (c: UIChatMessage) => {
   try {
-    if (c.type === "text") {
-      const sel = window.getSelection();
-      const node = sel?.anchorNode ?? null;
-      const el = document.getElementById(c.id);
-      const selected =
-        sel && sel.toString().trim() && el?.contains(node)
-          ? sel.toString()
-          : c.content;
-      await navigator.clipboard.writeText(selected);
-      return;
-    }
-    const ids = JSON.parse(c.content) as string[];
-    const first = ids[0];
-    if (!first) return;
-    const url = `${import.meta.env.VITE_API_URL}/room/images/${first}`;
-    const res = await fetch(url);
-    if (!res.ok) return;
-    const blob = await res.blob();
-    const type = blob.type || "image/png";
-    if (
-      navigator.clipboard &&
-      "write" in navigator.clipboard &&
-      typeof ClipboardItem !== "undefined"
-    ) {
-      try {
-        await navigator.clipboard.write([new ClipboardItem({ [type]: blob })]);
-        return;
-      } catch {
-        // Unsupported image type — fall through to URL copy below.
-      }
-    }
-    await navigator.clipboard.writeText(url);
+    const sel = window.getSelection();
+    const node = sel?.anchorNode ?? null;
+    const el = document.getElementById(c.id);
+    const selected =
+      sel && sel.toString().trim() && el?.contains(node)
+        ? sel.toString()
+        : c.content;
+    await navigator.clipboard.writeText(selected);
   } catch {
     // Silent — see Q2.
   }
@@ -245,6 +255,11 @@ const ChatList = memo(
     roomStats?: RoomStats;
     onReply?: (message: UIChatMessage) => void;
   }) => {
+    const favoriteSticker = useFavoriteSticker();
+    const onFavoriteSticker = (key: string) => {
+      favoriteSticker.mutate(key);
+      toast.success("Saved to stickers");
+    };
     const groups = useMemo(() => {
       const res: {
         id: string;
@@ -384,40 +399,65 @@ const ChatList = memo(
                                     {c.localFiles?.length
                                       ? c.localFiles.map(
                                           (
-                                            { file, isUploading, uploadFailed },
+                                            {
+                                              file,
+                                              isUploading,
+                                              uploadFailed,
+                                              key,
+                                            },
                                             index,
-                                          ) => (
-                                            <div
-                                              className="relative shrink-0"
-                                              key={`${file.name}_${index}`}
-                                            >
-                                              <ChatImage
-                                                src={getLocalFileUrl(file)}
-                                                alt={file.name}
-                                              />
+                                          ) =>
+                                            // Uploaded successfully → has a key →
+                                            // favorite/copy like a sent image. Still
+                                            // uploading or failed → no key, render
+                                            // with the status overlay and no menu.
+                                            key ? (
+                                              <ImageWithFavorite
+                                                key={`${file.name}_${index}`}
+                                                storageKey={key}
+                                                onFavorite={onFavoriteSticker}
+                                              >
+                                                <ChatImage
+                                                  src={getLocalFileUrl(file)}
+                                                  alt={file.name}
+                                                />
+                                              </ImageWithFavorite>
+                                            ) : (
+                                              <div
+                                                className="relative shrink-0"
+                                                key={`${file.name}_${index}`}
+                                              >
+                                                <ChatImage
+                                                  src={getLocalFileUrl(file)}
+                                                  alt={file.name}
+                                                />
 
-                                              {isUploading && (
-                                                <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
-                                                  <Spinner />
-                                                </div>
-                                              )}
+                                                {isUploading && (
+                                                  <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
+                                                    <Spinner />
+                                                  </div>
+                                                )}
 
-                                              {uploadFailed && (
-                                                <div className="absolute inset-0 bg-amber-500/30 flex items-center justify-center">
-                                                  <TriangleAlert className="text-amber-500" />
-                                                </div>
-                                              )}
-                                            </div>
-                                          ),
+                                                {uploadFailed && (
+                                                  <div className="absolute inset-0 bg-amber-500/30 flex items-center justify-center">
+                                                    <TriangleAlert className="text-amber-500" />
+                                                  </div>
+                                                )}
+                                              </div>
+                                            ),
                                         )
                                       : (JSON.parse(c.content) as string[]).map(
                                           (i, index) => (
-                                            <div className="shrink-0" key={i}>
+                                            <ImageWithFavorite
+                                              key={i}
+                                              storageKey={i}
+                                              onFavorite={onFavoriteSticker}
+                                            >
                                               <ChatImage
                                                 src={`${import.meta.env.VITE_API_URL}/room/images/${i}`}
                                                 alt={`image_${index}`}
                                               />
-                                            </div>
+                                            </ImageWithFavorite>
                                           ),
                                         )}
                                   </div>
@@ -450,16 +490,14 @@ const ChatList = memo(
                               <Reply />
                               <span>回复</span>
                             </ContextMenuItem>
-                            <ContextMenuItem
-                              onClick={() => void copyMessage(c)}
-                              disabled={
-                                c.type === "image" &&
-                                (!!c.localFiles?.length || !!c.sendFailed)
-                              }
-                            >
-                              <Copy />
-                              <span>复制</span>
-                            </ContextMenuItem>
+                            {c.type === "text" && (
+                              <ContextMenuItem
+                                onClick={() => void copyMessage(c)}
+                              >
+                                <Copy />
+                                <span>复制</span>
+                              </ContextMenuItem>
+                            )}
                           </ContextMenuContent>
                         </ContextMenu>
                       );

@@ -1,5 +1,10 @@
 import { relations } from "drizzle-orm";
-import { integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
+import {
+  integer,
+  sqliteTable,
+  text,
+  uniqueIndex,
+} from "drizzle-orm/sqlite-core";
 import { v7 } from "uuid";
 
 export const roomTable = sqliteTable("room", {
@@ -30,3 +35,24 @@ export const favoriteRoomTable = sqliteTable("favorite_room", {
 export const roomRelations = relations(roomTable, ({ many }) => ({
   favoriteRooms: many(favoriteRoomTable),
 }));
+
+// A user's personal Sticker Library — images favorited from chat for quick
+// reuse, referenced by their storage key (sha256). Per-user, cross-room. The
+// unique (userId, key) makes favoriting idempotent: favoriting the same image
+// twice is a no-op, not an error. See CONTEXT.md "Stickers".
+export const stickerTable = sqliteTable(
+  "sticker",
+  {
+    id: text()
+      .primaryKey()
+      .$defaultFn(() => v7()),
+    userId: text().notNull(),
+    key: text().notNull(),
+    createdAt: integer({ mode: "timestamp" })
+      .notNull()
+      .$defaultFn(() => new Date()),
+  },
+  (table) => [
+    uniqueIndex("sticker_userId_key_unique").on(table.userId, table.key),
+  ],
+);

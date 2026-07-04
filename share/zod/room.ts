@@ -49,6 +49,16 @@ export const getImageSchema = z.object({
   key: z.hash("sha256", { enc: "base64url" }),
 });
 
+// A sticker references an image already in storage by its sha256 key. See
+// CONTEXT.md "Stickers" and ADR 0004.
+export const favoriteStickerSchema = z.object({
+  key: z.hash("sha256", { enc: "base64url" }),
+});
+
+export const stickerIdSchema = z.object({
+  id: z.string().min(1),
+});
+
 export const linkPreviewQuerySchema = z.object({
   url: z
     .url()

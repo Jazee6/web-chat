@@ -85,6 +85,7 @@ const Room = ({
     realtimeStatus,
     onSend,
     setTyping,
+    sendSticker,
     stickToBottom,
     unreadCount,
     scrollToBottom,
@@ -267,6 +268,7 @@ const Room = ({
                 isLoading={isLoading}
                 onCall={onCall}
                 onTypingChange={setTyping}
+                onSendSticker={sendSticker}
                 replyTarget={replyTarget}
                 users={users}
                 onCancelReply={() => setReplyTarget(null)}

@@ -48,6 +48,24 @@ dispatched, so the recipient never received it. Per-message, not per-file. Impli
 peer knows about them.
 _Avoid_: upload failed (different concept — see above)
 
+### Stickers
+
+**Sticker**:
+An image a user has saved from a chat for quick reuse. Identified by the same storage key as its source image — the bytes live in object storage once and are
+referenced, never re-uploaded on send. A Sticker is always sent as an image message; it is distinct from a Unicode emoji, which is plain text rendered
+oversized.
+_Avoid_: emoji (that is the Unicode text concept), 表情 (ambiguous between the two)
+
+**Sticker Library**:
+A user's personal collection of Stickers, shared across all their rooms. Per-user, not per-room. Surfaced via the sticker picker in the input area.
+_Avoid_: favorites (overloaded — see Favorite), sticker pack
+
+**Favorite** (overloaded — two senses, disambiguate by object):
+(1) **Favorite Room** — a room a user has pinned to their favorites list.
+(2) **Favorite Sticker** — the act of saving an image to the Sticker Library.
+The same word names two unrelated actions on different objects; do not abbreviate to "favorite a …" without naming the object.
+_Avoid_: bookmark, save (use the Sticker sense sparingly to avoid clashing with Favorite Room)
+
 ### Call
 
 **Call**:

@@ -17,6 +17,10 @@ type UseRoomImagesReturn = {
     textMessage?: string,
     replyTo?: ReplyRef,
   ) => Promise<void>;
+  // Sticker fast path: the image is already in storage (keyed by sha256), so
+  // skip WebP conversion and re-upload entirely — just optimistically append
+  // an image message carrying the key and fire the WS send. See ADR 0004.
+  sendSticker: (key: string) => void;
 };
 
 export function useRoomImages({
@@ -104,10 +108,13 @@ export function useRoomImages({
         .json();
 
       await Promise.all(
-        presigned.map(async ({ url }, i) => {
+        presigned.map(async ({ url, key }, i) => {
           if (url) {
             await ky.put(url, { body: converted[i] });
           }
+          // Stamp the storage key onto the localFile so the sender can
+          // favorite/copy their own just-sent image — the optimistic message's
+          // `content` stays empty (server doesn't echo to the sender). See ADR 0004.
           setChats((prev) =>
             prev.map((c) =>
               c.id === messageId
@@ -115,7 +122,7 @@ export function useRoomImages({
                     ...c,
                     localFiles: c.localFiles?.map((f, idx) =>
                       idx === succeeded[i].originalIndex
-                        ? { ...f, isUploading: false }
+                        ? { ...f, isUploading: false, key }
                         : f,
                     ),
                   }
@@ -173,5 +180,42 @@ export function useRoomImages({
     }
   };
 
-  return { sendImages };
+  // Sticker fast path. The bytes already exist in object storage under `key`,
+  // so there is nothing to upload: append an optimistic image message and send
+  // the wire message. If the socket isn't OPEN, mark the message send-failed
+  // (the bytes exist but no peer will receive them) — mirroring sendImages.
+  // See ADR 0004.
+  const sendSticker = (key: string) => {
+    const messageId = crypto.randomUUID();
+    requestStickToBottom();
+    setChats((prev) => [
+      ...prev,
+      {
+        id: messageId,
+        userId,
+        type: "image" as const,
+        content: JSON.stringify([key]),
+        createdAt: new Date().toISOString(),
+      },
+    ]);
+
+    if (readyState !== WebSocket.OPEN) {
+      setChats((prev) =>
+        prev.map((c) => (c.id === messageId ? { ...c, sendFailed: true } : c)),
+      );
+      return;
+    }
+
+    sendMessage(
+      gm({
+        type: "send",
+        data: {
+          type: "image",
+          content: JSON.stringify([key]),
+        },
+      }),
+    );
+  };
+
+  return { sendImages, sendSticker };
 }

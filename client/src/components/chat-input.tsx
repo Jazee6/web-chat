@@ -1,4 +1,5 @@
 import Footer from "@/components/footer.tsx";
+import StickerPicker from "@/components/sticker-picker.tsx";
 import { Button } from "@/components/ui/button.tsx";
 import {
   InputGroup,
@@ -30,6 +31,7 @@ const ChatInput = ({
   isLoading,
   className,
   onTypingChange,
+  onSendSticker,
   replyTarget,
   users,
   onCancelReply,
@@ -44,6 +46,7 @@ const ChatInput = ({
   isLoading: boolean;
   className?: string;
   onTypingChange?: (typing: boolean) => void;
+  onSendSticker: (key: string) => void;
   replyTarget: ReplyRef | null;
   users: Record<string, User>;
   onCancelReply: () => void;
@@ -294,6 +297,11 @@ const ChatInput = ({
               )}
 
               <InputGroupAddon align="block-end">
+                <StickerPicker
+                  onSendSticker={onSendSticker}
+                  disabled={isLoading || isSending}
+                />
+
                 <InputGroupButton size="icon-xs" onClick={onImageSelect}>
                   <input
                     ref={imageInputRef}

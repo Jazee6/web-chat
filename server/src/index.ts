@@ -9,12 +9,14 @@ import { HTTPException } from "hono/http-exception";
 import {
   basePaginationSchema,
   createRoomSchema,
+  favoriteStickerSchema,
   getImageSchema,
   getPresignedUrlSchema,
   getRoomInfoSchema,
   getUserInfoSchema,
   linkPreviewQuerySchema,
   roomIdSchema,
+  stickerIdSchema,
 } from "web-chat-share";
 import realtime from "./api/realtime";
 import { getAuth } from "./lib/auth";
@@ -23,7 +25,7 @@ import { createS3 } from "./lib/s3";
 import * as authSchema from "./lib/schema/auth";
 import { user } from "./lib/schema/auth";
 import * as d1Schema from "./lib/schema/d1";
-import { favoriteRoomTable, roomTable } from "./lib/schema/d1";
+import { favoriteRoomTable, roomTable, stickerTable } from "./lib/schema/d1";
 import { HONOInstance } from "./lib/types";
 export { Room } from "./do/room";
 
@@ -86,6 +88,19 @@ app.use(
 );
 
 app.use("/room/*", async (c, next) => {
+  const a = getAuth(c.env.web_chat);
+  const session = await a.api.getSession({ headers: c.req.raw.headers });
+  if (!session) {
+    throw new HTTPException(401, { message: "Unauthorized" });
+  }
+  c.set("user", session.user);
+  c.set("session", session.session);
+  await next();
+});
+
+// The Sticker Library is user-scoped, not room-scoped, but shares the same
+// auth gate. See CONTEXT.md "Stickers".
+app.use("/sticker/*", async (c, next) => {
   const a = getAuth(c.env.web_chat);
   const session = await a.api.getSession({ headers: c.req.raw.headers });
   if (!session) {
@@ -373,6 +388,58 @@ app.get(
         "Content-Type": object.httpMetadata?.contentType ?? "image/webp",
       },
     });
+  },
+);
+
+// A user's Sticker Library — images favorited from chat, referenced by their
+// storage key. Cross-room, per-user. See CONTEXT.md "Stickers".
+app.get(
+  "/sticker",
+  zValidator("query", basePaginationSchema),
+  async (c) => {
+    const { limit, offset } = c.req.valid("query");
+    const user = c.get("user");
+    const db = getD1Db(c.env.web_chat);
+    const stickers = await db.query.stickerTable.findMany({
+      where: eq(stickerTable.userId, user.id),
+      orderBy: [desc(stickerTable.createdAt), desc(stickerTable.id)],
+      limit,
+      offset,
+    });
+    return c.json(stickers);
+  },
+);
+
+app.post("/sticker", zValidator("json", favoriteStickerSchema), async (c) => {
+  const { key } = c.req.valid("json");
+  const user = c.get("user");
+  const db = getD1Db(c.env.web_chat);
+  // Idempotent: favoriting the same image twice is a no-op, not an error. The
+  // unique (userId, key) index enforces it; on conflict, return the existing
+  // row as if the insert succeeded.
+  await db
+    .insert(stickerTable)
+    .values({
+      userId: user.id,
+      key,
+    })
+    .onConflictDoNothing();
+  return c.body(null, 201);
+});
+
+app.delete(
+  "/sticker/:id",
+  zValidator("param", stickerIdSchema),
+  async (c) => {
+    const { id } = c.req.valid("param");
+    const user = c.get("user");
+    const db = getD1Db(c.env.web_chat);
+    await db
+      .delete(stickerTable)
+      .where(
+        and(eq(stickerTable.id, id), eq(stickerTable.userId, user.id)),
+      );
+    return c.body(null, 204);
   },
 );
 
