@@ -7,6 +7,7 @@ import {
 import type { Sticker } from "web-chat-share";
 
 const STICKER_LIMIT = 25;
+const STICKER_STALE_TIME = 1000 * 60 * 60 * 24;
 
 export const stickerListQueryKey = ["sticker"] as const;
 
@@ -32,6 +33,7 @@ export function useStickers() {
       lastPage.length < STICKER_LIMIT
         ? undefined
         : lastPageParam + STICKER_LIMIT,
+    staleTime: STICKER_STALE_TIME,
   });
 
   const favoriteMutation = useMutation({

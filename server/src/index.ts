@@ -5,6 +5,7 @@ import { Hono } from "hono";
 import { cache } from "hono/cache";
 import { cors } from "hono/cors";
 import { showRoutes } from "hono/dev";
+import { etag } from "hono/etag";
 import { HTTPException } from "hono/http-exception";
 import {
   basePaginationSchema,
@@ -396,11 +397,13 @@ app.get(
 app.get(
   "/sticker",
   zValidator("query", basePaginationSchema),
+  etag(),
   async (c) => {
     const { limit, offset } = c.req.valid("query");
     const user = c.get("user");
     const db = getD1Db(c.env.web_chat);
     const stickers = await db.query.stickerTable.findMany({
+      columns: { id: true, key: true, createdAt: true },
       where: eq(stickerTable.userId, user.id),
       orderBy: [desc(stickerTable.createdAt), desc(stickerTable.id)],
       limit,
@@ -427,21 +430,15 @@ app.post("/sticker", zValidator("json", favoriteStickerSchema), async (c) => {
   return c.body(null, 201);
 });
 
-app.delete(
-  "/sticker/:id",
-  zValidator("param", stickerIdSchema),
-  async (c) => {
-    const { id } = c.req.valid("param");
-    const user = c.get("user");
-    const db = getD1Db(c.env.web_chat);
-    await db
-      .delete(stickerTable)
-      .where(
-        and(eq(stickerTable.id, id), eq(stickerTable.userId, user.id)),
-      );
-    return c.body(null, 204);
-  },
-);
+app.delete("/sticker/:id", zValidator("param", stickerIdSchema), async (c) => {
+  const { id } = c.req.valid("param");
+  const user = c.get("user");
+  const db = getD1Db(c.env.web_chat);
+  await db
+    .delete(stickerTable)
+    .where(and(eq(stickerTable.id, id), eq(stickerTable.userId, user.id)));
+  return c.body(null, 204);
+});
 
 app.route("/room", realtime);
 

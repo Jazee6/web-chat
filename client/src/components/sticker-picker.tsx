@@ -4,6 +4,12 @@ import {
   ContextMenuItem,
   ContextMenuTrigger,
 } from "@/components/ui/context-menu.tsx";
+import {
+  Empty,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyMedia,
+} from "@/components/ui/empty.tsx";
 import { InputGroupButton } from "@/components/ui/input-group.tsx";
 import {
   Popover,
@@ -54,15 +60,20 @@ const StickerGrid = ({
 
   if (isEmpty) {
     return (
-      <div className="flex h-40 items-center justify-center px-4 text-center text-xs text-muted-foreground">
-        No stickers yet. Right-click an image to save one.
-      </div>
+      <Empty className="h-40 p-4">
+        <EmptyHeader>
+          <EmptyMedia>
+            <SmilePlus />
+          </EmptyMedia>
+          <EmptyDescription className="text-xs">No Stickers</EmptyDescription>
+        </EmptyHeader>
+      </Empty>
     );
   }
 
   return (
     <div className="flex max-h-72 flex-col">
-      <div className="grid grid-cols-4 gap-1 overflow-y-auto scrollbar p-1 sm:grid-cols-5">
+      <div className="grid grid-cols-4 gap-1 overflow-y-auto scrollbar py-1 px-1 sm:grid-cols-5">
         {listQuery.isLoading
           ? Array.from({ length: 10 }).map((_, i) => (
               <Skeleton key={i} className="aspect-square rounded" />
@@ -94,13 +105,13 @@ const StickerGrid = ({
                     }}
                   >
                     <Trash2 />
-                    <span>删除</span>
+                    <span>Delete</span>
                   </ContextMenuItem>
                 </ContextMenuContent>
               </ContextMenu>
             ))}
       </div>
-      <div ref={sentinelRef} className="h-1 shrink-0" />
+      <div ref={sentinelRef} className="shrink-0" />
       {isFetchingNextPage && (
         <div className="flex justify-center py-1">
           <Skeleton className="h-4 w-16" />
