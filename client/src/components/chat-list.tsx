@@ -17,7 +17,7 @@ import { Skeleton } from "@/components/ui/skeleton.tsx";
 import { Spinner } from "@/components/ui/spinner.tsx";
 import { useFavoriteSticker } from "@/hooks/use-stickers.ts";
 import type { User } from "@/lib/auth-client.ts";
-import { cn, formatChatListTime } from "@/lib/utils.ts";
+import { api, cn, formatChatListTime } from "@/lib/utils.ts";
 import {
   CircleAlert,
   Copy,
@@ -58,18 +58,23 @@ const ChatImage = ({ src, alt }: { src: string; alt: string }) => {
   );
 };
 
-// Wraps an image in a per-image context menu: 收藏到表情 (favorite as a Sticker)
-// and 复制 (copy this image's bytes). Used both for sent images (keyed by their
+// Wraps an image in a per-image context menu: Reply (the whole message, not
+// this single file), Copy (this image's bytes to the system clipboard), and
+// Save to stickers (in-app reuse). Used both for sent images (keyed by their
 // storage key) and for the sender's just-uploaded local files (keyed once the
-// PUT lands — see ADR 0004). Local/uploading/failed files have no key and
-// aren't wrapped. See CONTEXT.md "Stickers".
+// PUT lands - see ADR 0004). Local/uploading/failed files have no key and
+// aren't wrapped. See CONTEXT.md "Stickers" and ADR 0005.
 const ImageWithFavorite = ({
   storageKey,
+  message,
   onFavorite,
+  onReply,
   children,
 }: {
   storageKey: string;
+  message: UIChatMessage;
   onFavorite: (key: string) => void;
+  onReply?: (message: UIChatMessage) => void;
   children: ReactNode;
 }) => (
   <ContextMenu>
@@ -77,6 +82,14 @@ const ImageWithFavorite = ({
       {children}
     </ContextMenuTrigger>
     <ContextMenuContent>
+      <ContextMenuItem onClick={() => onReply?.(message)}>
+        <Reply />
+        <span>Reply</span>
+      </ContextMenuItem>
+      <ContextMenuItem onClick={() => void copyImage(storageKey)}>
+        <Copy />
+        <span>Copy</span>
+      </ContextMenuItem>
       <ContextMenuItem onClick={() => onFavorite(storageKey)}>
         <HeartPlus />
         <span>Save to stickers</span>
@@ -189,9 +202,7 @@ const flashMessage = (id: string) => {
 };
 
 // Silent copy (Q2: no toast). Text → the user's current selection if it lives
-// inside this message, else the whole message text. Image messages have no
-// copy affordance — per-image copy was removed in favor of favoriting as a
-// Sticker. See CONTEXT.md "Stickers".
+// inside this message, else the whole message text.
 const copyMessage = async (c: UIChatMessage) => {
   try {
     const sel = window.getSelection();
@@ -203,7 +214,19 @@ const copyMessage = async (c: UIChatMessage) => {
         : c.content;
     await navigator.clipboard.writeText(selected);
   } catch {
-    // Silent — see Q2.
+    // Silent - see Q2.
+  }
+};
+
+// Copies image bytes (WebP) to the system clipboard for pasting into other
+// apps. Distinct from favoriting as a Sticker (in-app reuse) - see CONTEXT.md
+// "Stickers" and ADR 0005. Silent on failure, matching copyMessage.
+const copyImage = async (storageKey: string) => {
+  try {
+    const blob = await api(`room/images/${storageKey}`).blob();
+    await navigator.clipboard.write([new ClipboardItem({ [blob.type]: blob })]);
+  } catch {
+    // Silent - see Q2.
   }
 };
 
@@ -415,7 +438,9 @@ const ChatList = memo(
                                               <ImageWithFavorite
                                                 key={`${file.name}_${index}`}
                                                 storageKey={key}
+                                                message={c}
                                                 onFavorite={onFavoriteSticker}
+                                                onReply={onReply}
                                               >
                                                 <ChatImage
                                                   src={getLocalFileUrl(file)}
@@ -451,7 +476,9 @@ const ChatList = memo(
                                             <ImageWithFavorite
                                               key={i}
                                               storageKey={i}
+                                              message={c}
                                               onFavorite={onFavoriteSticker}
+                                              onReply={onReply}
                                             >
                                               <ChatImage
                                                 src={`${import.meta.env.VITE_API_URL}/room/images/${i}`}
@@ -488,14 +515,14 @@ const ChatList = memo(
                           <ContextMenuContent>
                             <ContextMenuItem onClick={() => onReply?.(c)}>
                               <Reply />
-                              <span>回复</span>
+                              <span>Reply</span>
                             </ContextMenuItem>
                             {c.type === "text" && (
                               <ContextMenuItem
                                 onClick={() => void copyMessage(c)}
                               >
                                 <Copy />
-                                <span>复制</span>
+                                <span>Copy</span>
                               </ContextMenuItem>
                             )}
                           </ContextMenuContent>

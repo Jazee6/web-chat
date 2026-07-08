@@ -66,6 +66,11 @@ _Avoid_: favorites (overloaded — see Favorite), sticker pack
 The same word names two unrelated actions on different objects; do not abbreviate to "favorite a …" without naming the object.
 _Avoid_: bookmark, save (use the Sticker sense sparingly to avoid clashing with Favorite Room)
 
+**Image Copy**:
+Copying an image's bytes to the system clipboard from its context menu, for pasting into other apps. Per-image, keyed by the image's storage key.
+Distinct from Favorite Sticker: a Sticker reuses the image *inside this app* by referencing its storage key; an Image Copy takes the bytes *out* of the app. The two coexist on the image context menu - they answer different intents. See ADR 0005.
+_Avoid_: copy image (use the noun form to stay distinct from copying text)
+
 ### Call
 
 **Call**:
