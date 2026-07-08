@@ -334,7 +334,7 @@ const ChatList = memo(
                   isMe ? "justify-end" : "",
                 )}
               >
-                <div className="flex gap-1 max-w-[90%]">
+                <div className="flex gap-1 max-w-[90%] min-w-0">
                   {!isMe && (
                     <Avatar className="self-end sticky bottom-1 hover:brightness-75 transition shrink-0 ani-slide-top">
                       <AvatarImage
@@ -362,7 +362,7 @@ const ChatList = memo(
                     </Avatar>
                   )}
 
-                  <div className="flex flex-col gap-1">
+                  <div className="flex flex-col gap-1 min-w-0">
                     {group.messages.map((c) => {
                       return (
                         <ContextMenu key={c.id}>
@@ -385,7 +385,7 @@ const ChatList = memo(
 
                             <div
                               className={cn(
-                                "flex gap-1 ani-slide-top",
+                                "flex gap-1 ani-slide-top min-w-0",
                                 isMe ? "flex-row-reverse" : "",
                               )}
                             >
@@ -394,8 +394,8 @@ const ChatList = memo(
                               )}
 
                               {c.type === "image" && (
-                                <div className="flex flex-col gap-1 peer">
-                                  <div className="flex overflow-x-auto scrollbar gap-1">
+                                <div className="flex flex-col gap-1 peer max-w-full">
+                                  <div className="flex overflow-x-auto scrollbar gap-1 max-w-full">
                                     {c.localFiles?.length
                                       ? c.localFiles.map(
                                           (

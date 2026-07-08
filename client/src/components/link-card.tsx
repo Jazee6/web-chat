@@ -4,7 +4,7 @@ import { cn } from "@/lib/utils.ts";
 import { FileText, ImageOff } from "lucide-react";
 import { useState } from "react";
 
-const CARD_WIDTH = "w-80";
+const CARD_WIDTH = "w-80 max-w-full";
 const SHELL =
   "block rounded-lg overflow-hidden border bg-secondary hover:brightness-75 transition";
 
