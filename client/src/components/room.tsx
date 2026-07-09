@@ -227,7 +227,7 @@ const Room = ({
             <div className="h-dvh flex flex-col relative">
               {chats && (
                 <div
-                  className="overflow-y-auto scrollbar pt-16 max-md:px-2 scrollbar-gutter-both"
+                  className="overflow-y-auto scrollbar pt-16 max-md:px-2 scrollbar-gutter-both overflow-x-hidden"
                   ref={chatListRef}
                 >
                   <div ref={contentRef}>
