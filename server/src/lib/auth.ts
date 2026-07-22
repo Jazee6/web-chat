@@ -19,7 +19,7 @@ export const authConfig: BetterAuthOptions = {
           clientId: process.env.EASY_AUTH_CLIENT_ID,
           clientSecret: process.env.EASY_AUTH_CLIENT_SECRET,
           pkce: true,
-          scopes: ["openid", "profile", "email", "offline_access"],
+          scopes: ["openid", "profile", "email"],
           overrideUserInfo: true,
         },
       ],

@@ -22,6 +22,13 @@ export const api = ky.extend({
         }
 
         if (!response.ok) {
+          const body = (await response
+            .clone()
+            .json()
+            .catch(() => null)) as { code?: string } | null;
+          if (body?.code === "PUBLIC_ROOM_DISCOVERY_REGION_RESTRICTED") {
+            return;
+          }
           toast.error(await response.text());
         }
       },

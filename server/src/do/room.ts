@@ -91,6 +91,16 @@ export class Room extends DurableObject {
     void ctx.blockConcurrencyWhile(async () => migrate(this.db, migrations));
   }
 
+  async getLatestActivity(): Promise<Date | null> {
+    const latest = await this.db
+      .select({ createdAt: messageTable.createdAt })
+      .from(messageTable)
+      .orderBy(desc(messageTable.createdAt), desc(messageTable.id))
+      .limit(1)
+      .then((rows) => rows[0]);
+    return latest?.createdAt ?? null;
+  }
+
   storeSession = (ws: WebSocket, session: WsSession) => {
     ws.serializeAttachment({
       ...ws.deserializeAttachment(),
@@ -290,6 +300,22 @@ export class Room extends DurableObject {
           })
           .returning()
           .then((i) => i[0]);
+        // Discovery ordering is a best-effort projection. A failed D1 update
+        // must never turn an accepted Chat Message into a send failure.
+        this.ctx.waitUntil(
+          this.env.web_chat
+            .prepare(
+              "UPDATE room SET lastActiveAt = MAX(lastActiveAt, ?) WHERE id = ? AND type = 'public'",
+            )
+            .bind(
+              Math.floor(data.createdAt.getTime() / 1000),
+              this.ctx.id.toString(),
+            )
+            .run()
+            .catch((error) => {
+              console.error("Failed to project Room Activity", error);
+            }),
+        );
         this.broadcast(
           {
             type: "message",

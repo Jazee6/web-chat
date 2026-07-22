@@ -15,6 +15,13 @@
       "when": 1782866569800,
       "tag": "0001_chubby_maximus",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1784693278021,
+      "tag": "0002_supreme_lord_hawal",
+      "breakpoints": true
     }
   ]
 }

@@ -1,21 +1,31 @@
-import Index from "@/pages";
-import Layout from "@/pages/layout.tsx";
-import Login from "@/pages/login.tsx";
-import Settings from "@/pages/settings.tsx";
+import { lazy, Suspense } from "react";
 import { BrowserRouter, Route, Routes } from "react-router";
+
+const Index = lazy(() => import("@/pages"));
+const Layout = lazy(() => import("@/pages/layout.tsx"));
+const Login = lazy(() => import("@/pages/login.tsx"));
+const Settings = lazy(() => import("@/pages/settings.tsx"));
 
 function App() {
   return (
     <BrowserRouter>
-      <Routes>
-        <Route path="/login" element={<Login />} />
+      <Suspense
+        fallback={
+          <div className="flex h-dvh items-center justify-center">
+            Loading...
+          </div>
+        }
+      >
+        <Routes>
+          <Route path="/login" element={<Login />} />
 
-        <Route element={<Layout />}>
-          <Route path="/room?/:id?" element={<Index />} />
+          <Route element={<Layout />}>
+            <Route path="/room?/:id?" element={<Index />} />
 
-          <Route path="/settings" element={<Settings />} />
-        </Route>
-      </Routes>
+            <Route path="/settings" element={<Settings />} />
+          </Route>
+        </Routes>
+      </Suspense>
     </BrowserRouter>
   );
 }

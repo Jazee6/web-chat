@@ -1,5 +1,5 @@
 import { zValidator } from "@hono/zod-validator";
-import { and, desc, eq, inArray } from "drizzle-orm";
+import { and, desc, eq, inArray, lt, or } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
 import { Hono } from "hono";
 import { cache } from "hono/cache";
@@ -9,15 +9,17 @@ import { etag } from "hono/etag";
 import { HTTPException } from "hono/http-exception";
 import {
   basePaginationSchema,
-  createRoomSchema,
+  createRoomRequestSchema,
   favoriteStickerSchema,
   getImageSchema,
   getPresignedUrlSchema,
   getRoomInfoSchema,
   getUserInfoSchema,
   linkPreviewQuerySchema,
+  publicRoomPaginationSchema,
   roomIdSchema,
   stickerIdSchema,
+  updateRoomVisibilitySchema,
 } from "web-chat-share";
 import realtime from "./api/realtime";
 import { getAuth } from "./lib/auth";
@@ -67,6 +69,34 @@ const getAuthDb = (db: D1Database) => {
 };
 
 const app = new Hono<HONOInstance>();
+const PUBLIC_ROOM_PAGE_SIZE = 20;
+
+const encodePublicRoomCursor = (lastActiveAt: Date, id: string) =>
+  btoa(JSON.stringify([lastActiveAt.getTime(), id]))
+    .replaceAll("+", "-")
+    .replaceAll("/", "_")
+    .replace(/=+$/, "");
+
+const decodePublicRoomCursor = (cursor: string) => {
+  try {
+    const base64 = cursor.replaceAll("-", "+").replaceAll("_", "/");
+    const [timestamp, id] = JSON.parse(
+      atob(base64.padEnd(Math.ceil(base64.length / 4) * 4, "=")),
+    ) as unknown[];
+    if (
+      typeof timestamp !== "number" ||
+      !Number.isSafeInteger(timestamp) ||
+      timestamp < 0 ||
+      typeof id !== "string" ||
+      !id
+    ) {
+      throw new Error("Invalid cursor payload");
+    }
+    return { lastActiveAt: new Date(timestamp), id };
+  } catch {
+    throw new HTTPException(400, { message: "Invalid cursor" });
+  }
+};
 
 app.onError((err) => {
   if (err instanceof HTTPException) {
@@ -117,7 +147,7 @@ app.on(["POST", "GET"], "/api/auth/*", (c) => {
   return a.handler(c.req.raw);
 });
 
-app.post("/room", zValidator("json", createRoomSchema), async (c) => {
+app.post("/room", zValidator("json", createRoomRequestSchema), async (c) => {
   const { name, type } = c.req.valid("json");
   const user = c.get("user");
   const db = getDb(c.env.web_chat);
@@ -126,11 +156,14 @@ app.post("/room", zValidator("json", createRoomSchema), async (c) => {
     throw new HTTPException(400, { message: "Room limit reached" });
   }
   const id = c.env.ROOM.newUniqueId().toString();
+  const now = new Date();
   await db.insert(roomTable).values({
     id,
     name,
     type,
     userId: user.id,
+    createdAt: now,
+    lastActiveAt: now,
   });
   return c.json(
     {
@@ -155,6 +188,63 @@ app.get("/room", zValidator("query", basePaginationSchema), async (c) => {
   });
   return c.json(rooms);
 });
+
+app.get(
+  "/room/public",
+  zValidator("query", publicRoomPaginationSchema),
+  async (c) => {
+    const country = c.req.raw.cf?.country;
+    if (!country) {
+      console.warn("Public Room Discovery request has no country metadata");
+    }
+    if (country === "CN") {
+      return c.json(
+        {
+          code: "PUBLIC_ROOM_DISCOVERY_REGION_RESTRICTED",
+          message: "Public Room Discovery is unavailable in this region",
+        },
+        403,
+      );
+    }
+
+    const { cursor: rawCursor } = c.req.valid("query");
+    const cursor = rawCursor ? decodePublicRoomCursor(rawCursor) : undefined;
+    const db = getDb(c.env.web_chat);
+    const rooms = await db
+      .select({
+        id: roomTable.id,
+        name: roomTable.name,
+        lastActiveAt: roomTable.lastActiveAt,
+      })
+      .from(roomTable)
+      .where(
+        and(
+          eq(roomTable.type, "public"),
+          cursor
+            ? or(
+                lt(roomTable.lastActiveAt, cursor.lastActiveAt),
+                and(
+                  eq(roomTable.lastActiveAt, cursor.lastActiveAt),
+                  lt(roomTable.id, cursor.id),
+                ),
+              )
+            : undefined,
+        ),
+      )
+      .orderBy(desc(roomTable.lastActiveAt), desc(roomTable.id))
+      .limit(PUBLIC_ROOM_PAGE_SIZE + 1);
+
+    const page = rooms.slice(0, PUBLIC_ROOM_PAGE_SIZE);
+    const last = page.at(-1);
+    return c.json({
+      rooms: page,
+      nextCursor:
+        rooms.length > PUBLIC_ROOM_PAGE_SIZE && last
+          ? encodePublicRoomCursor(last.lastActiveAt, last.id)
+          : null,
+    });
+  },
+);
 
 app.get(
   "/room/favorite",
@@ -243,6 +333,73 @@ app.delete("/room/:id", zValidator("param", roomIdSchema), async (c) => {
 
   return c.body(null, 204);
 });
+
+app.patch(
+  "/room/:id/visibility",
+  zValidator("param", roomIdSchema),
+  zValidator("json", updateRoomVisibilitySchema),
+  async (c) => {
+    const { id } = c.req.valid("param");
+    const { type } = c.req.valid("json");
+    const user = c.get("user");
+    const db = getDb(c.env.web_chat);
+    const room = await db
+      .select({
+        id: roomTable.id,
+        type: roomTable.type,
+        createdAt: roomTable.createdAt,
+      })
+      .from(roomTable)
+      .where(and(eq(roomTable.id, id), eq(roomTable.userId, user.id)))
+      .limit(1)
+      .then((rows) => rows[0]);
+
+    if (!room) {
+      throw new HTTPException(404, { message: "Room not found" });
+    }
+    if (room.type === type) {
+      return c.body(null, 204);
+    }
+
+    if (type === "public") {
+      const stub = c.env.ROOM.get(c.env.ROOM.idFromString(id));
+      const latestMessageAt = await stub.getLatestActivity();
+      await db
+        .update(roomTable)
+        .set({ type, lastActiveAt: latestMessageAt ?? room.createdAt })
+        .where(and(eq(roomTable.id, id), eq(roomTable.userId, user.id)));
+
+      // Close the gap between the first history read and publication. Messages
+      // after publication project themselves with MAX(), so this second read
+      // only has to capture messages accepted while the room was unlisted.
+      try {
+        const latestAfterPublish = await stub.getLatestActivity();
+        if (latestAfterPublish) {
+          await db
+            .update(roomTable)
+            .set({ lastActiveAt: latestAfterPublish })
+            .where(
+              and(
+                eq(roomTable.id, id),
+                eq(roomTable.userId, user.id),
+                eq(roomTable.type, "public"),
+                lt(roomTable.lastActiveAt, latestAfterPublish),
+              ),
+            );
+        }
+      } catch (error) {
+        console.error("Failed to reconcile Room Activity after publish", error);
+      }
+    } else {
+      await db
+        .update(roomTable)
+        .set({ type })
+        .where(and(eq(roomTable.id, id), eq(roomTable.userId, user.id)));
+    }
+
+    return c.body(null, 204);
+  },
+);
 
 app.get(
   "/room/user",

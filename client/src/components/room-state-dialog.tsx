@@ -4,6 +4,7 @@ import {
   AvatarFallback,
   AvatarImage,
 } from "@/components/ui/avatar.tsx";
+import { Badge } from "@/components/ui/badge.tsx";
 import {
   Dialog,
   DialogContent,
@@ -29,7 +30,7 @@ import type { RoomStats } from "web-chat-share";
 export interface RoomInfo {
   id: string;
   name: string;
-  type: string;
+  type: "public" | "unlisted";
   createdAt: string;
   isFavorite: boolean;
   userId: string;
@@ -62,7 +63,14 @@ const RoomStateDialog = ({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Room {roomInfo?.name}</DialogTitle>
+          <div className="flex items-center gap-2">
+            <DialogTitle>Room {roomInfo?.name}</DialogTitle>
+            {roomInfo && (
+              <Badge variant="secondary">
+                {roomInfo.type === "public" ? "Public" : "Unlisted"}
+              </Badge>
+            )}
+          </div>
           <DialogDescription className="hidden" />
         </DialogHeader>
 

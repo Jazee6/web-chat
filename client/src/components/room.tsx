@@ -1,41 +1,32 @@
 import AddFavoritesButton from "@/components/add-favorites-button.tsx";
-import { AudioStream } from "@/components/audio-stream.tsx";
 import ChatInput from "@/components/chat-input.tsx";
 import ChatList from "@/components/chat-list.tsx";
-import RealtimeProvider from "@/components/context/realtime-context.tsx";
 import RealtimeLand from "@/components/realtime-land.tsx";
 import RealtimeSidebar from "@/components/realtime-sidebar.tsx";
-import RealtimeWindow from "@/components/realtime-window.tsx";
 import RoomStateDialog from "@/components/room-state-dialog.tsx";
 import ShareButton from "@/components/share-button.tsx";
 import { Button } from "@/components/ui/button.tsx";
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar.tsx";
 import { Spinner } from "@/components/ui/spinner.tsx";
 import { useIncomingCall } from "@/hooks/use-incoming-call.ts";
-import { useKickedTabWatcher } from "@/hooks/use-kicked-tab-watcher.ts";
 import { useRoom } from "@/hooks/use-room.ts";
 import { RoomContext, type RoomContextType } from "@/lib/context.ts";
 import { toReplyRef } from "@/lib/reply.ts";
 import { appName } from "@/lib/utils.ts";
 import type { User } from "better-auth";
 import { ChevronDown, PictureInPicture } from "lucide-react";
-import { useCallback, useRef, useState } from "react";
+import { lazy, Suspense, useCallback, useRef, useState } from "react";
 import { useBeforeUnload } from "react-router";
 import type { ReplyRef, UIChatMessage } from "web-chat-share";
 
 let realtimeKeyCounter = 0;
 
+const CallSession = lazy(() => import("@/components/call-session.tsx"));
+
 // Lives inside RoomContext + UserInfoProvider, so it can react to Call
 // arrivals and surface the incoming-call toast + chime.
 const RoomEffects = () => {
   useIncomingCall();
-  return null;
-};
-
-// Lives inside RealtimeProvider + RoomContext: watches for this tab being
-// kicked from the Call (same user joined elsewhere) and self-exits.
-const CallWatcher = () => {
-  useKickedTabWatcher();
   return null;
 };
 
@@ -154,19 +145,21 @@ const Room = ({
       <RoomContext value={roomContextValue}>
         <RoomEffects />
         {realtimeWindowOpen && (
-          <RealtimeProvider key={realtimeKey}>
-            <CallWatcher />
-            <RealtimeWindow
-              open={realtimeWindowOpen}
-              onOpenChange={setRealtimeWindowOpen}
-            />
-
-            <AudioStream
+          <Suspense
+            fallback={
+              <div className="fixed right-16 top-20 z-50 flex h-24 w-64 items-center justify-center rounded-lg border bg-background/80 shadow-lg backdrop-blur">
+                <Spinner />
+              </div>
+            }
+          >
+            <CallSession
+              realtimeKey={realtimeKey}
               tracksToPull={tracksToPull}
+              onOpenChange={setRealtimeWindowOpen}
               onTrackAdded={onTrackAdded}
               onTrackRemoved={onTrackRemoved}
             />
-          </RealtimeProvider>
+          </Suspense>
         )}
         <SidebarProvider
           open={realtimeSidebarOpen}

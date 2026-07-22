@@ -23,7 +23,7 @@ import { Switch } from "@/components/ui/switch.tsx";
 import { api } from "@/lib/utils.ts";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useQueryClient } from "@tanstack/react-query";
-import { useId, useState } from "react";
+import { useEffect, useId, useState } from "react";
 import { Controller, useForm } from "react-hook-form";
 import { useNavigate } from "react-router";
 import { toast } from "sonner";
@@ -33,9 +33,11 @@ import { z } from "zod";
 export function RoomCreateDialog({
   open,
   onOpenChange,
+  defaultType = "unlisted",
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  defaultType?: "public" | "unlisted";
 }) {
   const nameId = useId();
   const typeId = useId();
@@ -48,9 +50,13 @@ export function RoomCreateDialog({
     resolver: zodResolver(createRoomSchema),
     defaultValues: {
       name: "",
-      type: "private",
+      type: defaultType,
     },
   });
+
+  useEffect(() => {
+    if (open) form.reset({ name: "", type: defaultType });
+  }, [defaultType, form, open]);
 
   const onSubmit = async (data: z.infer<typeof createRoomSchema>) => {
     setIsLoading(true);
@@ -59,6 +65,7 @@ export function RoomCreateDialog({
       .json()
       .finally(() => setIsLoading(false));
     queryClient.refetchQueries({ queryKey: ["room"] });
+    queryClient.invalidateQueries({ queryKey: ["publicRooms"] });
     toast.success("Room created");
     nav("/room/" + id);
     onOpenChange(false);
@@ -106,7 +113,8 @@ export function RoomCreateDialog({
                       <FieldLabel htmlFor={typeId}>Public Room</FieldLabel>
                       <FieldDescription>
                         Enable this to display the room in the public rooms
-                        list.
+                        list. Any signed-in user will be able to enter and read
+                        its history.
                       </FieldDescription>
                       {fieldState.invalid && (
                         <FieldError errors={[fieldState.error]} />
@@ -117,10 +125,9 @@ export function RoomCreateDialog({
                       name={field.name}
                       checked={field.value === "public"}
                       onCheckedChange={(checked) => {
-                        field.onChange(checked ? "public" : "private");
+                        field.onChange(checked ? "public" : "unlisted");
                       }}
                       aria-invalid={fieldState.invalid}
-                      disabled
                     />
                   </Field>
                 )}

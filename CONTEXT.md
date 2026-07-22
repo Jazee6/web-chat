@@ -4,6 +4,28 @@ A real-time chat where users exchange text and images in shared rooms.
 
 ## Language
 
+### Rooms
+
+**Public Room**:
+A room eligible to appear in Public Room Discovery. Being public affects discoverability, not whether a user with its URL may enter it.
+_Avoid_: listed room, open room
+
+**Unlisted Room**:
+A room omitted from Public Room Discovery but accessible to any signed-in user who has its URL. It does not imply member-only access.
+_Avoid_: private room, secret room
+
+**Public Room Discovery**:
+The homepage catalogue through which users find Public Rooms. Regional restrictions may remove this catalogue without restricting direct room access or other chat features.
+_Avoid_: public room access, room directory
+
+**Mainland China Visitor**:
+A user whose current network exit is identified as mainland China (`CN`). Hong Kong, Macao, Taiwan, and visitors whose region is unknown are not included.
+_Avoid_: Chinese user, China-based user
+
+**Room Activity**:
+A successfully accepted Chat Message that advances a room's latest activity time. A room with no Chat Messages uses its creation time; visits, typing, favorites, and Call activity do not count.
+_Avoid_: presence, online activity
+
 ### Messages
 
 **Chat Message**:

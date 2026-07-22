@@ -21,7 +21,9 @@ import { Link } from "react-router";
 interface Room {
   id: string;
   name: string;
+  type: "public" | "unlisted";
   createdAt: string;
+  lastActiveAt: string;
 }
 
 interface FavoriteRoom {
@@ -116,8 +118,10 @@ export function AppSidebar({ ...props }: ComponentProps<typeof Sidebar>) {
             <NavMain
               label="Your Rooms"
               items={roomsData.map((i) => ({
+                id: i.id,
                 title: i.name,
                 url: `/room/${i.id}`,
+                visibility: i.type,
               }))}
             />
           )

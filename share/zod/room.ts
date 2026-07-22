@@ -5,9 +5,29 @@ export const basePaginationSchema = z.object({
   offset: z.coerce.number().min(0),
 });
 
+export const roomVisibilitySchema = z.enum(["unlisted", "public"]);
+
 export const createRoomSchema = z.object({
   name: z.string().min(1).max(16),
-  type: z.enum(["private", "public"]),
+  type: roomVisibilitySchema,
+});
+
+// Old deployed clients submit `private`; normalize it only at the server
+// boundary while cached clients age out. Persisted and returned values use the
+// canonical Unlisted Room term.
+export const createRoomRequestSchema = createRoomSchema
+  .extend({ type: z.enum(["unlisted", "public", "private"]) })
+  .transform((value) => ({
+    ...value,
+    type: value.type === "private" ? ("unlisted" as const) : value.type,
+  }));
+
+export const updateRoomVisibilitySchema = z.object({
+  type: roomVisibilitySchema,
+});
+
+export const publicRoomPaginationSchema = z.object({
+  cursor: z.string().max(512).optional(),
 });
 
 export const roomIdSchema = z.object({
