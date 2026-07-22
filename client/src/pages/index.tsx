@@ -1,7 +1,4 @@
-import {
-  PublicRoomList,
-  PublicRoomListSkeleton,
-} from "@/components/public-room-list.tsx";
+import { PublicRoomList } from "@/components/public-room-list.tsx";
 import { RoomCreateDialog } from "@/components/room-create-dialog.tsx";
 import { Spinner } from "@/components/ui/spinner.tsx";
 import { UserInfoProvider } from "@/components/user-info.tsx";
@@ -22,32 +19,6 @@ const Index = () => {
   >("unlisted");
   const { openPip, isActive, pipWindow, closePip } = useDocPip();
 
-  if (isPending) {
-    if (!id) {
-      return (
-        <div className="h-full overflow-y-auto">
-          <PublicRoomListSkeleton />
-        </div>
-      );
-    }
-
-    return (
-      <div className="flex justify-center items-center h-full gap-2">
-        <Spinner />
-        Loading...
-      </div>
-    );
-  }
-
-  if (!session?.user) {
-    return (
-      <div className="flex justify-center items-center h-full gap-2">
-        <Spinner />
-        Loading...
-      </div>
-    );
-  }
-
   const openRoomCreateDialog = (type: "public" | "unlisted") => {
     setRoomCreateDefaultType(type);
     setRoomCreateDialogOpen(true);
@@ -59,12 +30,22 @@ const Index = () => {
         <PublicRoomList
           onCreateRoom={() => openRoomCreateDialog("unlisted")}
           onCreatePublicRoom={() => openRoomCreateDialog("public")}
+          enabled={!isPending && !!session?.user}
         />
         <RoomCreateDialog
           open={roomCreateDialogOpen}
           onOpenChange={setRoomCreateDialogOpen}
           defaultType={roomCreateDefaultType}
         />
+      </div>
+    );
+  }
+
+  if (isPending || !session?.user) {
+    return (
+      <div className="flex justify-center items-center h-full gap-2">
+        <Spinner />
+        Loading...
       </div>
     );
   }

@@ -25,6 +25,7 @@ import {
 } from "@/components/ui/tooltip.tsx";
 import { api } from "@/lib/utils.ts";
 import { useInfiniteQuery, useQueryClient } from "@tanstack/react-query";
+import { HTTPError } from "ky";
 import { Globe2, MessageCircle, Plus, RefreshCw } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Link } from "react-router";
@@ -44,31 +45,19 @@ class RegionRestrictedError extends Error {}
 
 export function PublicRoomListSkeleton() {
   return (
-    <section className="mx-auto flex w-full max-w-3xl flex-col gap-6 px-4 py-10 md:px-8 md:py-16">
-      <header className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-        <div className="flex flex-col gap-2">
-          <Skeleton className="h-4 w-24" />
-          <Skeleton className="h-9 w-64 max-w-full" />
-        </div>
-        <div className="flex gap-2">
-          <Skeleton className="size-9" />
-          <Skeleton className="h-9 w-32" />
-        </div>
-      </header>
-      <ItemGroup>
-        {Array.from({ length: 5 }, (_, index) => (
-          <Item variant="outline" key={index}>
-            <ItemMedia variant="icon">
-              <Skeleton className="size-8 rounded-full" />
-            </ItemMedia>
-            <ItemContent>
-              <Skeleton className="h-4 w-40 max-w-full" />
-              <Skeleton className="h-3 w-24" />
-            </ItemContent>
-          </Item>
-        ))}
-      </ItemGroup>
-    </section>
+    <ItemGroup>
+      {Array.from({ length: 5 }, (_, index) => (
+        <Item variant="outline" key={index}>
+          <ItemMedia variant="icon">
+            <Skeleton className="size-8 rounded-full" />
+          </ItemMedia>
+          <ItemContent>
+            <Skeleton className="h-4 w-40 max-w-full" />
+            <Skeleton className="h-3 w-24" />
+          </ItemContent>
+        </Item>
+      ))}
+    </ItemGroup>
   );
 }
 
@@ -98,9 +87,11 @@ const relativeTime = (value: string, now: number) => {
 export function PublicRoomList({
   onCreateRoom,
   onCreatePublicRoom,
+  enabled = true,
 }: {
   onCreateRoom: () => void;
   onCreatePublicRoom: () => void;
+  enabled?: boolean;
 }) {
   const queryClient = useQueryClient();
   const [now, setNow] = useState<number>();
@@ -115,12 +106,8 @@ export function PublicRoomList({
           })
           .json();
       } catch (error) {
-        const response =
-          error && typeof error === "object" && "response" in error
-            ? (error.response as Response)
-            : undefined;
-        if (response?.status === 403) {
-          const body = (await response
+        if (error instanceof HTTPError && error.response.status === 403) {
+          const body = (await error.response
             .clone()
             .json()
             .catch(() => null)) as { code?: string } | null;
@@ -132,8 +119,9 @@ export function PublicRoomList({
       }
     },
     getNextPageParam: (page) => page.nextCursor ?? undefined,
-    retry: false,
-    refetchOnWindowFocus: false,
+    retry: (failureCount, error) =>
+      !(error instanceof RegionRestrictedError) && failureCount < 2,
+    enabled,
   });
 
   useEffect(() => {
@@ -144,10 +132,6 @@ export function PublicRoomList({
       clearInterval(interval);
     };
   }, []);
-
-  if (query.isPending) {
-    return <PublicRoomListSkeleton />;
-  }
 
   if (query.error instanceof RegionRestrictedError) {
     return (
@@ -190,7 +174,9 @@ export function PublicRoomList({
         </div>
       </header>
 
-      {query.isError ? (
+      {query.isPending ? (
+        <PublicRoomListSkeleton />
+      ) : query.isError ? (
         <Empty className="border">
           <EmptyHeader>
             <EmptyMedia variant="icon">
