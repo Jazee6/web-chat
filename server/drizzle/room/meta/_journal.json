@@ -15,6 +15,20 @@
       "when": 1782744432306,
       "tag": "0001_graceful_darkhawk",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1784775833738,
+      "tag": "0002_careless_miss_america",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "6",
+      "when": 1784776768952,
+      "tag": "0003_material_demogoblin",
+      "breakpoints": true
     }
   ]
 }

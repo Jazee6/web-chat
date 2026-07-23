@@ -21,15 +21,23 @@ export function useRoomNotifications({
 
   const notifyOnMessage = useCallback(
     (message: ChatMessage) => {
-      if (document.visibilityState === "visible") return;
+      if (
+        document.visibilityState === "visible" ||
+        message.authorType === "system"
+      ) {
+        return;
+      }
 
       setFaviconState({ hasUnread: true });
 
-      const u = users[message.userId];
-      const n = pushNotification(u?.name ?? "New Message", {
-        body: getNotificationBody(message),
-        icon: u?.image ?? "/icon.svg",
-      });
+      const u = message.userId ? users[message.userId] : undefined;
+      const n = pushNotification(
+        message.authorType === "ai" ? "AI" : (u?.name ?? "New Message"),
+        {
+          body: getNotificationBody(message),
+          icon: u?.image ?? "/icon.svg",
+        },
+      );
       if (n) {
         notificationListRef.current.push(n);
       }

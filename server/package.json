@@ -3,6 +3,7 @@
   "type": "module",
   "scripts": {
     "dev": "wrangler dev",
+    "test": "bun test",
     "deploy": "wrangler deploy --minify",
     "cf-typegen": "wrangler types --env-interface CloudflareBindings",
     "db:push:d1": "drizzle-kit push && drizzle-kit generate && bunx wrangler d1 migrations apply web-chat",
@@ -11,6 +12,8 @@
   },
   "dependencies": {
     "@hono/zod-validator": "^0.8.0",
+    "@openrouter/ai-sdk-provider": "^3.0.0",
+    "ai": "^7",
     "aws4fetch": "^1.0.20",
     "better-auth": "^1.6.22",
     "dotenv": "^17.4.2",

@@ -34,6 +34,7 @@ export interface RoomInfo {
   createdAt: string;
   isFavorite: boolean;
   userId: string;
+  aiEnabled: boolean;
 }
 
 const RoomStateDialog = ({

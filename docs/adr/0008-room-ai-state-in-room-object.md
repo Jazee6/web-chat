@@ -1,0 +1,3 @@
+# Room AI state belongs to the room object
+
+Room AI Availability is authoritative in the room Durable Object's SQLite database, while the central D1 database remains authoritative for Room Ownership and visibility. An owner-only HTTP endpoint verifies Room Ownership in D1, then asks the room object to update Room AI Availability and append the corresponding System Message in one local transaction; message processing reads the same local state. Storing the setting only in D1 was rejected because every invocation would require a cross-store read or synchronized cache, and writing it to both stores was rejected because a partial update could make room history disagree with actual availability.

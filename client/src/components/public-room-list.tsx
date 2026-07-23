@@ -103,6 +103,7 @@ export function PublicRoomList({
         return await api
           .get<PublicRoomPage>("room/public", {
             searchParams: pageParam ? { cursor: pageParam } : undefined,
+            retry: 0,
           })
           .json();
       } catch (error) {
@@ -119,8 +120,7 @@ export function PublicRoomList({
       }
     },
     getNextPageParam: (page) => page.nextCursor ?? undefined,
-    retry: (failureCount, error) =>
-      !(error instanceof RegionRestrictedError) && failureCount < 2,
+    retry: false,
     enabled,
   });
 

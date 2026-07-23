@@ -1,9 +1,7 @@
 import {
   DropdownMenu,
   DropdownMenuContent,
-  DropdownMenuGroup,
   DropdownMenuItem,
-  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu.tsx";
 import {
@@ -14,11 +12,9 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
 } from "@/components/ui/sidebar";
-import { api, showAlertDialog } from "@/lib/utils.ts";
-import { useQueryClient } from "@tanstack/react-query";
-import { MoreHorizontal } from "lucide-react";
-import { NavLink, useLocation, useNavigate } from "react-router";
-import { toast } from "sonner";
+import { openRoomSettings } from "@/lib/room-settings.ts";
+import { MoreHorizontal, Settings } from "lucide-react";
+import { NavLink, useLocation } from "react-router";
 
 export function NavMain({
   label,
@@ -35,26 +31,6 @@ export function NavMain({
   type?: "favorite";
 }) {
   const location = useLocation();
-  const queryClient = useQueryClient();
-  const nav = useNavigate();
-
-  const updateVisibility = async (
-    item: { id?: string; title: string },
-    visibility: "public" | "unlisted",
-  ) => {
-    if (!item.id) return;
-    await api.patch(`room/${item.id}/visibility`, {
-      json: { type: visibility },
-    });
-    await Promise.all([
-      queryClient.invalidateQueries({ queryKey: ["room"] }),
-      queryClient.invalidateQueries({ queryKey: ["publicRooms"] }),
-      queryClient.invalidateQueries({ queryKey: ["roomInfo", item.id] }),
-    ]);
-    toast.success(
-      visibility === "public" ? "Room is now public" : "Room is now unlisted",
-    );
-  };
 
   return (
     <SidebarGroup>
@@ -79,62 +55,17 @@ export function NavMain({
                     </SidebarMenuAction>
                   }
                 />
-                <DropdownMenuContent side="right" align="start">
-                  <DropdownMenuGroup>
-                    {item.visibility === "public" ? (
-                      <DropdownMenuItem
-                        onClick={() => {
-                          void updateVisibility(item, "unlisted").catch(
-                            () => undefined,
-                          );
-                        }}
-                      >
-                        Make unlisted
-                      </DropdownMenuItem>
-                    ) : (
-                      <DropdownMenuItem
-                        onClick={() => {
-                          showAlertDialog({
-                            title: "Make this room public?",
-                            description:
-                              "Anyone signed in will be able to find this room, enter it, and read its existing message history.",
-                            confirmText: "Make public",
-                            onConfirmAction: () =>
-                              updateVisibility(item, "public"),
-                          });
-                        }}
-                      >
-                        Make public
-                      </DropdownMenuItem>
-                    )}
-                  </DropdownMenuGroup>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuGroup>
-                    <DropdownMenuItem
-                      variant="destructive"
-                      onClick={() => {
-                        showAlertDialog({
-                          title: "Delete Room",
-                          description:
-                            "Are you sure you want to delete this room? This action cannot be undone.",
-                          confirmText: "Delete",
-                          onConfirmAction: async () => {
-                            await api.delete(
-                              "room/" + item.url.split("/").pop(),
-                            );
-                            toast.success("Room deleted successfully");
-                            queryClient.refetchQueries({ queryKey: ["room"] });
-                            queryClient.invalidateQueries({
-                              queryKey: ["publicRooms"],
-                            });
-                            nav("/");
-                          },
-                        });
-                      }}
-                    >
-                      Delete
-                    </DropdownMenuItem>
-                  </DropdownMenuGroup>
+                <DropdownMenuContent
+                  side="right"
+                  align="start"
+                  className="w-fit"
+                >
+                  <DropdownMenuItem
+                    onClick={() => item.id && openRoomSettings(item.id)}
+                  >
+                    <Settings />
+                    Room settings
+                  </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
             )}

@@ -3,6 +3,7 @@ import ChatInput from "@/components/chat-input.tsx";
 import ChatList from "@/components/chat-list.tsx";
 import RealtimeLand from "@/components/realtime-land.tsx";
 import RealtimeSidebar from "@/components/realtime-sidebar.tsx";
+import RoomSettingsDialog from "@/components/room-settings-dialog.tsx";
 import RoomStateDialog from "@/components/room-state-dialog.tsx";
 import ShareButton from "@/components/share-button.tsx";
 import { Button } from "@/components/ui/button.tsx";
@@ -14,8 +15,15 @@ import { RoomContext, type RoomContextType } from "@/lib/context.ts";
 import { toReplyRef } from "@/lib/reply.ts";
 import { appName } from "@/lib/utils.ts";
 import type { User } from "better-auth";
-import { ChevronDown, PictureInPicture } from "lucide-react";
-import { lazy, Suspense, useCallback, useRef, useState } from "react";
+import { ChevronDown, PictureInPicture, Settings } from "lucide-react";
+import {
+  lazy,
+  Suspense,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 import { useBeforeUnload } from "react-router";
 import type { ReplyRef, UIChatMessage } from "web-chat-share";
 
@@ -42,6 +50,7 @@ const Room = ({
   isPipActive?: boolean;
 }) => {
   const [roomStateDialogOpen, setRoomStateDialogOpen] = useState(false);
+  const [roomSettingsDialogOpen, setRoomSettingsDialogOpen] = useState(false);
   const [realtimeWindowOpen, setRealtimeWindowOpen] = useState(false);
   const [realtimeSidebarOpen, setRealtimeSidebarOpen] = useState(false);
   const [audioTrackMap, setAudioTrackMap] = useState<
@@ -72,6 +81,7 @@ const Room = ({
     users,
     roomStats,
     roomInfo,
+    aiTyping,
     roomRealtime,
     realtimeStatus,
     onSend,
@@ -88,6 +98,15 @@ const Room = ({
     loaderRef,
     onOpen,
   });
+
+  useEffect(() => {
+    const openSettings = (event: Event) => {
+      const detail = (event as CustomEvent<{ id: string }>).detail;
+      if (detail.id === id) setRoomSettingsDialogOpen(true);
+    };
+    addEventListener("room-settings:open", openSettings);
+    return () => removeEventListener("room-settings:open", openSettings);
+  }, [id]);
 
   useBeforeUnload((e) => {
     if (realtimeWindowOpen) {
@@ -179,6 +198,17 @@ const Room = ({
                   </div>
 
                   <div className="flex items-center">
+                    {roomInfo?.userId === user.id && (
+                      <Button
+                        size="icon-sm"
+                        className="rounded-full"
+                        variant="ghost"
+                        onClick={() => setRoomSettingsDialogOpen(true)}
+                      >
+                        <Settings />
+                        <span className="sr-only">Room settings</span>
+                      </Button>
+                    )}
                     <AddFavoritesButton
                       id={id}
                       added={!!roomInfo?.isFavorite}
@@ -236,6 +266,7 @@ const Room = ({
                       userId={user.id}
                       users={users}
                       roomStats={roomStats}
+                      aiTyping={aiTyping}
                       onReply={(message: UIChatMessage) =>
                         setReplyTarget(toReplyRef(message))
                       }
@@ -271,6 +302,13 @@ const Room = ({
 
           {!!roomRealtime?.total && <RealtimeSidebar />}
         </SidebarProvider>
+        {roomInfo?.userId === user.id && (
+          <RoomSettingsDialog
+            roomInfo={roomInfo}
+            open={roomSettingsDialogOpen}
+            onOpenChange={setRoomSettingsDialogOpen}
+          />
+        )}
       </RoomContext>
     </>
   );

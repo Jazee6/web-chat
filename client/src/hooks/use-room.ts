@@ -12,6 +12,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useWebSocket } from "ahooks";
 import type { User } from "better-auth";
 import { type RefObject, useEffect, useRef, useState } from "react";
+import { toast } from "sonner";
 import {
   gm,
   type ReplyRef,
@@ -49,6 +50,7 @@ export function useRoom({
   // the effect below re-sends it on WS reconnect — mirroring the presence effect.
   // See ADR 0002: no heartbeat; cleared by disconnect, not by a timeout.
   const [typing, setTyping] = useState(false);
+  const [aiTyping, setAiTyping] = useState(false);
 
   const pingIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const roomRealtimeTotalRef = useRef(0);
@@ -113,6 +115,21 @@ export function useRoom({
           case "message": {
             chat.handleMessage(m.data);
             notifications.notifyOnMessage(m.data);
+            break;
+          }
+          case "aiTyping": {
+            setAiTyping(m.data.active);
+            break;
+          }
+          case "aiError": {
+            const messages = {
+              disabled: "AI is not enabled in this room.",
+              rate_limited: "Wait a moment before mentioning AI again.",
+              queue_full:
+                "AI is busy. Try again after the current queue clears.",
+              unavailable: "AI cannot reply right now. Try again later.",
+            } as const;
+            toast.error(messages[m.data.code]);
             break;
           }
           case "roomRealtime": {
@@ -266,6 +283,7 @@ export function useRoom({
     users,
     roomStats,
     roomInfo,
+    aiTyping,
     roomRealtime,
     realtimeStatus,
     onSend,

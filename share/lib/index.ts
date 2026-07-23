@@ -18,7 +18,8 @@ export interface RoomStats {
 // isn't in the local paginated history. See ADR 0003 and CONTEXT.md "Reply".
 export interface ReplyRef {
   id: string;
-  userId: string;
+  authorType: "user" | "ai";
+  userId?: string;
   type: "text" | "image";
   // text message → its content truncated; image message → the literal
   // "[图片]" label (image `content` is a JSON id-array with no usable text).
@@ -27,7 +28,8 @@ export interface ReplyRef {
 
 export interface ChatMessage {
   id: string;
-  userId: string;
+  authorType: "user" | "ai" | "system";
+  userId?: string;
   type: "text" | "image";
   content: string;
   createdAt: string;
@@ -112,6 +114,16 @@ export type ServerMessage =
   | {
       type: "message";
       data: ChatMessage;
+    }
+  | {
+      type: "aiTyping";
+      data: { active: boolean };
+    }
+  | {
+      type: "aiError";
+      data: {
+        code: "disabled" | "rate_limited" | "queue_full" | "unavailable";
+      };
     }
   | {
       type: "realtimeStatus";

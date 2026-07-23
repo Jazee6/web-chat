@@ -6,6 +6,10 @@ A real-time chat where users exchange text and images in shared rooms.
 
 ### Rooms
 
+**Room Owner**:
+The user who created a room and controls its room-level settings. A room has exactly one Room Owner.
+_Avoid_: host, admin, room creator
+
 **Public Room**:
 A room eligible to appear in Public Room Discovery. Being public affects discoverability, not whether a user with its URL may enter it.
 _Avoid_: listed room, open room
@@ -23,14 +27,37 @@ A user whose current network exit is identified as mainland China (`CN`). Hong K
 _Avoid_: Chinese user, China-based user
 
 **Room Activity**:
-A successfully accepted Chat Message that advances a room's latest activity time. A room with no Chat Messages uses its creation time; visits, typing, favorites, and Call activity do not count.
+A successfully accepted, user-authored Chat Message that advances a room's latest activity time. A room with no such messages uses its creation time; Room AI messages, System Messages, visits, typing, favorites, and Call activity do not count.
 _Avoid_: presence, online activity
+
+**Room AI Availability**:
+A room-level permission controlled by the Room Owner. When enabled, any user in the room may invoke the Room AI; when disabled, no user may invoke it.
+_Avoid_: AI user permission, personal AI setting
 
 ### Messages
 
+**Room AI**:
+An automated room participant whose messages are always visibly attributed to AI. It speaks briefly and conversationally like a participant without presenting itself as a human user.
+_Avoid_: bot user, virtual member, assistant
+
+**Room AI Invocation**:
+A text Chat Message containing the standalone, case-insensitive marker `@AI` while Room AI Availability is enabled. The marker may appear anywhere; one Chat Message causes at most one invocation.
+_Avoid_: AI command, prompt
+
+**Room AI Context**:
+The triggering Room AI Invocation together with up to 49 preceding text Chat Messages, preserving their speaker identities. Image messages and older history are excluded.
+_Avoid_: full history, conversation memory
+
+**AI Typing**:
+The transient, room-visible indication that the Room AI is processing one or more invocations. It remains visible until the active generation and its queue are empty; it is not a Room User's User Status.
+_Avoid_: AI presence, AI user status
+
+**System Message**:
+A persistent, authorless notice in room history that records a room-level state change, such as Room AI Availability being enabled or disabled. It is not a Chat Message and does not count as Room Activity.
+_Avoid_: bot message, announcement
+
 **Chat Message**:
-A single utterance in a room — either text or a set of images. Identified by an id created on the client when the user
-submits.
+A single authored utterance in a room, identified by a server-generated id. A user may send text or images; the Room AI sends text only. Its author type explicitly distinguishes a user from the Room AI.
 _Avoid_: post, entry
 
 **Local Files**:
@@ -90,7 +117,7 @@ _Avoid_: bookmark, save (use the Sticker sense sparingly to avoid clashing with 
 
 **Image Copy**:
 Copying an image's bytes to the system clipboard from its context menu, for pasting into other apps. Per-image, keyed by the image's storage key.
-Distinct from Favorite Sticker: a Sticker reuses the image *inside this app* by referencing its storage key; an Image Copy takes the bytes *out* of the app. The two coexist on the image context menu - they answer different intents. See ADR 0005.
+Distinct from Favorite Sticker: a Sticker reuses the image _inside this app_ by referencing its storage key; an Image Copy takes the bytes _out_ of the app. The two coexist on the image context menu - they answer different intents. See ADR 0005.
 _Avoid_: copy image (use the noun form to stay distinct from copying text)
 
 ### Call

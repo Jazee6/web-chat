@@ -208,8 +208,12 @@ const ChatInput = ({
           <Reply className="size-3.5 shrink-0 text-muted-foreground" />
           <div className="flex min-w-0 flex-col">
             <span className="text-xs font-medium text-primary line-clamp-1">
-              {users[replyTarget.userId]?.name ||
-                replyTarget.userId.slice(0, 2)}
+              {replyTarget.authorType === "ai"
+                ? "AI"
+                : replyTarget.userId
+                  ? users[replyTarget.userId]?.name ||
+                    replyTarget.userId.slice(0, 2)
+                  : "Unknown user"}
             </span>
             <span className="text-xs text-muted-foreground line-clamp-1 wrap-anywhere">
               {replyTarget.snippet}

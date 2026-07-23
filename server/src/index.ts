@@ -19,6 +19,7 @@ import {
   publicRoomPaginationSchema,
   roomIdSchema,
   stickerIdSchema,
+  updateRoomAiSchema,
   updateRoomVisibilitySchema,
 } from "web-chat-share";
 import realtime from "./api/realtime";
@@ -401,6 +402,31 @@ app.patch(
   },
 );
 
+app.patch(
+  "/room/:id/ai",
+  zValidator("param", roomIdSchema),
+  zValidator("json", updateRoomAiSchema),
+  async (c) => {
+    const { id } = c.req.valid("param");
+    const { enabled } = c.req.valid("json");
+    const user = c.get("user");
+    const db = getDb(c.env.web_chat);
+    const room = await db
+      .select({ id: roomTable.id })
+      .from(roomTable)
+      .where(and(eq(roomTable.id, id), eq(roomTable.userId, user.id)))
+      .limit(1)
+      .then((rows) => rows[0]);
+    if (!room) {
+      throw new HTTPException(404, { message: "Room not found" });
+    }
+
+    const stub = c.env.ROOM.get(c.env.ROOM.idFromString(id));
+    await stub.setAiEnabled(enabled);
+    return c.body(null, 204);
+  },
+);
+
 app.get(
   "/room/user",
   zValidator("query", getUserInfoSchema),
@@ -451,7 +477,13 @@ app.get("/room/:id/info", zValidator("param", getRoomInfoSchema), async (c) => {
   if (!info) {
     throw new HTTPException(404, { message: "Room not found" });
   }
-  return c.json({ ...info.room, isFavorite: !!info.favorite });
+  const stub = c.env.ROOM.get(c.env.ROOM.idFromString(id));
+  const aiEnabled = await stub.getAiEnabled();
+  return c.json({
+    ...info.room,
+    isFavorite: !!info.favorite,
+    aiEnabled,
+  });
 });
 
 app.post("/room/:id/favorite", zValidator("param", roomIdSchema), async (c) => {

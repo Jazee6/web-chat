@@ -50,6 +50,7 @@ bun run db:push:d1
 
 ```bash
 cd server
+bunx wrangler secret put OPENROUTER_API_KEY
 bun run deploy
 ```
 
@@ -57,28 +58,29 @@ bun run deploy
 
 ### 服务端 (`server/.env`)
 
-| 名称                              | 描述                                                      |
-|---------------------------------|---------------------------------------------------------|
-| SITE_URL                        | 前端站点地址                                                  |
-| BETTER_AUTH_URL                 | 认证服务地址（后端地址）                                            |
-| BETTER_AUTH_SECRET              | better-auth 密钥（随机字符串）                                   |
-| EASY_AUTH_URL                   | [Easy Auth](https://github.com/Jazee6/easy-auth) URL    |
-| EASY_AUTH_CLIENT_ID             | [Easy Auth](https://github.com/Jazee6/easy-auth) 客户端 ID |
-| EASY_AUTH_CLIENT_SECRET         | [Easy Auth](https://github.com/Jazee6/easy-auth) 客户端密钥  |
-| CLOUDFLARE_ACCOUNT_ID           | Cloudflare 账户 ID                                        |
-| CLOUDFLARE_DATABASE_ID          | D1 数据库 ID                                               |
-| CLOUDFLARE_D1_TOKEN             | D1 HTTP API 令牌                                          |
-| CLOUDFLARE_SFU_ID               | Cloudflare RealtimeKit SFU ID                           |
-| CLOUDFLARE_SFU_SECRET           | Cloudflare RealtimeKit SFU Secret                       |
-| CLOUDFLARE_TURN_ID              | Cloudflare TURN Key ID                                  |
-| CLOUDFLARE_TURN_SECRET          | Cloudflare TURN Secret                                  |
-| CLOUDFLARE_R2_ACCESS_KEY_ID     | R2 存储 Access Key ID                                     |
-| CLOUDFLARE_R2_SECRET_ACCESS_KEY | R2 存储 Secret Access Key                                 |
+| 名称                            | 描述                                                        |
+| ------------------------------- | ----------------------------------------------------------- |
+| SITE_URL                        | 前端站点地址                                                |
+| BETTER_AUTH_URL                 | 认证服务地址（后端地址）                                    |
+| BETTER_AUTH_SECRET              | better-auth 密钥（随机字符串）                              |
+| EASY_AUTH_URL                   | [Easy Auth](https://github.com/Jazee6/easy-auth) URL        |
+| EASY_AUTH_CLIENT_ID             | [Easy Auth](https://github.com/Jazee6/easy-auth) 客户端 ID  |
+| EASY_AUTH_CLIENT_SECRET         | [Easy Auth](https://github.com/Jazee6/easy-auth) 客户端密钥 |
+| OPENROUTER_API_KEY              | OpenRouter API 密钥                                         |
+| CLOUDFLARE_ACCOUNT_ID           | Cloudflare 账户 ID                                          |
+| CLOUDFLARE_DATABASE_ID          | D1 数据库 ID                                                |
+| CLOUDFLARE_D1_TOKEN             | D1 HTTP API 令牌                                            |
+| CLOUDFLARE_SFU_ID               | Cloudflare RealtimeKit SFU ID                               |
+| CLOUDFLARE_SFU_SECRET           | Cloudflare RealtimeKit SFU Secret                           |
+| CLOUDFLARE_TURN_ID              | Cloudflare TURN Key ID                                      |
+| CLOUDFLARE_TURN_SECRET          | Cloudflare TURN Secret                                      |
+| CLOUDFLARE_R2_ACCESS_KEY_ID     | R2 存储 Access Key ID                                       |
+| CLOUDFLARE_R2_SECRET_ACCESS_KEY | R2 存储 Secret Access Key                                   |
 
 ### 客户端 (`client/.env`)
 
-| 名称           | 描述        |
-|--------------|-----------|
+| 名称         | 描述          |
+| ------------ | ------------- |
 | VITE_API_URL | 后端 API 地址 |
 
 ## 赞助

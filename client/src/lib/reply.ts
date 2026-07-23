@@ -17,6 +17,7 @@ const imageSnippet = (message: UIChatMessage): string => {
 
 export const toReplyRef = (message: UIChatMessage): ReplyRef => ({
   id: message.id,
+  authorType: message.authorType === "ai" ? "ai" : "user",
   userId: message.userId,
   type: message.type,
   snippet:

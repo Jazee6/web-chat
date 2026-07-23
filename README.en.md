@@ -52,6 +52,7 @@ bun run db:push:d1
 
 ```bash
 cd server
+bunx wrangler secret put OPENROUTER_API_KEY
 bun run deploy
 ```
 
@@ -60,13 +61,14 @@ bun run deploy
 ### Server (`server/.env`)
 
 | Name                            | Description                                                    |
-|---------------------------------|----------------------------------------------------------------|
+| ------------------------------- | -------------------------------------------------------------- |
 | SITE_URL                        | Frontend site URL                                              |
 | BETTER_AUTH_URL                 | Authentication service URL (backend URL)                       |
 | BETTER_AUTH_SECRET              | `better-auth` secret (random string)                           |
 | EASY_AUTH_URL                   | [Easy Auth](https://github.com/Jazee6/easy-auth) URL           |
 | EASY_AUTH_CLIENT_ID             | [Easy Auth](https://github.com/Jazee6/easy-auth) Client ID     |
 | EASY_AUTH_CLIENT_SECRET         | [Easy Auth](https://github.com/Jazee6/easy-auth) Client Secret |
+| OPENROUTER_API_KEY              | OpenRouter API key                                             |
 | CLOUDFLARE_ACCOUNT_ID           | Cloudflare Account ID                                          |
 | CLOUDFLARE_DATABASE_ID          | D1 Database ID                                                 |
 | CLOUDFLARE_D1_TOKEN             | D1 HTTP API Token                                              |
@@ -80,7 +82,7 @@ bun run deploy
 ### Client (`client/.env`)
 
 | Name         | Description     |
-|--------------|-----------------|
+| ------------ | --------------- |
 | VITE_API_URL | Backend API URL |
 
 ## Sponsor

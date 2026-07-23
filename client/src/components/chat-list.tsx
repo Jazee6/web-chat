@@ -19,6 +19,7 @@ import { useFavoriteSticker } from "@/hooks/use-stickers.ts";
 import type { User } from "@/lib/auth-client.ts";
 import { api, cn, formatChatListTime } from "@/lib/utils.ts";
 import {
+  Bot,
   CircleAlert,
   Copy,
   HeartPlus,
@@ -241,8 +242,11 @@ const Quote = ({
   users: Record<string, User>;
   onJump: () => void;
 }) => {
-  const author = users[replyTo.userId];
-  const name = author?.name || replyTo.userId.slice(0, 2);
+  const author = replyTo.userId ? users[replyTo.userId] : undefined;
+  const name =
+    replyTo.authorType === "ai"
+      ? "AI"
+      : author?.name || replyTo.userId?.slice(0, 2) || "Unknown user";
   return (
     <button
       type="button"
@@ -269,6 +273,7 @@ const ChatList = memo(
     userId,
     users,
     roomStats,
+    aiTyping,
     onReply,
   }: {
     chats: UIChatMessage[];
@@ -276,6 +281,7 @@ const ChatList = memo(
     userId: string;
     users: Record<string, User>;
     roomStats?: RoomStats;
+    aiTyping?: boolean;
     onReply?: (message: UIChatMessage) => void;
   }) => {
     const favoriteSticker = useFavoriteSticker();
@@ -286,7 +292,8 @@ const ChatList = memo(
     const groups = useMemo(() => {
       const res: {
         id: string;
-        userId: string;
+        authorType: UIChatMessage["authorType"];
+        userId?: string;
         messages: UIChatMessage[];
         showTime: boolean;
         time: string;
@@ -301,9 +308,16 @@ const ChatList = memo(
             new Date(prevMessage.createdAt).getTime() >
             5 * 60 * 1000;
 
-        if (showTime || !currentGroup || currentGroup.userId !== c.userId) {
+        if (
+          c.authorType === "system" ||
+          showTime ||
+          !currentGroup ||
+          currentGroup.authorType !== c.authorType ||
+          currentGroup.userId !== c.userId
+        ) {
           currentGroup = {
             id: c.id,
+            authorType: c.authorType,
             userId: c.userId,
             messages: [c],
             showTime,
@@ -339,9 +353,9 @@ const ChatList = memo(
     return (
       <ul className={cn("space-y-2", className)}>
         {groups.map((group) => {
-          const isMe = group.userId === userId;
-          const user = users[group.userId];
-          const roomUser = roomUserMap[group.userId];
+          const isMe = group.authorType === "user" && group.userId === userId;
+          const user = group.userId ? users[group.userId] : undefined;
+          const roomUser = group.userId ? roomUserMap[group.userId] : undefined;
 
           return (
             <Fragment key={group.id}>
@@ -351,128 +365,146 @@ const ChatList = memo(
                 </li>
               )}
 
-              <li
-                className={cn(
-                  "max-w-3xl mx-auto w-full flex",
-                  isMe ? "justify-end" : "",
-                )}
-              >
-                <div className="flex gap-1 max-w-[90%] min-w-0">
-                  {!isMe && (
-                    <Avatar className="self-end sticky bottom-1 hover:brightness-75 transition shrink-0 ani-slide-top">
-                      <AvatarImage
-                        src={user?.image ?? undefined}
-                        alt={user?.name || "Avatar"}
-                      />
-                      <AvatarFallback>
-                        {user?.name.slice(0, 2) ?? group.userId.slice(0, 2)}
-                      </AvatarFallback>
-
-                      {roomUser && (
-                        <AvatarBadge
-                          className={cn(
-                            "size-1.5!",
-                            roomUser ? "bg-green-500" : "",
-                            roomUser?.status?.user === "idle"
-                              ? "bg-yellow-500"
-                              : "",
-                            roomUser?.status?.screen === "locked"
-                              ? "bg-neutral-500"
-                              : "",
-                          )}
-                        />
-                      )}
-                    </Avatar>
+              {group.authorType === "system" ? (
+                <li className="max-w-3xl mx-auto w-full flex justify-center px-4 py-1">
+                  <div className="max-w-xl rounded-full bg-muted px-3 py-1 text-center text-xs text-muted-foreground ani-slide-top">
+                    {group.messages[0].content}
+                  </div>
+                </li>
+              ) : (
+                <li
+                  className={cn(
+                    "max-w-3xl mx-auto w-full flex",
+                    isMe ? "justify-end" : "",
                   )}
+                >
+                  <div className="flex gap-1 max-w-[90%] min-w-0">
+                    {!isMe && (
+                      <Avatar className="self-end sticky bottom-1 hover:brightness-75 transition shrink-0 ani-slide-top">
+                        <AvatarImage
+                          src={user?.image ?? undefined}
+                          alt={
+                            group.authorType === "ai"
+                              ? "AI"
+                              : user?.name || "Avatar"
+                          }
+                        />
+                        <AvatarFallback>
+                          {group.authorType === "ai" ? (
+                            <Bot className="size-4" />
+                          ) : (
+                            (user?.name.slice(0, 2) ??
+                            group.userId?.slice(0, 2) ??
+                            "?")
+                          )}
+                        </AvatarFallback>
 
-                  <div className="flex flex-col gap-1 min-w-0">
-                    {group.messages.map((c) => {
-                      return (
-                        <ContextMenu key={c.id}>
-                          <ContextMenuTrigger
-                            render={
-                              <div
-                                id={c.id}
-                                className="flex flex-col gap-0.5"
-                              />
-                            }
-                          >
-                            {c.replyTo && (
-                              <Quote
-                                replyTo={c.replyTo}
-                                isMe={isMe}
-                                users={users}
-                                onJump={() => flashMessage(c.replyTo!.id)}
-                              />
+                        {roomUser && (
+                          <AvatarBadge
+                            className={cn(
+                              "size-1.5!",
+                              roomUser ? "bg-green-500" : "",
+                              roomUser?.status?.user === "idle"
+                                ? "bg-yellow-500"
+                                : "",
+                              roomUser?.status?.screen === "locked"
+                                ? "bg-neutral-500"
+                                : "",
                             )}
+                          />
+                        )}
+                      </Avatar>
+                    )}
 
-                            <div
-                              className={cn(
-                                "flex gap-1 ani-slide-top min-w-0",
-                                isMe ? "flex-row-reverse" : "",
-                              )}
+                    <div className="flex flex-col gap-1 min-w-0">
+                      {group.messages.map((c) => {
+                        return (
+                          <ContextMenu key={c.id}>
+                            <ContextMenuTrigger
+                              render={
+                                <div
+                                  id={c.id}
+                                  className="flex flex-col gap-0.5"
+                                />
+                              }
                             >
-                              {c.type === "text" && (
-                                <TextMessageContent content={c.content} />
+                              {c.replyTo && (
+                                <Quote
+                                  replyTo={c.replyTo}
+                                  isMe={isMe}
+                                  users={users}
+                                  onJump={() => flashMessage(c.replyTo!.id)}
+                                />
                               )}
 
-                              {c.type === "image" && (
-                                <div className="flex flex-col gap-1 peer max-w-full">
-                                  <div className="flex overflow-x-auto scrollbar gap-1 max-w-full">
-                                    {c.localFiles?.length
-                                      ? c.localFiles.map(
-                                          (
-                                            {
-                                              file,
-                                              isUploading,
-                                              uploadFailed,
-                                              key,
-                                            },
-                                            index,
-                                          ) =>
-                                            // Uploaded successfully → has a key →
-                                            // favorite/copy like a sent image. Still
-                                            // uploading or failed → no key, render
-                                            // with the status overlay and no menu.
-                                            key ? (
-                                              <ImageWithFavorite
-                                                key={`${file.name}_${index}`}
-                                                storageKey={key}
-                                                message={c}
-                                                onFavorite={onFavoriteSticker}
-                                                onReply={onReply}
-                                              >
-                                                <ChatImage
-                                                  src={getLocalFileUrl(file)}
-                                                  alt={file.name}
-                                                />
-                                              </ImageWithFavorite>
-                                            ) : (
-                                              <div
-                                                className="relative shrink-0"
-                                                key={`${file.name}_${index}`}
-                                              >
-                                                <ChatImage
-                                                  src={getLocalFileUrl(file)}
-                                                  alt={file.name}
-                                                />
+                              <div
+                                className={cn(
+                                  "flex gap-1 ani-slide-top min-w-0",
+                                  isMe ? "flex-row-reverse" : "",
+                                )}
+                              >
+                                {c.type === "text" && (
+                                  <TextMessageContent content={c.content} />
+                                )}
 
-                                                {isUploading && (
-                                                  <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
-                                                    <Spinner />
-                                                  </div>
-                                                )}
+                                {c.type === "image" && (
+                                  <div className="flex flex-col gap-1 peer max-w-full">
+                                    <div className="flex overflow-x-auto scrollbar gap-1 max-w-full">
+                                      {c.localFiles?.length
+                                        ? c.localFiles.map(
+                                            (
+                                              {
+                                                file,
+                                                isUploading,
+                                                uploadFailed,
+                                                key,
+                                              },
+                                              index,
+                                            ) =>
+                                              // Uploaded successfully → has a key →
+                                              // favorite/copy like a sent image. Still
+                                              // uploading or failed → no key, render
+                                              // with the status overlay and no menu.
+                                              key ? (
+                                                <ImageWithFavorite
+                                                  key={`${file.name}_${index}`}
+                                                  storageKey={key}
+                                                  message={c}
+                                                  onFavorite={onFavoriteSticker}
+                                                  onReply={onReply}
+                                                >
+                                                  <ChatImage
+                                                    src={getLocalFileUrl(file)}
+                                                    alt={file.name}
+                                                  />
+                                                </ImageWithFavorite>
+                                              ) : (
+                                                <div
+                                                  className="relative shrink-0"
+                                                  key={`${file.name}_${index}`}
+                                                >
+                                                  <ChatImage
+                                                    src={getLocalFileUrl(file)}
+                                                    alt={file.name}
+                                                  />
 
-                                                {uploadFailed && (
-                                                  <div className="absolute inset-0 bg-amber-500/30 flex items-center justify-center">
-                                                    <TriangleAlert className="text-amber-500" />
-                                                  </div>
-                                                )}
-                                              </div>
-                                            ),
-                                        )
-                                      : (JSON.parse(c.content) as string[]).map(
-                                          (i, index) => (
+                                                  {isUploading && (
+                                                    <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
+                                                      <Spinner />
+                                                    </div>
+                                                  )}
+
+                                                  {uploadFailed && (
+                                                    <div className="absolute inset-0 bg-amber-500/30 flex items-center justify-center">
+                                                      <TriangleAlert className="text-amber-500" />
+                                                    </div>
+                                                  )}
+                                                </div>
+                                              ),
+                                          )
+                                        : (
+                                            JSON.parse(c.content) as string[]
+                                          ).map((i, index) => (
                                             <ImageWithFavorite
                                               key={i}
                                               storageKey={i}
@@ -485,53 +517,53 @@ const ChatList = memo(
                                                 alt={`image_${index}`}
                                               />
                                             </ImageWithFavorite>
-                                          ),
-                                        )}
-                                  </div>
-
-                                  {c.sendFailed && (
-                                    <div className="flex items-center gap-1 self-end text-xs text-destructive">
-                                      <CircleAlert className="size-3.5 shrink-0" />
-                                      <span>未送达</span>
+                                          ))}
                                     </div>
-                                  )}
+
+                                    {c.sendFailed && (
+                                      <div className="flex items-center gap-1 self-end text-xs text-destructive">
+                                        <CircleAlert className="size-3.5 shrink-0" />
+                                        <span>未送达</span>
+                                      </div>
+                                    )}
+                                  </div>
+                                )}
+
+                                <div className="text-muted-foreground brightness-75 text-xs self-end opacity-0 peer-hover:opacity-100 transition-opacity">
+                                  {new Date(c.createdAt)
+                                    .getHours()
+                                    .toString()
+                                    .padStart(2, "0")}
+                                  :
+                                  {new Date(c.createdAt)
+                                    .getMinutes()
+                                    .toString()
+                                    .padStart(2, "0")}
                                 </div>
-                              )}
-
-                              <div className="text-muted-foreground brightness-75 text-xs self-end opacity-0 peer-hover:opacity-100 transition-opacity">
-                                {new Date(c.createdAt)
-                                  .getHours()
-                                  .toString()
-                                  .padStart(2, "0")}
-                                :
-                                {new Date(c.createdAt)
-                                  .getMinutes()
-                                  .toString()
-                                  .padStart(2, "0")}
                               </div>
-                            </div>
-                          </ContextMenuTrigger>
+                            </ContextMenuTrigger>
 
-                          <ContextMenuContent>
-                            <ContextMenuItem onClick={() => onReply?.(c)}>
-                              <Reply />
-                              <span>Reply</span>
-                            </ContextMenuItem>
-                            {c.type === "text" && (
-                              <ContextMenuItem
-                                onClick={() => void copyMessage(c)}
-                              >
-                                <Copy />
-                                <span>Copy</span>
+                            <ContextMenuContent>
+                              <ContextMenuItem onClick={() => onReply?.(c)}>
+                                <Reply />
+                                <span>Reply</span>
                               </ContextMenuItem>
-                            )}
-                          </ContextMenuContent>
-                        </ContextMenu>
-                      );
-                    })}
+                              {c.type === "text" && (
+                                <ContextMenuItem
+                                  onClick={() => void copyMessage(c)}
+                                >
+                                  <Copy />
+                                  <span>Copy</span>
+                                </ContextMenuItem>
+                              )}
+                            </ContextMenuContent>
+                          </ContextMenu>
+                        );
+                      })}
+                    </div>
                   </div>
-                </div>
-              </li>
+                </li>
+              )}
             </Fragment>
           );
         })}
@@ -546,11 +578,18 @@ const ChatList = memo(
         <li
           key="typing"
           className="max-w-3xl mx-auto w-full flex -mt-1 h-8 items-end"
-          aria-hidden={typingUsers.length === 0}
+          aria-hidden={typingUsers.length === 0 && !aiTyping}
         >
-          {typingUsers.length > 0 && (
+          {(typingUsers.length > 0 || aiTyping) && (
             <div className="flex gap-1 max-w-[90%] ani-slide-top">
               <AvatarGroup className="self-end shrink-0">
+                {aiTyping && (
+                  <Avatar title="AI">
+                    <AvatarFallback>
+                      <Bot className="size-4" />
+                    </AvatarFallback>
+                  </Avatar>
+                )}
                 {typingUsers.slice(0, 5).map((u) => {
                   const user = users[u.id];
                   return (

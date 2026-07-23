@@ -35,7 +35,7 @@ type UseRoomChatReturn = {
   roomStats: RoomStats | undefined;
   setChats: Dispatch<SetStateAction<UIChatMessage[]>>;
   addChatMessage: (
-    msg: Omit<UIChatMessage, "id" | "userId" | "createdAt">,
+    msg: Omit<UIChatMessage, "id" | "authorType" | "userId" | "createdAt">,
   ) => void;
   sendText: (content: string, replyTo?: ReplyRef) => void;
   handleInitHistory: (data: ChatMessage[]) => void;
@@ -139,7 +139,11 @@ export function useRoomChat({
       }
       setChats(data);
       oldestChatTimeRef.current = data[0].createdAt;
-      fetchMissingUsers(data.map((c) => c.userId));
+      fetchMissingUsers(
+        data.flatMap((c) =>
+          c.authorType === "user" && c.userId ? [c.userId] : [],
+        ),
+      );
     },
     [fetchMissingUsers],
   );
@@ -158,7 +162,11 @@ export function useRoomChat({
       }
       setChats((chats) => [...data, ...chats]);
       oldestChatTimeRef.current = data[0].createdAt;
-      debouncedFetchMissingUsers(data.map((c) => c.userId));
+      debouncedFetchMissingUsers(
+        data.flatMap((c) =>
+          c.authorType === "user" && c.userId ? [c.userId] : [],
+        ),
+      );
     },
     [chatListRef, debouncedFetchMissingUsers],
   );
@@ -166,7 +174,9 @@ export function useRoomChat({
   const handleMessage = useCallback(
     (data: ChatMessage) => {
       setChats((chats) => [...chats, data]);
-      debouncedFetchMissingUsers([data.userId]);
+      if (data.authorType === "user" && data.userId) {
+        debouncedFetchMissingUsers([data.userId]);
+      }
       if (!stickToBottomRef.current) {
         unreadCountRef.current += 1;
         setUnreadCount(unreadCountRef.current);
@@ -263,13 +273,16 @@ export function useRoomChat({
   }, [isLoading, loaderRef, sendMessage, hasMore]);
 
   const addChatMessage = useCallback(
-    (msg: Omit<UIChatMessage, "id" | "userId" | "createdAt">) => {
+    (
+      msg: Omit<UIChatMessage, "id" | "authorType" | "userId" | "createdAt">,
+    ) => {
       setStick(true);
       setChats((prev) => [
         ...prev,
         {
           ...msg,
           id: crypto.randomUUID(),
+          authorType: "user",
           userId,
           createdAt: new Date().toISOString(),
         },

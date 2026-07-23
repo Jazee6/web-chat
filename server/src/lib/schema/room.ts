@@ -7,7 +7,10 @@ export const messageTable = sqliteTable("message", {
     .primaryKey()
     .$defaultFn(() => v7()),
   content: text().notNull(),
-  userId: text().notNull(),
+  authorType: text({ enum: ["user", "ai", "system"] })
+    .notNull()
+    .default("user"),
+  userId: text(),
   type: text({ enum: ["text", "image"] })
     .notNull()
     .default("text"),
@@ -17,4 +20,14 @@ export const messageTable = sqliteTable("message", {
   createdAt: integer({ mode: "timestamp_ms" })
     .notNull()
     .$defaultFn(() => new Date()),
+});
+
+export const roomSettingTable = sqliteTable("room_setting", {
+  id: integer().primaryKey(),
+  aiEnabled: integer({ mode: "boolean" }).notNull().default(false),
+});
+
+export const roomAiCooldownTable = sqliteTable("room_ai_cooldown", {
+  userId: text().primaryKey(),
+  acceptedAt: integer().notNull(),
 });

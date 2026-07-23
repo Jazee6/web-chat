@@ -26,6 +26,10 @@ export const updateRoomVisibilitySchema = z.object({
   type: roomVisibilitySchema,
 });
 
+export const updateRoomAiSchema = z.object({
+  enabled: z.boolean(),
+});
+
 export const publicRoomPaginationSchema = z.object({
   cursor: z.string().max(512).optional(),
 });
@@ -47,12 +51,17 @@ export const sendMessageSchema = z.object({
 
 // Mirrors ReplyRef in share/lib/index.ts. Stored as an opaque JSON blob on the
 // message row; the server never reads into it. See ADR 0003.
-export const replyRefSchema = z.object({
-  id: z.string().min(1),
-  userId: z.string().min(1),
-  type: z.enum(["text", "image"]),
-  snippet: z.string().max(100),
-});
+export const replyRefSchema = z
+  .object({
+    id: z.string().min(1),
+    authorType: z.enum(["user", "ai"]),
+    userId: z.string().min(1).optional(),
+    type: z.enum(["text", "image"]),
+    snippet: z.string().max(100),
+  })
+  .refine((value) => value.authorType !== "user" || !!value.userId, {
+    message: "User replies require a userId",
+  });
 
 export const getRoomInfoSchema = z.object({
   id: z.string().min(1),
