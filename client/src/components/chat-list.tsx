@@ -459,12 +459,12 @@ const ChatList = memo(
                 >
                   <div className="flex gap-1 max-w-[90%] min-w-0">
                     {!isMe && (
-                      <div className="self-end sticky bottom-1 shrink-0">
+                      <div className="self-end sticky bottom-1 flex shrink-0">
                         {canMention ? (
                           <button
                             type="button"
                             aria-label={`Mention ${mentionName}`}
-                            className="rounded-full cursor-pointer"
+                            className="block rounded-full cursor-pointer"
                             onPointerDown={(event) => event.preventDefault()}
                             onClick={() => onMention?.(mentionName)}
                           >
