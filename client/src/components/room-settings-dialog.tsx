@@ -14,7 +14,6 @@ import {
   FieldGroup,
   FieldTitle,
 } from "@/components/ui/field.tsx";
-import { Separator } from "@/components/ui/separator.tsx";
 import { Switch } from "@/components/ui/switch.tsx";
 import { api, showAlertDialog } from "@/lib/utils.ts";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
@@ -133,8 +132,6 @@ const RoomSettingsDialog = ({
               aria-label="Room AI"
             />
           </Field>
-
-          <Separator />
 
           <Field orientation="horizontal">
             <FieldContent>

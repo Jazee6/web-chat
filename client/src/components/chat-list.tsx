@@ -17,6 +17,7 @@ import { Skeleton } from "@/components/ui/skeleton.tsx";
 import { Spinner } from "@/components/ui/spinner.tsx";
 import { useFavoriteSticker } from "@/hooks/use-stickers.ts";
 import type { User } from "@/lib/auth-client.ts";
+import { findMentionRanges } from "@/lib/mentions.ts";
 import { api, cn, formatChatListTime } from "@/lib/utils.ts";
 import {
   Bot,
@@ -124,7 +125,29 @@ const isPureUrl = (content: string): string | null => {
   return cleanUrl(trimmed);
 };
 
-const formatContent = (content: string) => {
+const formatMentions = (content: string, userNames: string[]) => {
+  const mentions = findMentionRanges(content, userNames);
+  if (mentions.length === 0) return content;
+
+  const result: ReactNode[] = [];
+  let offset = 0;
+  mentions.forEach(({ start, end }) => {
+    if (start > offset) result.push(content.slice(offset, start));
+    result.push(
+      <span
+        key={`${start}-${end}`}
+        className="rounded-sm bg-primary/15 px-0.5 font-medium text-primary"
+      >
+        {content.slice(start, end)}
+      </span>,
+    );
+    offset = end;
+  });
+  if (offset < content.length) result.push(content.slice(offset));
+  return result;
+};
+
+const formatContent = (content: string, userNames: string[]) => {
   return content.split(urlRegex).map((part, i) => {
     if (i % 2 === 1) {
       const href = cleanUrl(part);
@@ -143,7 +166,7 @@ const formatContent = (content: string) => {
         </Fragment>
       );
     }
-    return part;
+    return <Fragment key={i}>{formatMentions(part, userNames)}</Fragment>;
   });
 };
 
@@ -159,7 +182,13 @@ const isEmojiOnly = (content: string) => {
   return isEmojiRegex.test(content);
 };
 
-const TextMessageContent = ({ content }: { content: string }) => {
+const TextMessageContent = ({
+  content,
+  userNames,
+}: {
+  content: string;
+  userNames: string[];
+}) => {
   const pureUrl = isPureUrl(content);
   if (pureUrl) return <LinkCard url={pureUrl} />;
   return (
@@ -171,7 +200,7 @@ const TextMessageContent = ({ content }: { content: string }) => {
           : "bg-secondary px-2 py-1",
       )}
     >
-      {formatContent(content)}
+      {formatContent(content, userNames)}
     </div>
   );
 };
@@ -266,6 +295,42 @@ const Quote = ({
   );
 };
 
+const MessageAvatar = ({
+  authorType,
+  user,
+  userId,
+  roomUser,
+}: {
+  authorType: UIChatMessage["authorType"];
+  user?: User;
+  userId?: string;
+  roomUser?: RoomStats["users"][0];
+}) => (
+  <Avatar className="hover:brightness-75 transition shrink-0 ani-slide-top">
+    <AvatarImage
+      src={user?.image ?? undefined}
+      alt={authorType === "ai" ? "AI" : user?.name || "Avatar"}
+    />
+    <AvatarFallback>
+      {authorType === "ai" ? (
+        <Bot className="size-4" />
+      ) : (
+        (user?.name.slice(0, 2) ?? userId?.slice(0, 2) ?? "?")
+      )}
+    </AvatarFallback>
+
+    {roomUser && (
+      <AvatarBadge
+        className={cn(
+          "size-1.5! bg-green-500",
+          roomUser.status?.user === "idle" && "bg-yellow-500",
+          roomUser.status?.screen === "locked" && "bg-neutral-500",
+        )}
+      />
+    )}
+  </Avatar>
+);
+
 const ChatList = memo(
   ({
     chats,
@@ -275,6 +340,7 @@ const ChatList = memo(
     roomStats,
     aiTyping,
     onReply,
+    onMention,
   }: {
     chats: UIChatMessage[];
     className?: string;
@@ -283,6 +349,7 @@ const ChatList = memo(
     roomStats?: RoomStats;
     aiTyping?: boolean;
     onReply?: (message: UIChatMessage) => void;
+    onMention?: (name: string) => void;
   }) => {
     const favoriteSticker = useFavoriteSticker();
     const onFavoriteSticker = (key: string) => {
@@ -340,6 +407,11 @@ const ChatList = memo(
       return map;
     }, [roomStats?.users]);
 
+    const mentionUserNames = useMemo(
+      () => Object.values(users).map((user) => user.name),
+      [users],
+    );
+
     // Who besides me is typing right now. Never includes the local user — we
     // never render our own typing. Drives the trailing indicator <li>. See
     // ADR 0002: cleared by disconnect, so this is just a read of roomStats.
@@ -356,6 +428,13 @@ const ChatList = memo(
           const isMe = group.authorType === "user" && group.userId === userId;
           const user = group.userId ? users[group.userId] : undefined;
           const roomUser = group.userId ? roomUserMap[group.userId] : undefined;
+          const mentionName =
+            group.authorType === "ai"
+              ? "AI"
+              : user?.name.toLocaleLowerCase() === "ai"
+                ? undefined
+                : user?.name;
+          const canMention = !!mentionName && !!onMention;
 
           return (
             <Fragment key={group.id}>
@@ -380,40 +459,31 @@ const ChatList = memo(
                 >
                   <div className="flex gap-1 max-w-[90%] min-w-0">
                     {!isMe && (
-                      <Avatar className="self-end sticky bottom-1 hover:brightness-75 transition shrink-0 ani-slide-top">
-                        <AvatarImage
-                          src={user?.image ?? undefined}
-                          alt={
-                            group.authorType === "ai"
-                              ? "AI"
-                              : user?.name || "Avatar"
-                          }
-                        />
-                        <AvatarFallback>
-                          {group.authorType === "ai" ? (
-                            <Bot className="size-4" />
-                          ) : (
-                            (user?.name.slice(0, 2) ??
-                            group.userId?.slice(0, 2) ??
-                            "?")
-                          )}
-                        </AvatarFallback>
-
-                        {roomUser && (
-                          <AvatarBadge
-                            className={cn(
-                              "size-1.5!",
-                              roomUser ? "bg-green-500" : "",
-                              roomUser?.status?.user === "idle"
-                                ? "bg-yellow-500"
-                                : "",
-                              roomUser?.status?.screen === "locked"
-                                ? "bg-neutral-500"
-                                : "",
-                            )}
+                      <div className="self-end sticky bottom-1 shrink-0">
+                        {canMention ? (
+                          <button
+                            type="button"
+                            aria-label={`Mention ${mentionName}`}
+                            className="rounded-full cursor-pointer"
+                            onPointerDown={(event) => event.preventDefault()}
+                            onClick={() => onMention?.(mentionName)}
+                          >
+                            <MessageAvatar
+                              authorType={group.authorType}
+                              user={user}
+                              userId={group.userId}
+                              roomUser={roomUser}
+                            />
+                          </button>
+                        ) : (
+                          <MessageAvatar
+                            authorType={group.authorType}
+                            user={user}
+                            userId={group.userId}
+                            roomUser={roomUser}
                           />
                         )}
-                      </Avatar>
+                      </div>
                     )}
 
                     <div className="flex flex-col gap-1 min-w-0">
@@ -444,7 +514,10 @@ const ChatList = memo(
                                 )}
                               >
                                 {c.type === "text" && (
-                                  <TextMessageContent content={c.content} />
+                                  <TextMessageContent
+                                    content={c.content}
+                                    userNames={mentionUserNames}
+                                  />
                                 )}
 
                                 {c.type === "image" && (

@@ -1,5 +1,5 @@
 import AddFavoritesButton from "@/components/add-favorites-button.tsx";
-import ChatInput from "@/components/chat-input.tsx";
+import ChatInput, { type MentionRequest } from "@/components/chat-input.tsx";
 import ChatList from "@/components/chat-list.tsx";
 import RealtimeLand from "@/components/realtime-land.tsx";
 import RealtimeSidebar from "@/components/realtime-sidebar.tsx";
@@ -61,6 +61,9 @@ const Room = ({
   // moment the user picks "回复". Lives here so both ChatList (source) and
   // ChatInput (preview + send) share one source of truth. See ADR 0003.
   const [replyTarget, setReplyTarget] = useState<ReplyRef | null>(null);
+  const [mentionRequest, setMentionRequest] = useState<MentionRequest | null>(
+    null,
+  );
 
   const chatListRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
@@ -270,6 +273,12 @@ const Room = ({
                       onReply={(message: UIChatMessage) =>
                         setReplyTarget(toReplyRef(message))
                       }
+                      onMention={(name) =>
+                        setMentionRequest((current) => ({
+                          id: (current?.id ?? 0) + 1,
+                          name,
+                        }))
+                      }
                     />
                   </div>
                 </div>
@@ -296,6 +305,7 @@ const Room = ({
                 replyTarget={replyTarget}
                 users={users}
                 onCancelReply={() => setReplyTarget(null)}
+                mentionRequest={mentionRequest}
               />
             </div>
           </SidebarInset>

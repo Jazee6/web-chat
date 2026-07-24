@@ -42,6 +42,7 @@ _Avoid_: bot user, virtual member, assistant
 
 **Room AI Invocation**:
 A text Chat Message containing the standalone, case-insensitive marker `@AI` while Room AI Availability is enabled. The marker may appear anywhere; one Chat Message causes at most one invocation.
+`@AI` is reserved for the Room AI, so a user whose full display name is `AI` cannot be referenced by a User Mention.
 _Avoid_: AI command, prompt
 
 **Room AI Context**:
@@ -59,6 +60,10 @@ _Avoid_: bot message, announcement
 **Chat Message**:
 A single authored utterance in a room, identified by a server-generated id. A user may send text or images; the Room AI sends text only. Its author type explicitly distinguishes a user from the Room AI.
 _Avoid_: post, entry
+
+**User Mention**:
+A visible, standalone `@` reference matching a known user's full display name in a text Chat Message, whether typed or inserted through the user's message avatar. It is presentational only and does not notify the referenced user; a Room AI Invocation remains the distinct behavioral meaning of mentioning the Room AI.
+_Avoid_: notification, alert, tag
 
 **Local Files**:
 Image `File` objects held in client memory after the user has selected them but before they have been confirmed sent.

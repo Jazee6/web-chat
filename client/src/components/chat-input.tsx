@@ -9,6 +9,7 @@ import {
 } from "@/components/ui/input-group.tsx";
 import { Spinner } from "@/components/ui/spinner.tsx";
 import type { User } from "@/lib/auth-client.ts";
+import { insertMention } from "@/lib/mentions.ts";
 import { cn } from "@/lib/utils.ts";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { ArrowUpIcon, ImagePlus, PhoneCall, Reply, X } from "lucide-react";
@@ -25,6 +26,11 @@ import { toast } from "sonner";
 import { type ReplyRef, sendMessageSchema } from "web-chat-share";
 import { z } from "zod";
 
+export type MentionRequest = {
+  id: number;
+  name: string;
+};
+
 const ChatInput = ({
   onSend,
   onCall,
@@ -35,6 +41,7 @@ const ChatInput = ({
   replyTarget,
   users,
   onCancelReply,
+  mentionRequest,
 }: {
   onSend: (
     data: z.infer<typeof sendMessageSchema> & {
@@ -50,10 +57,13 @@ const ChatInput = ({
   replyTarget: ReplyRef | null;
   users: Record<string, User>;
   onCancelReply: () => void;
+  mentionRequest: MentionRequest | null;
 }) => {
   const [images, setImages] = useState<File[]>([]);
   const [isSending, setIsSending] = useState(false);
   const imageInputRef = useRef<HTMLInputElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const handledMentionRequestRef = useRef(0);
   const imagePreviewUrls = useRef(new Map<File, string>());
 
   // Edge-triggered typing: fire onTypingChange only on true↔false transitions,
@@ -123,6 +133,48 @@ const ChatInput = ({
       message: "",
     },
   });
+
+  useEffect(() => {
+    if (
+      !mentionRequest ||
+      handledMentionRequestRef.current === mentionRequest.id
+    ) {
+      return;
+    }
+    handledMentionRequestRef.current = mentionRequest.id;
+
+    const textarea = textareaRef.current;
+    const current = form.getValues("message");
+    const hasFocus = document.activeElement === textarea;
+    const start = hasFocus
+      ? (textarea?.selectionStart ?? current.length)
+      : current.length;
+    const end = hasFocus
+      ? (textarea?.selectionEnd ?? current.length)
+      : current.length;
+    const { value: next, caret } = insertMention(
+      current,
+      mentionRequest.name,
+      start,
+      end,
+    );
+
+    if (next.length > 2048) {
+      toast.warning("Message is too long to add this mention.");
+      textarea?.focus();
+      return;
+    }
+
+    form.setValue("message", next, {
+      shouldDirty: true,
+      shouldValidate: true,
+    });
+    requestAnimationFrame(() => {
+      if (!textarea?.isConnected) return;
+      textarea.focus();
+      textarea.setSelectionRange(caret, caret);
+    });
+  }, [form, mentionRequest]);
 
   const onSubmit = async (data: z.infer<typeof sendMessageSchema>) => {
     // Capture before clearing — onCancelReply runs before the await, matching
@@ -235,9 +287,13 @@ const ChatInput = ({
         <Controller
           name="message"
           control={form.control}
-          render={({ field }) => (
+          render={({ field: { ref, ...field } }) => (
             <>
               <InputGroupTextarea
+                ref={(element) => {
+                  ref(element);
+                  textareaRef.current = element;
+                }}
                 className="scrollbar"
                 placeholder="Text here..."
                 autoFocus
