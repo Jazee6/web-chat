@@ -306,7 +306,7 @@ const MessageAvatar = ({
   userId?: string;
   roomUser?: RoomStats["users"][0];
 }) => (
-  <Avatar className="hover:brightness-75 transition shrink-0 ani-slide-top">
+  <Avatar className="hover:brightness-75 transition shrink-0">
     <AvatarImage
       src={user?.image ?? undefined}
       alt={authorType === "ai" ? "AI" : user?.name || "Avatar"}
@@ -459,7 +459,7 @@ const ChatList = memo(
                 >
                   <div className="flex gap-1 max-w-[90%] min-w-0">
                     {!isMe && (
-                      <div className="self-end sticky bottom-1 flex shrink-0">
+                      <div className="self-end sticky bottom-1 flex shrink-0 ani-slide-top">
                         {canMention ? (
                           <button
                             type="button"
