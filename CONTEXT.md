@@ -49,8 +49,24 @@ _Avoid_: AI command, prompt
 The triggering Room AI Invocation together with up to 49 preceding text Chat Messages, preserving their speaker identities. Image messages and older history are excluded.
 _Avoid_: full history, conversation memory
 
+**Room AI Web Search**:
+An optional external-information lookup available when the deployment enables it and Room AI Availability is enabled. The Room AI may use it at most once per invocation when current information, outside facts, or sources are needed; its use does not change the resulting message's normal Room AI attribution.
+_Avoid_: search command, web mode, automatic search
+
+**Web Search Query**:
+The transient, minimum external-search terms needed to answer a Room AI Invocation. It may use the language best suited to the sought material and be derived from Room AI Context to resolve references, but excludes participant names, unrelated conversation, and sensitive information; if those cannot be excluded, no search occurs, and the query is never part of room history.
+_Avoid_: prompt, chat history, context dump
+
+**Web Search Evidence**:
+Transient, untrusted content returned by Room AI Web Search and used only as factual support for the current invocation. It never enters room history; medical, legal, and financial responses require authoritative evidence.
+_Avoid_: instructions, persisted sources, verified truth
+
+**Web Search Failure Response**:
+A room-visible Room AI Chat Message stating that reliable search results could not be obtained or that Web Search is unavailable, and suggesting a later retry when appropriate. It replaces neither missing results with model knowledge nor the Chat Message with a caller-only error.
+_Avoid_: unavailable error, silent fallback, guessed answer
+
 **AI Typing**:
-The transient, room-visible indication that the Room AI is processing one or more invocations. It remains visible until the active generation and its queue are empty; it is not a Room User's User Status.
+The transient, room-visible indication that the Room AI is processing one or more invocations, including any optional Web Search. It remains visible until the active generation and its queue are empty; it is not a Room User's User Status.
 _Avoid_: AI presence, AI user status
 
 **System Message**:

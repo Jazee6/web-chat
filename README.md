@@ -51,6 +51,8 @@ bun run db:push:d1
 ```bash
 cd server
 bunx wrangler secret put OPENROUTER_API_KEY
+# 可选：为 Room AI 启用 Web Search
+bunx wrangler secret put EXA_API_KEY
 bun run deploy
 ```
 
@@ -67,6 +69,7 @@ bun run deploy
 | EASY_AUTH_CLIENT_ID             | [Easy Auth](https://github.com/Jazee6/easy-auth) 客户端 ID  |
 | EASY_AUTH_CLIENT_SECRET         | [Easy Auth](https://github.com/Jazee6/easy-auth) 客户端密钥 |
 | OPENROUTER_API_KEY              | OpenRouter API 密钥                                         |
+| EXA_API_KEY                     | Exa API 密钥（可选；配置后为 Room AI 启用 Web Search）      |
 | CLOUDFLARE_ACCOUNT_ID           | Cloudflare 账户 ID                                          |
 | CLOUDFLARE_DATABASE_ID          | D1 数据库 ID                                                |
 | CLOUDFLARE_D1_TOKEN             | D1 HTTP API 令牌                                            |

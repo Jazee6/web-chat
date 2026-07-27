@@ -122,7 +122,9 @@ const RoomSettingsDialog = ({
               <FieldTitle>Room AI</FieldTitle>
               <FieldDescription>
                 Anyone can mention @AI. The latest 50 text messages and speaker
-                names are sent to OpenRouter with each invocation.
+                names are sent to OpenRouter. When available, AI may send a
+                minimized search query to Exa; queries and results are not saved
+                in room history.
               </FieldDescription>
             </FieldContent>
             <Switch
