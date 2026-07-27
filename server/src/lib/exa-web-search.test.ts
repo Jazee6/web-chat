@@ -65,7 +65,7 @@ describe("Exa Web Search tool", () => {
     expect(requestBody).toEqual({
       query: "latest AI news",
       type: "auto",
-      numResults: 5,
+      numResults: 3,
       moderation: true,
       contents: {
         text: { maxCharacters: 1500 },

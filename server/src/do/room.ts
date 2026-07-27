@@ -428,7 +428,7 @@ export class Room extends DurableObject<Env> {
                 tools: { webSearch: search.webSearch },
                 stopWhen: isStepCount(2),
                 prepareStep: ({ stepNumber }) =>
-                  stepNumber > 0 ? { activeTools: [] } : undefined,
+                  stepNumber > 0 ? { toolChoice: "none" } : undefined,
               }),
             });
             text = result.text;
