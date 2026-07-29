@@ -12,7 +12,6 @@
   },
   "dependencies": {
     "@hono/zod-validator": "^0.8.0",
-    "@openrouter/ai-sdk-provider": "^3.0.0",
     "ai": "^7",
     "aws4fetch": "^1.0.20",
     "better-auth": "^1.6.22",
@@ -22,6 +21,7 @@
     "hono-party": "^2.1.0",
     "uuid": "^14.0.1",
     "web-chat-share": "workspace:*",
+    "workers-ai-provider": "^4.0.0",
     "zod": "^4.4.3"
   },
   "devDependencies": {

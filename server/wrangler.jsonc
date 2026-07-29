@@ -15,6 +15,9 @@
     "EASY_AUTH_CLIENT_ID": "fvTSOvbniIAlmwBSLJIMZYxlOymzxcUw",
     "SITE_URL": "https://chat.jaze.top"
   },
+  "ai": {
+    "binding": "AI"
+  },
   "d1_databases": [
     {
       "binding": "web_chat",

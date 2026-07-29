@@ -1,8 +1,8 @@
 declare global {
   namespace Cloudflare {
     interface Env {
-      OPENROUTER_API_KEY: string;
       EXA_API_KEY?: string;
+      AI_GATEWAY_ID?: string;
     }
   }
 
@@ -12,8 +12,8 @@ declare global {
       BETTER_AUTH_URL: string;
       EASY_AUTH_CLIENT_ID: string;
       EASY_AUTH_CLIENT_SECRET: string;
-      OPENROUTER_API_KEY: string;
       EXA_API_KEY?: string;
+      AI_GATEWAY_ID?: string;
     }
   }
 }

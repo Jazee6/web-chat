@@ -122,9 +122,10 @@ const RoomSettingsDialog = ({
               <FieldTitle>Room AI</FieldTitle>
               <FieldDescription>
                 Anyone can mention @AI. The latest 50 text messages and speaker
-                names are sent to OpenRouter. When available, AI may send a
-                minimized search query to Exa; queries and results are not saved
-                in room history.
+                names are sent to Cloudflare Workers AI. When available, AI may
+                send a minimized search query to Exa. Web Chat does not save
+                queries or results in room history; Cloudflare and Exa may
+                retain data under their policies.
               </FieldDescription>
             </FieldContent>
             <Switch

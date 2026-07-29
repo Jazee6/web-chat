@@ -53,12 +53,16 @@ _Avoid_: full history, conversation memory
 An optional external-information lookup available when the deployment enables it and Room AI Availability is enabled. The Room AI may use it at most once per invocation when current information, outside facts, or sources are needed; its use does not change the resulting message's normal Room AI attribution.
 _Avoid_: search command, web mode, automatic search
 
+**Transient AI Data**:
+Data used for the current Room AI Invocation but not written by Web Chat to room history or its other business storage. External processing services may retain it under their own logging and retention policies.
+_Avoid_: never stored, ephemeral data
+
 **Web Search Query**:
-The transient, minimum external-search terms needed to answer a Room AI Invocation. It may use the language best suited to the sought material and be derived from Room AI Context to resolve references, but excludes participant names, unrelated conversation, and sensitive information; if those cannot be excluded, no search occurs, and the query is never part of room history.
+The minimum external-search terms needed to answer a Room AI Invocation. It is Transient AI Data and may use the language best suited to the sought material or be derived from Room AI Context to resolve references, but excludes participant names, unrelated conversation, and sensitive information; if those cannot be excluded, no search occurs.
 _Avoid_: prompt, chat history, context dump
 
 **Web Search Evidence**:
-Transient, untrusted content returned by Room AI Web Search and used only as factual support for the current invocation. It never enters room history; medical, legal, and financial responses require authoritative evidence.
+Untrusted content returned by Room AI Web Search and used only as factual support for the current invocation. It is Transient AI Data; medical, legal, and financial responses require authoritative evidence.
 _Avoid_: instructions, persisted sources, verified truth
 
 **Web Search Failure Response**:
