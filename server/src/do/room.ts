@@ -180,6 +180,7 @@ export class Room extends DurableObject<Env> {
         id,
         authorType: "system",
         userId: null,
+        submissionId: null,
         type: "text",
         content,
         replyTo: null,
@@ -571,18 +572,54 @@ export class Room extends DurableObject<Env> {
           this.handleDisconnect(ws);
           return;
         }
-        const { type, content, replyTo } = clientMessage.data;
-        const data = await this.db
+        const { submissionId, type, content, replyTo } = clientMessage.data;
+        const inserted = await this.db
           .insert(messageTable)
           .values({
             authorType: "user",
             type,
             content,
             userId: meta.id,
+            submissionId,
             replyTo,
+          })
+          .onConflictDoNothing({
+            target: [messageTable.userId, messageTable.submissionId],
           })
           .returning()
           .then((i) => i[0]);
+        const data =
+          inserted ??
+          (await this.db
+            .select()
+            .from(messageTable)
+            .where(
+              and(
+                eq(messageTable.userId, meta.id),
+                eq(messageTable.submissionId, submissionId),
+              ),
+            )
+            .limit(1)
+            .then((rows) => rows[0]));
+        if (!data) return;
+
+        if (ws.readyState === WebSocket.OPEN) {
+          try {
+            ws.send(
+              gm({
+                type: "messageAcceptance",
+                data: { submissionId, message: toClientMessage(data) },
+              }),
+            );
+          } catch {
+            // Persistence already succeeded. A retry will return the same
+            // Acceptance through the idempotency key.
+          }
+        }
+
+        // A duplicate submission only needs the same Acceptance. All other
+        // effects belong to the first persistence. See ADR 0009.
+        if (!inserted) break;
         // Discovery ordering is a best-effort projection. A failed D1 update
         // must never turn an accepted Chat Message into a send failure.
         this.ctx.waitUntil(

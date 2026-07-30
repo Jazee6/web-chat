@@ -63,6 +63,13 @@ export const replyRefSchema = z
     message: "User replies require a userId",
   });
 
+export const messageSubmissionSchema = z.object({
+  submissionId: z.uuid(),
+  type: z.enum(["text", "image"]),
+  content: z.string(),
+  replyTo: replyRefSchema.optional(),
+});
+
 export const getRoomInfoSchema = z.object({
   id: z.string().min(1),
 });
@@ -117,11 +124,7 @@ export const clientMessageSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("join") }),
   z.object({
     type: z.literal("send"),
-    data: z.object({
-      type: z.enum(["text", "image"]),
-      content: z.string(),
-      replyTo: replyRefSchema.optional(),
-    }),
+    data: messageSubmissionSchema,
   }),
   z.object({
     type: z.literal("loadHistory"),

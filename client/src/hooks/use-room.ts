@@ -11,7 +11,13 @@ import { api, appName } from "@/lib/utils.ts";
 import { useQuery } from "@tanstack/react-query";
 import { useWebSocket } from "ahooks";
 import type { User } from "better-auth";
-import { type RefObject, useEffect, useRef, useState } from "react";
+import {
+  type RefObject,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from "react";
 import { toast } from "sonner";
 import {
   gm,
@@ -54,6 +60,7 @@ export function useRoom({
 
   const pingIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const roomRealtimeTotalRef = useRef(0);
+  const chatRef = useRef<ReturnType<typeof useRoomChat> | null>(null);
 
   const { data: roomInfo } = useQuery({
     queryKey: ["roomInfo", id],
@@ -96,25 +103,30 @@ export function useRoom({
         if (pingIntervalRef.current) {
           clearInterval(pingIntervalRef.current);
         }
+        chatRef.current?.handleDisconnect();
       },
       onMessage: (message) => {
         const m = JSON.parse(message.data) as ServerMessage;
         switch (m.type) {
           case "roomStats": {
-            chat.handleRoomStats(m.data);
+            chatRef.current?.handleRoomStats(m.data);
             break;
           }
           case "initHistory": {
-            chat.handleInitHistory(m.data);
+            chatRef.current?.handleInitHistory(m.data);
             break;
           }
           case "history": {
-            chat.handleHistory(m.data);
+            chatRef.current?.handleHistory(m.data);
             break;
           }
           case "message": {
-            chat.handleMessage(m.data);
+            chatRef.current?.handleMessage(m.data);
             notifications.notifyOnMessage(m.data);
+            break;
+          }
+          case "messageAcceptance": {
+            chatRef.current?.handleMessageAcceptance(m.data);
             break;
           }
           case "aiTyping": {
@@ -153,14 +165,17 @@ export function useRoom({
     loaderRef,
     userId: user.id,
     sendMessage,
+    readyState,
     fetchMissingUsers,
   });
+  useLayoutEffect(() => {
+    chatRef.current = chat;
+  }, [chat]);
 
   const { sendImages, sendSticker } = useRoomImages({
     userId: user.id,
     setChats: chat.setChats,
-    sendMessage,
-    readyState,
+    sendSubmission: chat.sendSubmission,
     requestStickToBottom: chat.requestStickToBottom,
   });
 
@@ -289,6 +304,7 @@ export function useRoom({
     onSend,
     setTyping,
     sendSticker,
+    retrySubmission: chat.retrySubmission,
     stickToBottom: chat.stickToBottom,
     unreadCount: chat.unreadCount,
     scrollToBottom: chat.scrollToBottom,

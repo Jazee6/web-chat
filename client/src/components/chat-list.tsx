@@ -27,7 +27,14 @@ import {
   Reply,
   TriangleAlert,
 } from "lucide-react";
-import { type ReactNode, Fragment, memo, useMemo, useState } from "react";
+import {
+  type ReactNode,
+  Fragment,
+  memo,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
 import Zoom from "react-medium-image-zoom";
 import "react-medium-image-zoom/dist/styles.css";
 import { toast } from "sonner";
@@ -71,12 +78,14 @@ const ImageWithFavorite = ({
   message,
   onFavorite,
   onReply,
+  canReply,
   children,
 }: {
   storageKey: string;
   message: UIChatMessage;
   onFavorite: (key: string) => void;
   onReply?: (message: UIChatMessage) => void;
+  canReply: boolean;
   children: ReactNode;
 }) => (
   <ContextMenu>
@@ -84,7 +93,10 @@ const ImageWithFavorite = ({
       {children}
     </ContextMenuTrigger>
     <ContextMenuContent>
-      <ContextMenuItem onClick={() => onReply?.(message)}>
+      <ContextMenuItem
+        disabled={!canReply}
+        onClick={() => canReply && onReply?.(message)}
+      >
         <Reply />
         <span>Reply</span>
       </ContextMenuItem>
@@ -205,15 +217,17 @@ const TextMessageContent = ({
   );
 };
 
-const localFileUrlCache = new WeakMap<File, string>();
-const getLocalFileUrl = (file: File) => {
-  let url = localFileUrlCache.get(file);
-  if (!url) {
-    url = URL.createObjectURL(file);
-    localFileUrlCache.set(file, url);
-  }
-  return url;
+const LocalChatImage = ({ file }: { file: File }) => {
+  const [src] = useState(() => URL.createObjectURL(file));
+
+  useEffect(() => {
+    return () => URL.revokeObjectURL(src);
+  }, [src]);
+
+  return <ChatImage src={src} alt={file.name} />;
 };
+
+const isReplyable = (message: UIChatMessage) => !message.submissionId;
 
 // Best-effort scroll + flash to a replied-to message. No-ops when the
 // antecedent isn't in the loaded DOM (paginated out) — the snapshot Quote
@@ -341,6 +355,7 @@ const ChatList = memo(
     aiTyping,
     onReply,
     onMention,
+    onRetry,
   }: {
     chats: UIChatMessage[];
     className?: string;
@@ -350,6 +365,7 @@ const ChatList = memo(
     aiTyping?: boolean;
     onReply?: (message: UIChatMessage) => void;
     onMention?: (name: string) => void;
+    onRetry?: (submissionId: string) => void;
   }) => {
     const favoriteSticker = useFavoriteSticker();
     const onFavoriteSticker = (key: string) => {
@@ -509,8 +525,9 @@ const ChatList = memo(
 
                               <div
                                 className={cn(
-                                  "flex gap-1 ani-slide-top min-w-0",
+                                  "flex gap-1 ani-slide-top min-w-0 transition-opacity",
                                   isMe ? "flex-row-reverse" : "",
+                                  c.sendState === "sending" && "opacity-60",
                                 )}
                               >
                                 {c.type === "text" && (
@@ -545,21 +562,16 @@ const ChatList = memo(
                                                   message={c}
                                                   onFavorite={onFavoriteSticker}
                                                   onReply={onReply}
+                                                  canReply={isReplyable(c)}
                                                 >
-                                                  <ChatImage
-                                                    src={getLocalFileUrl(file)}
-                                                    alt={file.name}
-                                                  />
+                                                  <LocalChatImage file={file} />
                                                 </ImageWithFavorite>
                                               ) : (
                                                 <div
                                                   className="relative shrink-0"
                                                   key={`${file.name}_${index}`}
                                                 >
-                                                  <ChatImage
-                                                    src={getLocalFileUrl(file)}
-                                                    alt={file.name}
-                                                  />
+                                                  <LocalChatImage file={file} />
 
                                                   {isUploading && (
                                                     <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
@@ -584,6 +596,7 @@ const ChatList = memo(
                                               message={c}
                                               onFavorite={onFavoriteSticker}
                                               onReply={onReply}
+                                              canReply={isReplyable(c)}
                                             >
                                               <ChatImage
                                                 src={`${import.meta.env.VITE_API_URL}/room/images/${i}`}
@@ -592,14 +605,19 @@ const ChatList = memo(
                                             </ImageWithFavorite>
                                           ))}
                                     </div>
-
-                                    {c.sendFailed && (
-                                      <div className="flex items-center gap-1 self-end text-xs text-destructive">
-                                        <CircleAlert className="size-3.5 shrink-0" />
-                                        <span>未送达</span>
-                                      </div>
-                                    )}
                                   </div>
+                                )}
+
+                                {c.sendState === "failed" && c.submissionId && (
+                                  <button
+                                    type="button"
+                                    title="发送失败，点击重试"
+                                    aria-label="发送失败，点击重试"
+                                    className="self-center shrink-0 rounded-full text-destructive transition hover:brightness-75 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                                    onClick={() => onRetry?.(c.submissionId!)}
+                                  >
+                                    <CircleAlert className="size-4" />
+                                  </button>
                                 )}
 
                                 <div className="text-muted-foreground brightness-75 text-xs self-end opacity-0 peer-hover:opacity-100 transition-opacity">
@@ -617,7 +635,10 @@ const ChatList = memo(
                             </ContextMenuTrigger>
 
                             <ContextMenuContent>
-                              <ContextMenuItem onClick={() => onReply?.(c)}>
+                              <ContextMenuItem
+                                disabled={!isReplyable(c)}
+                                onClick={() => isReplyable(c) && onReply?.(c)}
+                              >
                                 <Reply />
                                 <span>Reply</span>
                               </ContextMenuItem>

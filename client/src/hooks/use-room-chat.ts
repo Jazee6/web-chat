@@ -1,23 +1,30 @@
 import { decideScrollAction } from "@/lib/decide-scroll-action.ts";
 import {
+  mergeInitialHistory,
+  reconcileMessageAcceptance,
+} from "@/lib/message-submissions.ts";
+import {
   type Dispatch,
   type RefObject,
   type SetStateAction,
   useCallback,
   useEffect,
-  useEffectEvent,
+  useLayoutEffect,
   useRef,
   useState,
 } from "react";
 import {
   type ChatMessage,
   gm,
+  type MessageAcceptance,
+  type MessageSubmission,
   type ReplyRef,
   type RoomStats,
   type UIChatMessage,
 } from "web-chat-share";
 
 const STICK_THRESHOLD_PX = 256;
+const ACCEPTANCE_TIMEOUT_MS = 10_000;
 
 type UseRoomChatParams = {
   chatListRef: RefObject<HTMLDivElement | null>;
@@ -25,6 +32,7 @@ type UseRoomChatParams = {
   loaderRef: RefObject<HTMLDivElement | null>;
   userId: string;
   sendMessage: (msg: string) => void;
+  readyState: number;
   fetchMissingUsers: (ids: string[]) => void;
 };
 
@@ -34,10 +42,11 @@ type UseRoomChatReturn = {
   hasMore: boolean;
   roomStats: RoomStats | undefined;
   setChats: Dispatch<SetStateAction<UIChatMessage[]>>;
-  addChatMessage: (
-    msg: Omit<UIChatMessage, "id" | "authorType" | "userId" | "createdAt">,
-  ) => void;
   sendText: (content: string, replyTo?: ReplyRef) => void;
+  sendSubmission: (submission: MessageSubmission) => void;
+  retrySubmission: (submissionId: string) => void;
+  handleMessageAcceptance: (data: MessageAcceptance) => void;
+  handleDisconnect: () => void;
   handleInitHistory: (data: ChatMessage[]) => void;
   handleHistory: (data: ChatMessage[]) => void;
   handleMessage: (data: ChatMessage) => void;
@@ -54,6 +63,7 @@ export function useRoomChat({
   loaderRef,
   userId,
   sendMessage,
+  readyState,
   fetchMissingUsers,
 }: UseRoomChatParams): UseRoomChatReturn {
   const [isLoading, setIsLoading] = useState(true);
@@ -70,8 +80,22 @@ export function useRoomChat({
   const unreadCountRef = useRef(0);
   const pendingUserIdsRef = useRef<Set<string>>(new Set());
   const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const readyStateRef = useRef(readyState);
+  const pendingSubmissionsRef = useRef(
+    new Map<
+      string,
+      {
+        submission: MessageSubmission;
+        timeoutId: ReturnType<typeof setTimeout> | null;
+      }
+    >(),
+  );
 
-  const setStick = useEffectEvent((next: boolean) => {
+  useLayoutEffect(() => {
+    readyStateRef.current = readyState;
+  }, [readyState]);
+
+  const setStick = useCallback((next: boolean) => {
     if (stickToBottomRef.current === next) return;
     stickToBottomRef.current = next;
     setStickToBottom(next);
@@ -79,20 +103,21 @@ export function useRoomChat({
       unreadCountRef.current = 0;
       setUnreadCount(0);
     }
-  });
+  }, []);
 
-  const scrollToBottom = useEffectEvent(
+  const scrollToBottom = useCallback(
     (behavior: ScrollBehavior = "smooth") => {
       const el = chatListRef.current;
       if (!el) return;
       el.scrollTo({ top: el.scrollHeight, behavior });
       setStick(true);
     },
+    [chatListRef, setStick],
   );
 
   const requestStickToBottom = useCallback(() => {
     setStick(true);
-  }, []);
+  }, [setStick]);
 
   // Debounced fetchMissingUsers
   const debouncedFetchMissingUsers = useCallback(
@@ -112,12 +137,18 @@ export function useRoomChat({
     [fetchMissingUsers],
   );
 
-  // Cleanup debounce timer on unmount
+  // Pending submissions are intentionally page-local. Clear their timers when
+  // this room unmounts rather than carrying them across a refresh. See ADR 0009.
   useEffect(() => {
+    const pendingSubmissions = pendingSubmissionsRef.current;
     return () => {
       if (debounceTimerRef.current) {
         clearTimeout(debounceTimerRef.current);
       }
+      pendingSubmissions.forEach(({ timeoutId }) => {
+        if (timeoutId) clearTimeout(timeoutId);
+      });
+      pendingSubmissions.clear();
     };
   }, []);
 
@@ -137,7 +168,7 @@ export function useRoomChat({
       if (data.length === 0) {
         return;
       }
-      setChats(data);
+      setChats((chats) => mergeInitialHistory(chats, data));
       oldestChatTimeRef.current = data[0].createdAt;
       fetchMissingUsers(
         data.flatMap((c) =>
@@ -160,7 +191,10 @@ export function useRoomChat({
         previousScrollHeightRef.current = chatListRef.current.scrollHeight;
         isLoadingHistoryRef.current = true;
       }
-      setChats((chats) => [...data, ...chats]);
+      setChats((chats) => {
+        const existingIds = new Set(chats.map((chat) => chat.id));
+        return [...data.filter((chat) => !existingIds.has(chat.id)), ...chats];
+      });
       oldestChatTimeRef.current = data[0].createdAt;
       debouncedFetchMissingUsers(
         data.flatMap((c) =>
@@ -173,7 +207,9 @@ export function useRoomChat({
 
   const handleMessage = useCallback(
     (data: ChatMessage) => {
-      setChats((chats) => [...chats, data]);
+      setChats((chats) =>
+        chats.some((chat) => chat.id === data.id) ? chats : [...chats, data],
+      );
       if (data.authorType === "user" && data.userId) {
         debouncedFetchMissingUsers([data.userId]);
       }
@@ -206,7 +242,7 @@ export function useRoomChat({
 
     el.addEventListener("scroll", onScroll, { passive: true });
     return () => el.removeEventListener("scroll", onScroll);
-  }, [chatListRef, isLoading]);
+  }, [chatListRef, isLoading, setStick]);
 
   // ResizeObserver on the inner content (its height tracks content growth;
   // the scroll container's box stays the same size).
@@ -272,41 +308,111 @@ export function useRoomChat({
     };
   }, [isLoading, loaderRef, sendMessage, hasMore]);
 
-  const addChatMessage = useCallback(
-    (
-      msg: Omit<UIChatMessage, "id" | "authorType" | "userId" | "createdAt">,
-    ) => {
-      setStick(true);
-      setChats((prev) => [
-        ...prev,
-        {
-          ...msg,
-          id: crypto.randomUUID(),
-          authorType: "user",
-          userId,
-          createdAt: new Date().toISOString(),
-        },
-      ]);
+  const markSubmissionFailed = useCallback((submissionId: string) => {
+    const pending = pendingSubmissionsRef.current.get(submissionId);
+    if (pending?.timeoutId) clearTimeout(pending.timeoutId);
+    if (pending) pending.timeoutId = null;
+    setChats((chats) =>
+      chats.map((chat) =>
+        chat.submissionId === submissionId
+          ? { ...chat, sendState: "failed" }
+          : chat,
+      ),
+    );
+  }, []);
+
+  const sendSubmission = useCallback(
+    (submission: MessageSubmission) => {
+      const previous = pendingSubmissionsRef.current.get(
+        submission.submissionId,
+      );
+      if (previous?.timeoutId) clearTimeout(previous.timeoutId);
+      pendingSubmissionsRef.current.set(submission.submissionId, {
+        submission,
+        timeoutId: null,
+      });
+
+      setChats((chats) =>
+        chats.map((chat) =>
+          chat.submissionId === submission.submissionId
+            ? { ...chat, sendState: "sending" }
+            : chat,
+        ),
+      );
+
+      if (readyStateRef.current !== WebSocket.OPEN) {
+        markSubmissionFailed(submission.submissionId);
+        return;
+      }
+
+      try {
+        sendMessage(gm({ type: "send", data: submission }));
+      } catch {
+        markSubmissionFailed(submission.submissionId);
+        return;
+      }
+
+      const pending = pendingSubmissionsRef.current.get(
+        submission.submissionId,
+      );
+      if (!pending) return;
+      pending.timeoutId = setTimeout(
+        () => markSubmissionFailed(submission.submissionId),
+        ACCEPTANCE_TIMEOUT_MS,
+      );
     },
-    [userId],
+    [markSubmissionFailed, sendMessage],
   );
+
+  const retrySubmission = useCallback(
+    (submissionId: string) => {
+      const pending = pendingSubmissionsRef.current.get(submissionId);
+      if (pending) sendSubmission(pending.submission);
+    },
+    [sendSubmission],
+  );
+
+  const handleMessageAcceptance = useCallback((data: MessageAcceptance) => {
+    const pending = pendingSubmissionsRef.current.get(data.submissionId);
+    if (pending?.timeoutId) clearTimeout(pending.timeoutId);
+    pendingSubmissionsRef.current.delete(data.submissionId);
+    setChats((chats) => reconcileMessageAcceptance(chats, data));
+  }, []);
+
+  const handleDisconnect = useCallback(() => {
+    pendingSubmissionsRef.current.forEach((pending, submissionId) => {
+      if (pending.timeoutId) clearTimeout(pending.timeoutId);
+      pending.timeoutId = null;
+      markSubmissionFailed(submissionId);
+    });
+  }, [markSubmissionFailed]);
 
   const sendText = useCallback(
     (content: string, replyTo?: ReplyRef) => {
-      addChatMessage({ type: "text", content, replyTo });
-      sendMessage(
-        gm({
-          type: "send",
-          data: { type: "text", content, replyTo },
-        }),
-      );
+      const submissionId = crypto.randomUUID();
+      setStick(true);
+      setChats((chats) => [
+        ...chats,
+        {
+          id: submissionId,
+          submissionId,
+          sendState: "sending",
+          authorType: "user",
+          userId,
+          type: "text",
+          content,
+          replyTo,
+          createdAt: new Date().toISOString(),
+        },
+      ]);
+      sendSubmission({ submissionId, type: "text", content, replyTo });
     },
-    [addChatMessage, sendMessage],
+    [sendSubmission, setStick, userId],
   );
 
   const scrollToBottomSmooth = useCallback(() => {
     scrollToBottom("smooth");
-  }, []);
+  }, [scrollToBottom]);
 
   return {
     chats,
@@ -314,8 +420,11 @@ export function useRoomChat({
     hasMore,
     roomStats,
     setChats,
-    addChatMessage,
     sendText,
+    sendSubmission,
+    retrySubmission,
+    handleMessageAcceptance,
+    handleDisconnect,
     handleInitHistory,
     handleHistory,
     handleMessage,

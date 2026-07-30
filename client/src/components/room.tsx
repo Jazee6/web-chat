@@ -90,6 +90,7 @@ const Room = ({
     onSend,
     setTyping,
     sendSticker,
+    retrySubmission,
     stickToBottom,
     unreadCount,
     scrollToBottom,
@@ -270,9 +271,11 @@ const Room = ({
                       users={users}
                       roomStats={roomStats}
                       aiTyping={aiTyping}
-                      onReply={(message: UIChatMessage) =>
-                        setReplyTarget(toReplyRef(message))
-                      }
+                      onRetry={retrySubmission}
+                      onReply={(message: UIChatMessage) => {
+                        if (message.submissionId) return;
+                        setReplyTarget(toReplyRef(message));
+                      }}
                       onMention={(name) =>
                         setMentionRequest((current) => ({
                           id: (current?.id ?? 0) + 1,

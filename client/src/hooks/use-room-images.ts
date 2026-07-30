@@ -1,13 +1,16 @@
 import { api, calculateSHA256, convertImageToWebP } from "@/lib/utils.ts";
 import ky from "ky";
 import { type Dispatch, type SetStateAction } from "react";
-import { gm, type ReplyRef, type UIChatMessage } from "web-chat-share";
+import type {
+  MessageSubmission,
+  ReplyRef,
+  UIChatMessage,
+} from "web-chat-share";
 
 type UseRoomImagesParams = {
   userId: string;
   setChats: Dispatch<SetStateAction<UIChatMessage[]>>;
-  sendMessage: (msg: string) => void;
-  readyState: number;
+  sendSubmission: (submission: MessageSubmission) => void;
   requestStickToBottom: () => void;
 };
 
@@ -17,39 +20,38 @@ type UseRoomImagesReturn = {
     textMessage?: string,
     replyTo?: ReplyRef,
   ) => Promise<void>;
-  // Sticker fast path: the image is already in storage (keyed by sha256), so
-  // skip WebP conversion and re-upload entirely — just optimistically append
-  // an image message carrying the key and fire the WS send. See ADR 0004.
+  // Sticker fast path: the image already exists under its storage key. See
+  // ADR 0004; retries reuse this key through the Message Submission registry.
   sendSticker: (key: string) => void;
 };
 
 export function useRoomImages({
   userId,
   setChats,
-  sendMessage,
-  readyState,
+  sendSubmission,
   requestStickToBottom,
 }: UseRoomImagesParams): UseRoomImagesReturn {
-  // A reply attaches to exactly one message: the text caption if present,
-  // otherwise the image. Both the optimistic local entry and the wire send
-  // carry it, so the sender sees the Quote immediately. See ADR 0003.
+  // A Reply attaches to exactly one message: the text caption if present,
+  // otherwise the image. Image and caption are independent submissions.
   const sendImages = async (
     rawImages: File[],
     textMessage?: string,
     replyTo?: ReplyRef,
   ) => {
-    const messageId = crypto.randomUUID();
+    const imageSubmissionId = crypto.randomUUID();
+    const textSubmissionId = textMessage ? crypto.randomUUID() : undefined;
     const replyOnText = !!textMessage;
 
     requestStickToBottom();
-    setChats((prev) => {
-      const next = [
-        ...prev,
+    setChats((previous) => {
+      const next: UIChatMessage[] = [
+        ...previous,
         {
-          id: messageId,
-          authorType: "user" as const,
+          id: imageSubmissionId,
+          submissionId: imageSubmissionId,
+          authorType: "user",
           userId,
-          type: "image" as const,
+          type: "image",
           content: "",
           localFiles: rawImages.map((file) => ({
             file,
@@ -59,12 +61,14 @@ export function useRoomImages({
           createdAt: new Date().toISOString(),
         },
       ];
-      if (textMessage) {
+      if (textMessage && textSubmissionId) {
         next.push({
-          id: crypto.randomUUID(),
-          authorType: "user" as const,
+          id: textSubmissionId,
+          submissionId: textSubmissionId,
+          sendState: "sending",
+          authorType: "user",
           userId,
-          type: "text" as const,
+          type: "text",
           content: textMessage,
           replyTo,
           createdAt: new Date().toISOString(),
@@ -73,155 +77,152 @@ export function useRoomImages({
       return next;
     });
 
+    // Preserve image-before-caption ordering when images succeed, while still
+    // submitting the independent caption if every upload fails.
+    const submitText = () => {
+      if (textMessage && textSubmissionId) {
+        sendSubmission({
+          submissionId: textSubmissionId,
+          type: "text",
+          content: textMessage,
+          replyTo,
+        });
+      }
+    };
+
+    const convertedResults = await Promise.allSettled(
+      rawImages.map(convertImageToWebP),
+    );
+    const converted: {
+      originalIndex: number;
+      file: File;
+    }[] = [];
+    convertedResults.forEach((result, index) => {
+      if (result.status === "fulfilled") {
+        converted.push({ originalIndex: index, file: result.value });
+      }
+    });
+
+    const hashResults = await Promise.allSettled(
+      converted.map(async ({ originalIndex, file }) => ({
+        originalIndex,
+        file,
+        key: await calculateSHA256(file),
+      })),
+    );
+    const hashed = hashResults.flatMap((result) =>
+      result.status === "fulfilled" ? [result.value] : [],
+    );
+
+    const failedIndexes = new Set<number>();
+    convertedResults.forEach((result, index) => {
+      if (result.status === "rejected") failedIndexes.add(index);
+    });
+    hashResults.forEach((result, index) => {
+      if (result.status === "rejected") {
+        failedIndexes.add(converted[index].originalIndex);
+      }
+    });
+
+    let presigned: { url: string | null; key: string }[];
     try {
-      const settled = await Promise.allSettled(
-        rawImages.map(convertImageToWebP),
-      );
-      const succeeded: { originalIndex: number; converted: File }[] = [];
-
-      settled.forEach((result, i) => {
-        if (result.status === "fulfilled") {
-          succeeded.push({ originalIndex: i, converted: result.value });
-        } else {
-          setChats((prev) =>
-            prev.map((c) =>
-              c.id === messageId
-                ? {
-                    ...c,
-                    localFiles: c.localFiles?.map((f, idx) =>
-                      idx === i
-                        ? { ...f, isUploading: false, uploadFailed: true }
-                        : f,
-                    ),
-                  }
-                : c,
-            ),
-          );
-        }
-      });
-
-      if (succeeded.length === 0) return;
-
-      const converted = succeeded.map((r) => r.converted);
-      const sha256List = await Promise.all(converted.map(calculateSHA256));
-
-      const presigned = await api
-        .post<{ url: string | null; key: string }[]>("room/upload/presigned", {
-          json: { sha256List },
-        })
+      if (hashed.length === 0) throw new Error("No images ready to upload");
+      presigned = await api
+        .post<
+          { url: string | null; key: string }[]
+        >("room/upload/presigned", { json: { sha256List: hashed.map(({ key }) => key) } })
         .json();
-
-      await Promise.all(
-        presigned.map(async ({ url, key }, i) => {
-          if (url) {
-            await ky.put(url, { body: converted[i] });
-          }
-          // Stamp the storage key onto the localFile so the sender can
-          // favorite/copy their own just-sent image — the optimistic message's
-          // `content` stays empty (server doesn't echo to the sender). See ADR 0004.
-          setChats((prev) =>
-            prev.map((c) =>
-              c.id === messageId
-                ? {
-                    ...c,
-                    localFiles: c.localFiles?.map((f, idx) =>
-                      idx === succeeded[i].originalIndex
-                        ? { ...f, isUploading: false, key }
-                        : f,
-                    ),
-                  }
-                : c,
-            ),
-          );
-        }),
-      );
-
-      if (readyState !== WebSocket.OPEN) {
-        setChats((prev) =>
-          prev.map((c) =>
-            c.id === messageId ? { ...c, sendFailed: true } : c,
-          ),
-        );
-        return;
-      }
-
-      sendMessage(
-        gm({
-          type: "send",
-          data: {
-            type: "image",
-            content: JSON.stringify(sha256List),
-            replyTo: replyOnText ? undefined : replyTo,
-          },
-        }),
-      );
-
-      if (textMessage) {
-        sendMessage(
-          gm({
-            type: "send",
-            data: {
-              type: "text",
-              content: textMessage,
-              replyTo,
-            },
-          }),
-        );
-      }
     } catch {
-      setChats((prev) =>
-        prev.map((c) =>
-          c.id === messageId
+      hashed.forEach(({ originalIndex }) => failedIndexes.add(originalIndex));
+      setChats((previous) =>
+        previous.map((chat) =>
+          chat.id === imageSubmissionId
             ? {
-                ...c,
-                localFiles: c.localFiles?.map((f) =>
-                  f.isUploading
-                    ? { ...f, isUploading: false, uploadFailed: true }
-                    : f,
+                ...chat,
+                localFiles: chat.localFiles?.map((localFile, index) =>
+                  failedIndexes.has(index)
+                    ? {
+                        ...localFile,
+                        isUploading: false,
+                        uploadFailed: true,
+                      }
+                    : localFile,
                 ),
               }
-            : c,
+            : chat,
         ),
       );
-    }
-  };
-
-  // Sticker fast path. The bytes already exist in object storage under `key`,
-  // so there is nothing to upload: append an optimistic image message and send
-  // the wire message. If the socket isn't OPEN, mark the message send-failed
-  // (the bytes exist but no peer will receive them) — mirroring sendImages.
-  // See ADR 0004.
-  const sendSticker = (key: string) => {
-    const messageId = crypto.randomUUID();
-    requestStickToBottom();
-    setChats((prev) => [
-      ...prev,
-      {
-        id: messageId,
-        authorType: "user" as const,
-        userId,
-        type: "image" as const,
-        content: JSON.stringify([key]),
-        createdAt: new Date().toISOString(),
-      },
-    ]);
-
-    if (readyState !== WebSocket.OPEN) {
-      setChats((prev) =>
-        prev.map((c) => (c.id === messageId ? { ...c, sendFailed: true } : c)),
-      );
+      submitText();
       return;
     }
 
-    sendMessage(
-      gm({
-        type: "send",
-        data: {
-          type: "image",
-          content: JSON.stringify([key]),
-        },
+    const uploadResults = await Promise.allSettled(
+      presigned.map(async ({ url, key }, index) => {
+        if (url) await ky.put(url, { body: hashed[index].file });
+        return { originalIndex: hashed[index].originalIndex, key };
       }),
     );
+    const uploaded = uploadResults.flatMap((result, index) => {
+      if (result.status === "fulfilled") return [result.value];
+      failedIndexes.add(hashed[index].originalIndex);
+      return [];
+    });
+    const uploadedByIndex = new Map(
+      uploaded.map(({ originalIndex, key }) => [originalIndex, key]),
+    );
+    const storageKeys = uploaded.map(({ key }) => key);
+    const content = JSON.stringify(storageKeys);
+
+    setChats((previous) =>
+      previous.map((chat) =>
+        chat.id === imageSubmissionId
+          ? {
+              ...chat,
+              content,
+              localFiles: chat.localFiles?.map((localFile, index) => {
+                const key = uploadedByIndex.get(index);
+                return key
+                  ? { ...localFile, isUploading: false, key }
+                  : {
+                      ...localFile,
+                      isUploading: false,
+                      uploadFailed: true,
+                    };
+              }),
+            }
+          : chat,
+      ),
+    );
+
+    if (storageKeys.length > 0) {
+      sendSubmission({
+        submissionId: imageSubmissionId,
+        type: "image",
+        content,
+        replyTo: replyOnText ? undefined : replyTo,
+      });
+    }
+    submitText();
+  };
+
+  const sendSticker = (key: string) => {
+    const submissionId = crypto.randomUUID();
+    const content = JSON.stringify([key]);
+    requestStickToBottom();
+    setChats((previous) => [
+      ...previous,
+      {
+        id: submissionId,
+        submissionId,
+        sendState: "sending",
+        authorType: "user",
+        userId,
+        type: "image",
+        content,
+        createdAt: new Date().toISOString(),
+      },
+    ]);
+    sendSubmission({ submissionId, type: "image", content });
   };
 
   return { sendImages, sendSticker };

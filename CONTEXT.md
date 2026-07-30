@@ -81,6 +81,14 @@ _Avoid_: bot message, announcement
 A single authored utterance in a room, identified by a server-generated id. A user may send text or images; the Room AI sends text only. Its author type explicitly distinguishes a user from the Room AI.
 _Avoid_: post, entry
 
+**Message Submission**:
+A user's request to add one authored utterance to room history, identified by a client-generated id that remains stable across retries. Repeating it by the same user in the same room must resolve to the same Chat Message.
+_Avoid_: Chat Message (that is the accepted, persistent utterance), send attempt
+
+**Message Acceptance**:
+The server's confirmation that a Message Submission has become a persistent Chat Message, including its server-generated id. It is the boundary at which a user message is considered sent.
+_Avoid_: delivery receipt (it does not confirm that another client rendered the message), WebSocket send
+
 **User Mention**:
 A visible, standalone `@` reference matching a known user's full display name in a text Chat Message, whether typed or inserted through the user's message avatar. It is presentational only and does not notify the referenced user; a Room AI Invocation remains the distinct behavioral meaning of mentioning the Room AI.
 _Avoid_: notification, alert, tag
@@ -103,9 +111,13 @@ itself: every Reply carries a Quote, and clicking the Quote jumps to the anteced
 is a `[图片]` text label, or `[图片] x N` for a multi-image antecedent — never the image itself.
 _Avoid_: reply (the relationship), citation
 
-### Image lifecycle states
+### Sending and image lifecycle states
 
-These are three distinct states. Calling all of them "上传失败" causes confusion — pick the right one.
+These are distinct states. Calling all of them "上传失败" causes confusion — pick the right one.
+
+**Sending**:
+A Message Submission is awaiting Message Acceptance. This state applies to every user-authored message type.
+_Avoid_: uploading (that is the per-file image state), delivered
 
 **Uploading**:
 A local file is being converted to WebP and/or `PUT` to object storage. Per-file, not per-message. Rendered as a spinner
@@ -117,9 +129,8 @@ Per-file. The rest of the batch may still succeed and be sent. Rendered as a war
 _Avoid_: send failed (different concept — see below)
 
 **Send Failed**:
-The image bytes were uploaded successfully, but the WebSocket was not `OPEN` when the message was about to be
-dispatched, so the recipient never received it. Per-message, not per-file. Implies the bytes exist in storage but no
-peer knows about them.
+A Message Submission has not obtained Message Acceptance and requires an idempotent retry. Per-message, not per-file,
+and applies to every user-authored message type; it does not prove that the Chat Message is absent from room history.
 _Avoid_: upload failed (different concept — see above)
 
 ### Stickers

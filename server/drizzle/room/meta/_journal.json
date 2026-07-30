@@ -29,6 +29,13 @@
       "when": 1784776768952,
       "tag": "0003_material_demogoblin",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "6",
+      "when": 1785416374372,
+      "tag": "0004_yummy_gateway",
+      "breakpoints": true
     }
   ]
 }

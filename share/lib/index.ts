@@ -37,20 +37,33 @@ export interface ChatMessage {
 }
 
 export interface UIChatMessage extends ChatMessage {
+  // Client-only correlation for a Message Submission. Removed when the full
+  // server Chat Message replaces the optimistic entry. See ADR 0009.
+  submissionId?: string;
+  sendState?: "sending" | "failed";
   localFiles?: {
     file: File;
     isUploading: boolean;
     // Per-file: WebP conversion or the PUT to object storage failed. The rest
-    // of the batch may still succeed. Distinct from `sendFailed` (per-message).
+    // of the batch may still succeed. Distinct from `sendState` (per-message).
     // See CONTEXT.md "Upload Failed" vs "Send Failed".
     uploadFailed?: boolean;
     // The storage key (sha256) once the upload has landed. Present only after a
-    // successful PUT — lets the sender favorite/copy their own just-sent image
-    // even though the optimistic message's `content` stays empty (the server
-    // doesn't echo back to the sender). See ADR 0004.
+    // successful PUT. See ADR 0004.
     key?: string;
   }[];
-  sendFailed?: boolean;
+}
+
+export interface MessageSubmission {
+  submissionId: string;
+  type: "text" | "image";
+  content: string;
+  replyTo?: ReplyRef;
+}
+
+export interface MessageAcceptance {
+  submissionId: string;
+  message: ChatMessage;
 }
 
 // A Sticker is an image a user has favorited from chat for quick reuse. It
@@ -116,6 +129,10 @@ export type ServerMessage =
       data: ChatMessage;
     }
   | {
+      type: "messageAcceptance";
+      data: MessageAcceptance;
+    }
+  | {
       type: "aiTyping";
       data: { active: boolean };
     }
@@ -143,11 +160,7 @@ export type ClientMessage =
     }
   | {
       type: "send";
-      data: {
-        type: "text" | "image";
-        content: string;
-        replyTo?: ReplyRef;
-      };
+      data: MessageSubmission;
     }
   | {
       type: "loadHistory";
