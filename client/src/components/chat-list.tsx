@@ -399,7 +399,7 @@ const ChatList = memo(
           currentGroup.userId !== c.userId
         ) {
           currentGroup = {
-            id: c.id,
+            id: c.renderKey ?? c.submissionId ?? c.id,
             authorType: c.authorType,
             userId: c.userId,
             messages: [c],
@@ -505,7 +505,9 @@ const ChatList = memo(
                     <div className="flex flex-col gap-1 min-w-0">
                       {group.messages.map((c) => {
                         return (
-                          <ContextMenu key={c.id}>
+                          <ContextMenu
+                            key={c.renderKey ?? c.submissionId ?? c.id}
+                          >
                             <ContextMenuTrigger
                               render={
                                 <div

@@ -37,6 +37,9 @@ export interface ChatMessage {
 }
 
 export interface UIChatMessage extends ChatMessage {
+  // Stable across optimistic-to-canonical reconciliation so React does not
+  // remount the message and replay its entrance animation.
+  renderKey?: string;
   // Client-only correlation for a Message Submission. Removed when the full
   // server Chat Message replaces the optimistic entry. See ADR 0009.
   submissionId?: string;

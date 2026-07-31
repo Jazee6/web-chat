@@ -35,7 +35,11 @@ describe("Message Acceptance reconciliation", () => {
         submissionId: "submission-id",
         message: canonical,
       }),
-    ).toEqual([message("before"), canonical, message("after")]);
+    ).toEqual([
+      message("before"),
+      { ...canonical, renderKey: "submission-id" },
+      message("after"),
+    ]);
   });
 
   test("removes a canonical duplicate already loaded through history", () => {
@@ -56,6 +60,25 @@ describe("Message Acceptance reconciliation", () => {
     ).toEqual([canonical]);
   });
 
+  test("keeps an existing canonical message mounted when removing its optimistic duplicate", () => {
+    const canonical = message("server-id", {
+      content: "accepted",
+      renderKey: "existing-render-key",
+    });
+    const optimistic = message("submission-id", {
+      submissionId: "submission-id",
+      sendState: "sending",
+    });
+
+    const result = reconcileMessageAcceptance([canonical, optimistic], {
+      submissionId: "submission-id",
+      message: message("server-id", { content: "accepted" }),
+    });
+
+    expect(result[0]).toBe(canonical);
+    expect(result).toEqual([canonical]);
+  });
+
   test("treats duplicate and late acceptances idempotently", () => {
     const canonical = message("server-id", { content: "accepted" });
     expect(
@@ -64,6 +87,26 @@ describe("Message Acceptance reconciliation", () => {
         message: canonical,
       }),
     ).toEqual([canonical]);
+  });
+
+  test("preserves the optimistic render key across duplicate acceptances", () => {
+    const canonical = message("server-id", { content: "accepted" });
+    const accepted = reconcileMessageAcceptance(
+      [
+        message("submission-id", {
+          submissionId: "submission-id",
+          sendState: "sending",
+        }),
+      ],
+      { submissionId: "submission-id", message: canonical },
+    );
+
+    expect(
+      reconcileMessageAcceptance(accepted, {
+        submissionId: "submission-id",
+        message: canonical,
+      }),
+    ).toEqual([{ ...canonical, renderKey: "submission-id" }]);
   });
 });
 
