@@ -1,0 +1,47 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "web-chat-test",
+  "main": "src/index.ts",
+  "compatibility_date": "2025-12-19",
+  "compatibility_flags": ["nodejs_compat"],
+  "vars": {
+    "SITE_URL": "https://chat.test",
+    "BETTER_AUTH_URL": "https://server.test",
+    "BETTER_AUTH_SECRET": "test-only-secret-with-at-least-32-characters",
+  },
+  "d1_databases": [
+    {
+      "binding": "web_chat",
+      "database_name": "web-chat-test",
+      "database_id": "00000000-0000-0000-0000-000000000000",
+      "migrations_dir": "drizzle/d1",
+    },
+  ],
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "ROOM",
+        "class_name": "Room",
+      },
+    ],
+  },
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_sqlite_classes": ["Room"],
+    },
+  ],
+  "r2_buckets": [
+    {
+      "binding": "FILE",
+      "bucket_name": "web-chat-test",
+    },
+  ],
+  "rules": [
+    {
+      "type": "Text",
+      "globs": ["**/*.sql"],
+      "fallthrough": true,
+    },
+  ],
+}

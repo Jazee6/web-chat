@@ -98,7 +98,14 @@ const RoomSettingsDialog = ({
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Room settings</DialogTitle>
-          <DialogDescription>{roomInfo.name}</DialogDescription>
+          <DialogDescription>
+            <span className="block">{roomInfo.name}</span>
+            <span className="mt-1 block">
+              Every room with no successfully accepted user messages for 30
+              consecutive days is permanently deleted, including its message
+              history.
+            </span>
+          </DialogDescription>
         </DialogHeader>
 
         <FieldGroup>

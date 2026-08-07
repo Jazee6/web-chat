@@ -19,6 +19,12 @@ import { createWorkersAI } from "workers-ai-provider";
 import migrations from "../../drizzle/room/migrations.js";
 import { createExaWebSearch } from "../lib/exa-web-search";
 import {
+  backfillMessageImages,
+  parseImageKeys,
+  promoteImageReservations,
+  reserveImageAssets,
+} from "../lib/image-lifecycle";
+import {
   getRejectedSubmissionId,
   getVisibleSubmissionId,
   isSameSubmissionPayload,
@@ -610,6 +616,24 @@ export class Room extends DurableObject<Env> {
           return;
         }
         const { submissionId, type, content, replyTo } = clientMessage.data;
+        const imageKeys = type === "image" ? parseImageKeys(content) : [];
+        if (type === "image") {
+          const reservation = await reserveImageAssets(this.env, {
+            roomId: this.ctx.id.toString(),
+            userId: meta.id,
+            submissionId,
+            keys: imageKeys,
+          });
+          if (reservation === "conflict") {
+            this.sendMessageRejection(ws, submissionId, "submission_conflict");
+            break;
+          }
+          if (reservation === "missing") {
+            this.sendMessageRejection(ws, submissionId, "invalid_submission");
+            break;
+          }
+          if (this.deleted) break;
+        }
         const inserted = await this.db
           .insert(messageTable)
           .values({
@@ -625,6 +649,7 @@ export class Room extends DurableObject<Env> {
           })
           .returning()
           .then((i) => i[0]);
+        if (this.deleted) break;
         const data =
           inserted ??
           (await this.db
@@ -638,12 +663,29 @@ export class Room extends DurableObject<Env> {
             )
             .limit(1)
             .then((rows) => rows[0]));
+        if (this.deleted) break;
         if (!data) return;
 
         if (!isSameSubmissionPayload(data, clientMessage.data)) {
           this.sendMessageRejection(ws, submissionId, "submission_conflict");
           break;
         }
+
+        if (
+          type === "image" &&
+          !(await promoteImageReservations(this.env, {
+            roomId: this.ctx.id.toString(),
+            userId: meta.id,
+            submissionId,
+            messageId: data.id,
+            imageCount: imageKeys.length,
+          }))
+        ) {
+          // The reservation still protects the bytes. A retry with the same
+          // submission id will finish promotion before receiving Acceptance.
+          break;
+        }
+        if (this.deleted) break;
 
         if (ws.readyState === WebSocket.OPEN) {
           try {
@@ -662,12 +704,13 @@ export class Room extends DurableObject<Env> {
         // A duplicate submission only needs the same Acceptance. All other
         // effects belong to the first persistence. See ADR 0009.
         if (!inserted) break;
+        if (this.deleted) break;
         // Discovery ordering is a best-effort projection. A failed D1 update
         // must never turn an accepted Chat Message into a send failure.
         this.ctx.waitUntil(
           this.env.web_chat
             .prepare(
-              "UPDATE room SET lastActiveAt = MAX(lastActiveAt, ?) WHERE id = ? AND type = 'public'",
+              "UPDATE room SET lastActiveAt = MAX(lastActiveAt, ?) WHERE id = ? AND deletionRequestedAt IS NULL",
             )
             .bind(
               Math.floor(data.createdAt.getTime() / 1000),
@@ -850,6 +893,70 @@ export class Room extends DurableObject<Env> {
     await this.ctx.storage.deleteAll();
     for (const ws of this.sessions.keys()) ws.close(1000, "Room deleted");
     this.sessions.clear();
+  }
+
+  async findImageMessageBySubmission(
+    userId: string,
+    submissionId: string,
+  ): Promise<string | null> {
+    const row = await this.db
+      .select({ id: messageTable.id })
+      .from(messageTable)
+      .where(
+        and(
+          eq(messageTable.userId, userId),
+          eq(messageTable.submissionId, submissionId),
+          eq(messageTable.type, "image"),
+        ),
+      )
+      .limit(1)
+      .then((rows) => rows[0]);
+    return row?.id ?? null;
+  }
+
+  async backfillImageRetentions(): Promise<void> {
+    if (this.deleted) return;
+    const messages = await this.db
+      .select({
+        id: messageTable.id,
+        userId: messageTable.userId,
+        submissionId: messageTable.submissionId,
+        content: messageTable.content,
+        createdAt: messageTable.createdAt,
+      })
+      .from(messageTable)
+      .where(
+        and(
+          eq(messageTable.authorType, "user"),
+          eq(messageTable.type, "image"),
+        ),
+      );
+    await backfillMessageImages(
+      this.env,
+      this.ctx.id.toString(),
+      messages.flatMap((message) =>
+        message.userId
+          ? [
+              {
+                ...message,
+                userId: message.userId,
+              },
+            ]
+          : [],
+      ),
+    );
+  }
+
+  async beginExpiration(cutoff: Date, createdAt: Date): Promise<boolean> {
+    if (this.deleted) return true;
+    const latest = [
+      ...this.storage.sql.exec<{ createdAt: number }>(
+        "SELECT createdAt FROM message WHERE authorType = 'user' ORDER BY createdAt DESC, id DESC LIMIT 1",
+      ),
+    ][0]?.createdAt;
+    if ((latest ?? createdAt.getTime()) > cutoff.getTime()) return false;
+    await this.clearStorage();
+    return true;
   }
 
   alarm() {

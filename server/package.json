@@ -4,6 +4,7 @@
   "scripts": {
     "dev": "wrangler dev",
     "test": "bun test",
+    "test:integration": "vitest run",
     "deploy": "wrangler deploy --minify",
     "cf-typegen": "wrangler types --env-interface CloudflareBindings",
     "db:push:d1": "drizzle-kit push && drizzle-kit generate && bunx wrangler d1 migrations apply web-chat",
@@ -25,9 +26,11 @@
     "zod": "^4.4.3"
   },
   "devDependencies": {
+    "@cloudflare/vitest-pool-workers": "^0.20.2",
     "@types/bun": "^1.3.14",
     "drizzle-kit": "^0.31.10",
     "tsx": "^4.22.4",
+    "vitest": "^4.1.10",
     "wrangler": "^4.105.0"
   }
 }

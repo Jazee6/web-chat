@@ -76,7 +76,11 @@ export function RoomCreateDialog({
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Create Room</DialogTitle>
-          <DialogDescription></DialogDescription>
+          <DialogDescription>
+            Every room with no successfully accepted user messages for 30
+            consecutive days is permanently deleted, including its message
+            history.
+          </DialogDescription>
         </DialogHeader>
 
         <form onSubmit={form.handleSubmit(onSubmit)} id={formId}>

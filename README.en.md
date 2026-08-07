@@ -21,6 +21,8 @@ Live Demo: https://chat.jaze.top
 - **Modern Frontend Experience**: React 19 + Vite + TypeScript + Tailwind CSS 4 + Shadcn UI
 - **Security & Authentication**: Integrated `better-auth` for authentication
 - **Object Storage**: Cloudflare R2 / S3-compatible storage for image and file uploads with preview support
+- **Reliable Message Lifecycle**: Idempotent acceptance, protected image references, and retry uploads prevent duplicates and accepted messages with missing images
+- **Automatic Data Cleanup**: Rooms without a user message for 30 consecutive days are deleted; unreferenced images are reclaimed from source storage after a 24-hour safety delay
 
 ## Deployment
 
@@ -48,6 +50,10 @@ bun run db:generate:auth
 bun run db:push:d1
 ```
 
+On the first 1.5 deployment, the hourly Cron automatically backfills references from existing room messages, Stickers,
+and R2 images. Unreferenced image reclamation starts automatically only after the backfill completes and another 24
+hours pass; no images are physically deleted while backfill is in progress.
+
 ### Deploy to Cloudflare Workers
 
 ```bash
@@ -56,6 +62,18 @@ cd server
 bunx wrangler secret put EXA_API_KEY
 # Optional: set AI_GATEWAY_ID in wrangler.jsonc or Cloudflare Dashboard
 bun run deploy
+```
+
+### Tests
+
+```bash
+cd server
+bun test
+bun run test:integration
+
+cd ../client
+bun test
+bun run build
 ```
 
 ## Environment Variables

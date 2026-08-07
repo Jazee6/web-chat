@@ -130,10 +130,12 @@ export function useRoom({
             break;
           }
           case "messageAcceptance": {
+            releaseUploadedImages(m.data.submissionId);
             chatRef.current?.handleMessageAcceptance(m.data);
             break;
           }
           case "messageRejection": {
+            releaseUploadedImages(m.data.submissionId);
             chatRef.current?.handleMessageRejection(m.data);
             break;
           }
@@ -180,13 +182,34 @@ export function useRoom({
     chatRef.current = chat;
   }, [chat]);
 
-  const { sendImages, sendSticker, retryImageUpload, confirmUploadedImages } =
-    useRoomImages({
-      userId: user.id,
-      setChats: chat.setChats,
-      sendSubmission: chat.sendSubmission,
-      requestStickToBottom: chat.requestStickToBottom,
-    });
+  const {
+    sendImages,
+    sendSticker,
+    retryImageUpload,
+    retryImageSubmission,
+    confirmUploadedImages,
+    releaseUploadedImages,
+  } = useRoomImages({
+    userId: user.id,
+    setChats: chat.setChats,
+    sendSubmission: chat.sendSubmission,
+    requestStickToBottom: chat.requestStickToBottom,
+  });
+
+  const retrySubmission = async (submissionId: string) => {
+    if (await retryImageSubmission(submissionId)) return;
+    chat.retrySubmission(submissionId);
+  };
+
+  const cancelSubmission = (submissionId: string) => {
+    releaseUploadedImages(submissionId);
+    chat.cancelSubmission(submissionId);
+  };
+
+  const removeSubmission = (submissionId: string) => {
+    releaseUploadedImages(submissionId);
+    chat.removeSubmission(submissionId);
+  };
 
   const notifications = useRoomNotifications({ users });
 
@@ -315,9 +338,9 @@ export function useRoom({
     sendSticker,
     retryImageUpload,
     confirmUploadedImages,
-    retrySubmission: chat.retrySubmission,
-    cancelSubmission: chat.cancelSubmission,
-    removeSubmission: chat.removeSubmission,
+    retrySubmission,
+    cancelSubmission,
+    removeSubmission,
     stickToBottom: chat.stickToBottom,
     unreadCount: chat.unreadCount,
     scrollToBottom: chat.scrollToBottom,

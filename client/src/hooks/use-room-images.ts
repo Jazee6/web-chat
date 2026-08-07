@@ -1,3 +1,7 @@
+import {
+  canSubmitImageBatch,
+  getImageRevalidationIndexes,
+} from "@/lib/image-submissions.ts";
 import { api, calculateSHA256, convertImageToWebP } from "@/lib/utils.ts";
 import ky from "ky";
 import { type Dispatch, type SetStateAction, useRef } from "react";
@@ -24,7 +28,9 @@ type UseRoomImagesReturn = {
   // ADR 0004; retries reuse this key through the Message Submission registry.
   sendSticker: (key: string) => void;
   retryImageUpload: (submissionId: string, index: number) => Promise<void>;
+  retryImageSubmission: (submissionId: string) => Promise<boolean>;
   confirmUploadedImages: (submissionId: string) => void;
+  releaseUploadedImages: (submissionId: string) => void;
 };
 
 type ImageBatch = {
@@ -44,7 +50,6 @@ export function useRoomImages({
     const batch = imageBatchesRef.current.get(submissionId);
     if (!batch || batch.files.some(({ key }) => !key)) return;
     const content = JSON.stringify(batch.files.map(({ key }) => key!));
-    imageBatchesRef.current.delete(submissionId);
     sendSubmission({
       submissionId,
       type: "image",
@@ -148,7 +153,7 @@ export function useRoomImages({
           : chat,
       ),
     );
-    return batch.files.every(({ key }) => !!key);
+    return canSubmitImageBatch(batch.files, failedIndexes);
   };
 
   // A Reply attaches to exactly one message: the text caption if present,
@@ -227,6 +232,22 @@ export function useRoomImages({
     await uploadBatchFiles(submissionId, [index]);
   };
 
+  const retryImageSubmission = async (submissionId: string) => {
+    const batch = imageBatchesRef.current.get(submissionId);
+    if (!batch) return false;
+
+    const allUploaded = await uploadBatchFiles(
+      submissionId,
+      getImageRevalidationIndexes(batch.files),
+    );
+    if (allUploaded) confirmUploadedImages(submissionId);
+    return true;
+  };
+
+  const releaseUploadedImages = (submissionId: string) => {
+    imageBatchesRef.current.delete(submissionId);
+  };
+
   const sendSticker = (key: string) => {
     const submissionId = crypto.randomUUID();
     const content = JSON.stringify([key]);
@@ -251,6 +272,8 @@ export function useRoomImages({
     sendImages,
     sendSticker,
     retryImageUpload,
+    retryImageSubmission,
     confirmUploadedImages,
+    releaseUploadedImages,
   };
 }

@@ -18,6 +18,18 @@ _Avoid_: listed room, open room
 A room omitted from Public Room Discovery but accessible to any signed-in user who has its URL. It does not imply member-only access.
 _Avoid_: private room, secret room
 
+**Deleting Room**:
+A room whose Room Owner has requested irreversible deletion but whose cleanup is not yet complete. It cannot be entered and accepts no new Message Submissions; failed cleanup remains resumable until deletion completes.
+_Avoid_: deleted room, inactive room, hidden room
+
+**Room Deletion**:
+The completed removal of a room's metadata, history, Favorite Room relationships, and Image References. Reclaiming an Unreferenced Image after its 24-hour safety delay is not part of Room Deletion completion.
+_Avoid_: archive, hide room, image reclamation
+
+**Room Expiration**:
+The point when any Public Room or Unlisted Room reaches 30 consecutive days without Room Activity. At the next scheduled cleanup it enters Room Deletion without an additional recovery period.
+_Avoid_: message expiry, archive, idle session
+
 **Public Room Discovery**:
 The homepage catalogue through which users find Public Rooms. Regional restrictions may remove this catalogue without restricting direct room access or other chat features.
 _Avoid_: public room access, room directory
@@ -81,6 +93,10 @@ _Avoid_: bot message, announcement
 A single authored utterance in a room, identified by a server-generated id. A user may send text or images; the Room AI sends text only. Its author type explicitly distinguishes a user from the Room AI.
 _Avoid_: post, entry
 
+**Message Retention**:
+An accepted Chat Message remains in room history for as long as its room exists; it has no independent expiry. Owner-requested Room Deletion or Room Expiration ends the retention of all its Chat Messages.
+_Avoid_: message expiry, temporary history
+
 **Message Submission**:
 A user's request to add one authored utterance to room history, identified by a client-generated id that remains stable across retries. Repeating it by the same user in the same room must resolve to the same Chat Message.
 _Avoid_: Chat Message (that is the accepted, persistent utterance), send attempt
@@ -105,9 +121,33 @@ _Avoid_: attachments, Persistent Images, drafts
 The sender-only presentation of a Local File for the lifetime of the sending page session. Message Acceptance updates the Chat Message's persistent identity without replacing this preview; a refreshed page or another device renders the Persistent Image instead.
 _Avoid_: Persistent Image, upload preview
 
+**Image Asset**:
+Image bytes identified by their content hash and available for reuse by Message Images and Stickers. An Image Asset is retained while it has a business reference and becomes eligible for delayed reclamation after its last reference disappears.
+_Avoid_: attachment, uploaded file, R2 object
+
 **Persistent Image**:
-An object-storage image referenced by an accepted image Chat Message. It is rendered when no Local Image Preview from the sending page session is available, such as after refresh or on another device.
-_Avoid_: Local File, Local Image Preview, attachment
+An Image Asset referenced by an accepted image Chat Message. It is rendered when no Local Image Preview from the sending page session is available, such as after refresh or on another device.
+_Avoid_: Local File, Local Image Preview, Image Asset
+
+**Image Reference**:
+A business relationship that keeps an Image Asset retained. Each Message Image and Sticker is a distinct Image Reference, even when several of them target the same Image Asset.
+_Avoid_: storage key, copy, duplicate image
+
+**Image Reservation**:
+Temporary retention of an Image Asset for an image Message Submission before that submission receives Message Acceptance. It becomes an Image Reference when the message is accepted, or is released by reconciliation after the submission is confirmed absent.
+_Avoid_: Image Reference, upload lease, pending message
+
+**Unreferenced Image**:
+An Image Asset with neither Image References nor Image Reservations, either because an upload was never submitted or because its last retention relationship was removed. It is reclaimed 24 hours after its last retention relationship disappears.
+_Avoid_: deleted image, expired message, unused attachment
+
+**Image Reclamation**:
+Removal of an Unreferenced Image from source object storage after its safety delay. It reclaims storage but does not promise removal of copies already held by browser, intermediary, or CDN caches.
+_Avoid_: access revocation, privacy deletion, cache purge
+
+**Image Message Integrity**:
+An image Message Submission can receive Message Acceptance only while every referenced Image Asset exists and is retained. A retry may transparently recreate a reclaimed Image Asset from its Local File while keeping the same submission id.
+_Avoid_: best-effort image, broken image acceptance
 
 **Message Image**:
 One ordered image occurrence within an image Chat Message. Multiple Message Images may reference the same Persistent Image; their positions and order remain distinct even when their storage keys match.

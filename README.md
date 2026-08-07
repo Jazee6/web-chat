@@ -19,6 +19,8 @@ Live Demo: https://chat.jaze.top
 - **现代前端体验**：React 19 + Vite + TypeScript + Tailwind CSS 4 + Shadcn UI
 - **安全与认证**：集成 `better-auth` 提供身份验证
 - **对象存储**：支持 Cloudflare R2 / S3 兼容存储，实现图片与文件的上传与预览
+- **可靠消息生命周期**：幂等消息确认、图片引用保护与失败重传，避免重复消息和已接受消息缺图
+- **自动数据清理**：连续 30 天没有用户消息的房间自动删除；无引用图片在 24 小时宽限期后回收源存储
 
 ## 部署
 
@@ -46,6 +48,9 @@ bun run db:generate:auth
 bun run db:push:d1
 ```
 
+1.5 首次部署会由每小时 Cron 自动回填已有房间消息、Sticker 与 R2 图片引用。回填全部完成并再等待 24 小时后，
+无引用图片回收会自动启用；回填期间不会物理删除图片。
+
 ### 部署到 Cloudflare Workers
 
 ```bash
@@ -54,6 +59,18 @@ cd server
 bunx wrangler secret put EXA_API_KEY
 # 可选：在 wrangler.jsonc 或 Cloudflare Dashboard 中设置 AI_GATEWAY_ID
 bun run deploy
+```
+
+### 测试
+
+```bash
+cd server
+bun test
+bun run test:integration
+
+cd ../client
+bun test
+bun run build
 ```
 
 ## 环境变量列表

@@ -3,70 +3,67 @@
   "name": "web-chat",
   "main": "src/index.ts",
   "compatibility_date": "2025-12-19",
-  "compatibility_flags": [
-    "nodejs_compat"
-  ],
+  "compatibility_flags": ["nodejs_compat"],
   "dev": {
-    "port": 3001
+    "port": 3001,
+  },
+  "triggers": {
+    "crons": ["0 * * * *"],
   },
   "vars": {
     "EASY_AUTH_URL": "https://account.jaze.top",
     "BETTER_AUTH_URL": "https://s.chat.jaze.top",
     "EASY_AUTH_CLIENT_ID": "fvTSOvbniIAlmwBSLJIMZYxlOymzxcUw",
     "SITE_URL": "https://chat.jaze.top",
-    "AI_GATEWAY_ID": "jaz"
+    "AI_GATEWAY_ID": "jaz",
   },
   "ai": {
-    "binding": "AI"
+    "binding": "AI",
   },
   "d1_databases": [
     {
       "binding": "web_chat",
       "database_name": "web-chat",
       "database_id": "06895244-713a-4eab-a19f-be610e81fb16",
-      "migrations_dir": "drizzle/d1"
-    }
+      "migrations_dir": "drizzle/d1",
+    },
   ],
   "durable_objects": {
     "bindings": [
       {
         "name": "ROOM",
-        "class_name": "Room"
-      }
-    ]
+        "class_name": "Room",
+      },
+    ],
   },
   "migrations": [
     {
       "tag": "v1",
-      "new_sqlite_classes": [
-        "Room"
-      ]
-    }
+      "new_sqlite_classes": ["Room"],
+    },
   ],
   "r2_buckets": [
     {
       "binding": "FILE",
-      "bucket_name": "web-chat"
-    }
+      "bucket_name": "web-chat",
+    },
   ],
   "rules": [
     {
       "type": "Text",
-      "globs": [
-        "**/*.sql"
-      ],
-      "fallthrough": true
-    }
+      "globs": ["**/*.sql"],
+      "fallthrough": true,
+    },
   ],
   "observability": {
     "logs": {
       "enabled": true,
       "head_sampling_rate": 1,
       "invocation_logs": true,
-      "persist": true
-    }
+      "persist": true,
+    },
   },
   "placement": {
-    "mode": "smart"
-  }
+    "mode": "smart",
+  },
 }

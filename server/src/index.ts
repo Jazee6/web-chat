@@ -1,5 +1,5 @@
 import { zValidator } from "@hono/zod-validator";
-import { and, desc, eq, inArray, lt, or } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull, lt, or } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
 import { Hono } from "hono";
 import { cache } from "hono/cache";
@@ -24,6 +24,12 @@ import {
 } from "web-chat-share";
 import realtime from "./api/realtime";
 import { getAuth } from "./lib/auth";
+import {
+  completeRoomDeletion,
+  markStickerRemoved,
+  registerImageCandidates,
+  runMaintenance,
+} from "./lib/image-lifecycle";
 import { fetchLinkPreview } from "./lib/preview";
 import { createS3 } from "./lib/s3";
 import * as authSchema from "./lib/schema/auth";
@@ -152,7 +158,10 @@ app.post("/room", zValidator("json", createRoomRequestSchema), async (c) => {
   const { name, type } = c.req.valid("json");
   const user = c.get("user");
   const db = getDb(c.env.web_chat);
-  const roomCount = await db.$count(roomTable, eq(roomTable.userId, user.id));
+  const roomCount = await db.$count(
+    roomTable,
+    and(eq(roomTable.userId, user.id), isNull(roomTable.deletionRequestedAt)),
+  );
   if (roomCount >= 10) {
     throw new HTTPException(400, { message: "Room limit reached" });
   }
@@ -182,7 +191,10 @@ app.get("/room", zValidator("query", basePaginationSchema), async (c) => {
     columns: {
       userId: false,
     },
-    where: eq(roomTable.userId, user.id),
+    where: and(
+      eq(roomTable.userId, user.id),
+      isNull(roomTable.deletionRequestedAt),
+    ),
     orderBy: [desc(roomTable.createdAt)],
     limit,
     offset,
@@ -221,6 +233,7 @@ app.get(
       .where(
         and(
           eq(roomTable.type, "public"),
+          isNull(roomTable.deletionRequestedAt),
           cursor
             ? or(
                 lt(roomTable.lastActiveAt, cursor.lastActiveAt),
@@ -266,7 +279,12 @@ app.get(
         },
       })
       .from(favoriteRoomTable)
-      .where(eq(favoriteRoomTable.userId, user.id))
+      .where(
+        and(
+          eq(favoriteRoomTable.userId, user.id),
+          isNull(roomTable.deletionRequestedAt),
+        ),
+      )
       .leftJoin(roomTable, eq(favoriteRoomTable.roomId, roomTable.id))
       .orderBy(desc(roomTable.createdAt))
       .limit(limit)
@@ -302,7 +320,7 @@ app.get("/room/:id/ws", zValidator("param", roomIdSchema), async (c) => {
       id: roomTable.id,
     })
     .from(roomTable)
-    .where(eq(roomTable.id, id))
+    .where(and(eq(roomTable.id, id), isNull(roomTable.deletionRequestedAt)))
     .limit(1)
     .then((r) => r[0]);
   if (!room) {
@@ -320,18 +338,13 @@ app.delete("/room/:id", zValidator("param", roomIdSchema), async (c) => {
   const { id } = c.req.valid("param");
   const user = c.get("user");
   const db = getDb(c.env.web_chat);
-  const room_id = c.env.ROOM.idFromString(id);
-  const stub = c.env.ROOM.get(room_id);
-  const deletedRoom = await db
-    .delete(roomTable)
+  const requestedAt = new Date();
+  const deletingRoom = await db
+    .update(roomTable)
+    .set({ deletionRequestedAt: requestedAt, deletionReason: "owner" })
     .where(and(eq(roomTable.id, id), eq(roomTable.userId, user.id)))
     .returning({ id: roomTable.id });
-
-  if (deletedRoom.length > 0) {
-    await stub.clearStorage();
-    await db.delete(favoriteRoomTable).where(eq(favoriteRoomTable.roomId, id));
-  }
-
+  if (deletingRoom[0]) await completeRoomDeletion(c.env, id);
   return c.body(null, 204);
 });
 
@@ -351,7 +364,13 @@ app.patch(
         createdAt: roomTable.createdAt,
       })
       .from(roomTable)
-      .where(and(eq(roomTable.id, id), eq(roomTable.userId, user.id)))
+      .where(
+        and(
+          eq(roomTable.id, id),
+          eq(roomTable.userId, user.id),
+          isNull(roomTable.deletionRequestedAt),
+        ),
+      )
       .limit(1)
       .then((rows) => rows[0]);
 
@@ -414,7 +433,13 @@ app.patch(
     const room = await db
       .select({ id: roomTable.id })
       .from(roomTable)
-      .where(and(eq(roomTable.id, id), eq(roomTable.userId, user.id)))
+      .where(
+        and(
+          eq(roomTable.id, id),
+          eq(roomTable.userId, user.id),
+          isNull(roomTable.deletionRequestedAt),
+        ),
+      )
       .limit(1)
       .then((rows) => rows[0]);
     if (!room) {
@@ -464,7 +489,7 @@ app.get("/room/:id/info", zValidator("param", getRoomInfoSchema), async (c) => {
       favorite: favoriteRoomTable.id,
     })
     .from(roomTable)
-    .where(eq(roomTable.id, id))
+    .where(and(eq(roomTable.id, id), isNull(roomTable.deletionRequestedAt)))
     .leftJoin(
       favoriteRoomTable,
       and(
@@ -530,6 +555,7 @@ app.post(
   zValidator("json", getPresignedUrlSchema),
   async (c) => {
     const { sha256List } = c.req.valid("json");
+    await registerImageCandidates(c.env, sha256List);
 
     const res = await Promise.all(
       sha256List.map(async (hash) => {
@@ -606,6 +632,10 @@ app.post("/sticker", zValidator("json", favoriteStickerSchema), async (c) => {
   const { key } = c.req.valid("json");
   const user = c.get("user");
   const db = getD1Db(c.env.web_chat);
+  if (!(await c.env.FILE.head(`images/${key}`))) {
+    throw new HTTPException(400, { message: "Image not found" });
+  }
+  await registerImageCandidates(c.env, [key]);
   // Idempotent: favoriting the same image twice is a no-op, not an error. The
   // unique (userId, key) index enforces it; on conflict, return the existing
   // row as if the insert succeeded.
@@ -616,6 +646,12 @@ app.post("/sticker", zValidator("json", favoriteStickerSchema), async (c) => {
       key,
     })
     .onConflictDoNothing();
+  await c.env.web_chat
+    .prepare(
+      "UPDATE image_asset SET unreferencedAt = NULL, reclaimingAt = NULL WHERE key = ?",
+    )
+    .bind(key)
+    .run();
   return c.body(null, 201);
 });
 
@@ -623,9 +659,11 @@ app.delete("/sticker/:id", zValidator("param", stickerIdSchema), async (c) => {
   const { id } = c.req.valid("param");
   const user = c.get("user");
   const db = getD1Db(c.env.web_chat);
-  await db
+  const deleted = await db
     .delete(stickerTable)
-    .where(and(eq(stickerTable.id, id), eq(stickerTable.userId, user.id)));
+    .where(and(eq(stickerTable.id, id), eq(stickerTable.userId, user.id)))
+    .returning({ key: stickerTable.key });
+  if (deleted[0]) await markStickerRemoved(c.env, deleted[0].key);
   return c.body(null, 204);
 });
 
@@ -633,4 +671,14 @@ app.route("/room", realtime);
 
 showRoutes(app);
 
-export default app;
+export { app };
+export default {
+  fetch: app.fetch,
+  async scheduled(
+    _controller: ScheduledController,
+    env: CloudflareBindings,
+    ctx: ExecutionContext,
+  ) {
+    ctx.waitUntil(runMaintenance(env));
+  },
+};

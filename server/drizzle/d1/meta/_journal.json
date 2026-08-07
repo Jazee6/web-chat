@@ -22,6 +22,20 @@
       "when": 1784693278021,
       "tag": "0002_supreme_lord_hawal",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "6",
+      "when": 1786092911244,
+      "tag": "0003_grey_joshua_kane",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "6",
+      "when": 1786093699817,
+      "tag": "0004_bitter_wildside",
+      "breakpoints": true
     }
   ]
 }

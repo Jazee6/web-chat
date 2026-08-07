@@ -8,6 +8,6 @@
     "lib": ["ESNext"],
     "jsx": "react-jsx",
     "jsxImportSource": "hono/jsx",
-    "types": ["node", "bun"]
+    "types": ["node", "bun", "@cloudflare/vitest-pool-workers/types"]
   }
 }

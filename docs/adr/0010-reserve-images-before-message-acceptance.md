@@ -1,0 +1,3 @@
+# Reserve images before message acceptance
+
+Image bytes, room messages, and global references live in R2, Durable Object SQLite, and D1, so accepting an image message cannot be one atomic storage transaction. Before persisting an image Message Submission, Web Chat creates idempotent Image Reservations in D1; those reservations protect the Image Assets until they become Image References or reconciliation proves the submission absent. Partial failure may therefore retain extra bytes temporarily, but must never produce an accepted Chat Message whose Image Assets were reclaimed. Unreferenced Images are reclaimed only after 24 hours, and historical assets are not eligible until a staged backfill has completed and remained ready for that delay.
