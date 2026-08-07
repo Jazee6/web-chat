@@ -1,3 +1,4 @@
+import { Button } from "@/components/ui/button.tsx";
 import {
   ContextMenu,
   ContextMenuContent,
@@ -26,9 +27,8 @@ import {
 import { Skeleton } from "@/components/ui/skeleton.tsx";
 import { useIsMobile } from "@/hooks/use-mobile.ts";
 import { stickerImageUrl, useStickers } from "@/hooks/use-stickers.ts";
-import { SmilePlus, Trash2 } from "lucide-react";
+import { CircleAlert, SmilePlus, Trash2 } from "lucide-react";
 import { useEffect, useRef } from "react";
-import { toast } from "sonner";
 
 // The sticker picker: a button in the input area that opens the user's Sticker
 // Library. Desktop renders a Popover, mobile a bottom Sheet. Clicking a sticker
@@ -36,10 +36,12 @@ import { toast } from "sonner";
 // long-press removes it from the library. See CONTEXT.md "Stickers" and ADR 0004.
 const StickerGrid = ({
   onSendSticker,
+  userId,
 }: {
   onSendSticker: (key: string) => void;
+  userId: string;
 }) => {
-  const { listQuery, removeSticker } = useStickers();
+  const { listQuery, removeSticker } = useStickers(userId);
   const sentinelRef = useRef<HTMLDivElement>(null);
   const { fetchNextPage, isFetchingNextPage, hasNextPage } = listQuery;
 
@@ -57,6 +59,24 @@ const StickerGrid = ({
 
   const stickers = listQuery.data?.pages.flat() ?? [];
   const isEmpty = !listQuery.isLoading && stickers.length === 0;
+
+  if (listQuery.isError && !listQuery.data) {
+    return (
+      <Empty className="h-40 gap-3 p-4">
+        <EmptyHeader>
+          <EmptyMedia>
+            <CircleAlert />
+          </EmptyMedia>
+          <EmptyDescription className="text-xs">
+            Failed to load stickers
+          </EmptyDescription>
+        </EmptyHeader>
+        <Button size="sm" variant="outline" onClick={() => listQuery.refetch()}>
+          Retry
+        </Button>
+      </Empty>
+    );
+  }
 
   if (isEmpty) {
     return (
@@ -99,10 +119,7 @@ const StickerGrid = ({
                 <ContextMenuContent>
                   <ContextMenuItem
                     variant="destructive"
-                    onClick={() => {
-                      removeSticker(s.id);
-                      toast.success("Removed from stickers");
-                    }}
+                    onClick={() => removeSticker(s.id)}
                   >
                     <Trash2 />
                     <span>Delete</span>
@@ -123,9 +140,11 @@ const StickerGrid = ({
 
 const StickerPicker = ({
   onSendSticker,
+  userId,
   disabled,
 }: {
   onSendSticker: (key: string) => void;
+  userId: string;
   disabled?: boolean;
 }) => {
   const isMobile = useIsMobile();
@@ -144,7 +163,7 @@ const StickerPicker = ({
           <SheetHeader className="px-2">
             <SheetTitle className="text-sm">Stickers</SheetTitle>
           </SheetHeader>
-          <StickerGrid onSendSticker={onSendSticker} />
+          <StickerGrid onSendSticker={onSendSticker} userId={userId} />
         </SheetContent>
       </Sheet>
     );
@@ -159,7 +178,7 @@ const StickerPicker = ({
         sideOffset={8}
         className="w-80 p-1"
       >
-        <StickerGrid onSendSticker={onSendSticker} />
+        <StickerGrid onSendSticker={onSendSticker} userId={userId} />
       </PopoverContent>
     </Popover>
   );

@@ -9,6 +9,7 @@ import {
 } from "@/components/ui/input-group.tsx";
 import { Spinner } from "@/components/ui/spinner.tsx";
 import type { User } from "@/lib/auth-client.ts";
+import { isMessageSubmitKey } from "@/lib/chat-input-keyboard.ts";
 import { insertMention } from "@/lib/mentions.ts";
 import { cn } from "@/lib/utils.ts";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -31,6 +32,11 @@ export type MentionRequest = {
   name: string;
 };
 
+export type EditRequest = {
+  id: number;
+  content: string;
+};
+
 const ChatInput = ({
   onSend,
   onCall,
@@ -38,10 +44,12 @@ const ChatInput = ({
   className,
   onTypingChange,
   onSendSticker,
+  userId,
   replyTarget,
   users,
   onCancelReply,
   mentionRequest,
+  editRequest,
 }: {
   onSend: (
     data: z.infer<typeof sendMessageSchema> & {
@@ -54,17 +62,21 @@ const ChatInput = ({
   className?: string;
   onTypingChange?: (typing: boolean) => void;
   onSendSticker: (key: string) => void;
+  userId: string;
   replyTarget: ReplyRef | null;
   users: Record<string, User>;
   onCancelReply: () => void;
   mentionRequest: MentionRequest | null;
+  editRequest: EditRequest | null;
 }) => {
   const [images, setImages] = useState<File[]>([]);
   const [isSending, setIsSending] = useState(false);
   const imageInputRef = useRef<HTMLInputElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const handledMentionRequestRef = useRef(0);
+  const handledEditRequestRef = useRef(0);
   const imagePreviewUrls = useRef(new Map<File, string>());
+  const compositionActiveRef = useRef(false);
 
   // Edge-triggered typing: fire onTypingChange only on true↔false transitions,
   // so a typing session is at most two broadcasts. 2s of inactivity ⇒ stop.
@@ -175,6 +187,26 @@ const ChatInput = ({
       textarea.setSelectionRange(caret, caret);
     });
   }, [form, mentionRequest]);
+
+  useEffect(() => {
+    if (!editRequest || handledEditRequestRef.current === editRequest.id) {
+      return;
+    }
+    handledEditRequestRef.current = editRequest.id;
+    form.setValue("message", editRequest.content, {
+      shouldDirty: true,
+      shouldValidate: true,
+    });
+    requestAnimationFrame(() => {
+      const textarea = textareaRef.current;
+      if (!textarea?.isConnected) return;
+      textarea.focus();
+      textarea.setSelectionRange(
+        editRequest.content.length,
+        editRequest.content.length,
+      );
+    });
+  }, [editRequest, form]);
 
   const onSubmit = async (data: z.infer<typeof sendMessageSchema>) => {
     // Capture before clearing — onCancelReply runs before the await, matching
@@ -297,11 +329,23 @@ const ChatInput = ({
                 className="scrollbar"
                 placeholder="Text here..."
                 autoFocus
+                onCompositionStart={() => {
+                  compositionActiveRef.current = true;
+                }}
+                onCompositionEnd={() => {
+                  compositionActiveRef.current = false;
+                }}
                 onKeyDown={(event) => {
                   if (
-                    event.key === "Enter" &&
-                    !event.shiftKey &&
-                    !event.nativeEvent.isComposing
+                    isMessageSubmitKey(
+                      {
+                        key: event.key,
+                        shiftKey: event.shiftKey,
+                        isComposing: event.nativeEvent.isComposing,
+                        keyCode: event.nativeEvent.keyCode,
+                      },
+                      compositionActiveRef.current,
+                    )
                   ) {
                     event.preventDefault();
                     if (
@@ -359,6 +403,7 @@ const ChatInput = ({
               <InputGroupAddon align="block-end">
                 <StickerPicker
                   onSendSticker={onSendSticker}
+                  userId={userId}
                   disabled={isLoading || isSending}
                 />
 

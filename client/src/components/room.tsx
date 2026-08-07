@@ -1,5 +1,8 @@
 import AddFavoritesButton from "@/components/add-favorites-button.tsx";
-import ChatInput, { type MentionRequest } from "@/components/chat-input.tsx";
+import ChatInput, {
+  type EditRequest,
+  type MentionRequest,
+} from "@/components/chat-input.tsx";
 import ChatList from "@/components/chat-list.tsx";
 import RealtimeLand from "@/components/realtime-land.tsx";
 import RealtimeSidebar from "@/components/realtime-sidebar.tsx";
@@ -11,6 +14,7 @@ import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar.tsx";
 import { Spinner } from "@/components/ui/spinner.tsx";
 import { useIncomingCall } from "@/hooks/use-incoming-call.ts";
 import { useRoom } from "@/hooks/use-room.ts";
+import { usePrefetchStickers } from "@/hooks/use-stickers.ts";
 import { RoomContext, type RoomContextType } from "@/lib/context.ts";
 import { toReplyRef } from "@/lib/reply.ts";
 import { appName } from "@/lib/utils.ts";
@@ -64,6 +68,8 @@ const Room = ({
   const [mentionRequest, setMentionRequest] = useState<MentionRequest | null>(
     null,
   );
+  const [editRequest, setEditRequest] = useState<EditRequest | null>(null);
+  usePrefetchStickers(user.id);
 
   const chatListRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
@@ -91,6 +97,10 @@ const Room = ({
     setTyping,
     sendSticker,
     retrySubmission,
+    cancelSubmission,
+    removeSubmission,
+    retryImageUpload,
+    confirmUploadedImages,
     stickToBottom,
     unreadCount,
     scrollToBottom,
@@ -272,6 +282,21 @@ const Room = ({
                       roomStats={roomStats}
                       aiTyping={aiTyping}
                       onRetry={retrySubmission}
+                      onCancel={cancelSubmission}
+                      onRemove={removeSubmission}
+                      onRetryUpload={(submissionId, index) =>
+                        void retryImageUpload(submissionId, index)
+                      }
+                      onConfirmImages={confirmUploadedImages}
+                      onEditRejected={(message) => {
+                        if (!message.submissionId) return;
+                        removeSubmission(message.submissionId);
+                        setReplyTarget(message.replyTo ?? null);
+                        setEditRequest((current) => ({
+                          id: (current?.id ?? 0) + 1,
+                          content: message.content,
+                        }));
+                      }}
                       onReply={(message: UIChatMessage) => {
                         if (message.submissionId) return;
                         setReplyTarget(toReplyRef(message));
@@ -305,10 +330,12 @@ const Room = ({
                 onCall={onCall}
                 onTypingChange={setTyping}
                 onSendSticker={sendSticker}
+                userId={user.id}
                 replyTarget={replyTarget}
                 users={users}
                 onCancelReply={() => setReplyTarget(null)}
                 mentionRequest={mentionRequest}
+                editRequest={editRequest}
               />
             </div>
           </SidebarInset>

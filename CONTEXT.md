@@ -89,14 +89,29 @@ _Avoid_: Chat Message (that is the accepted, persistent utterance), send attempt
 The server's confirmation that a Message Submission has become a persistent Chat Message, including its server-generated id. It is the boundary at which a user message is considered sent.
 _Avoid_: delivery receipt (it does not confirm that another client rendered the message), WebSocket send
 
+**Message Rejection**:
+The server's definitive response that a Message Submission cannot become a Chat Message as submitted. Retrying the unchanged submission will not succeed; the user must change or discard it.
+_Avoid_: Send Failed (that is an absence of acceptance and may be retried), error
+
 **User Mention**:
 A visible, standalone `@` reference matching a known user's full display name in a text Chat Message, whether typed or inserted through the user's message avatar. It is presentational only and does not notify the referenced user; a Room AI Invocation remains the distinct behavioral meaning of mentioning the Room AI.
 _Avoid_: notification, alert, tag
 
 **Local Files**:
-Image `File` objects held in client memory after the user has selected them but before they have been confirmed sent.
-Surfaced via `UIChatMessage.localFiles`.
-_Avoid_: attachments, drafts
+Image files held by the sending page session after selection. They provide the Local Image Preview for that page session after Message Acceptance, but do not survive a refresh or move to another device.
+_Avoid_: attachments, Persistent Images, drafts
+
+**Local Image Preview**:
+The sender-only presentation of a Local File for the lifetime of the sending page session. Message Acceptance updates the Chat Message's persistent identity without replacing this preview; a refreshed page or another device renders the Persistent Image instead.
+_Avoid_: Persistent Image, upload preview
+
+**Persistent Image**:
+An object-storage image referenced by an accepted image Chat Message. It is rendered when no Local Image Preview from the sending page session is available, such as after refresh or on another device.
+_Avoid_: Local File, Local Image Preview, attachment
+
+**Message Image**:
+One ordered image occurrence within an image Chat Message. Multiple Message Images may reference the same Persistent Image; their positions and order remain distinct even when their storage keys match.
+_Avoid_: Persistent Image (that is the stored content), attachment
 
 **Reply**:
 A Chat Message that explicitly references an earlier Chat Message as its antecedent. The antecedent is captured as
@@ -115,6 +130,10 @@ _Avoid_: reply (the relationship), citation
 
 These are distinct states. Calling all of them "上传失败" causes confusion — pick the right one.
 
+**Waiting for Connection**:
+A Message Submission retained while its room connection is unavailable. It will return to Sending once after the connection recovers; it has not yet become Send Failed.
+_Avoid_: Sending, Send Failed, offline message
+
 **Sending**:
 A Message Submission is awaiting Message Acceptance. This state applies to every user-authored message type.
 _Avoid_: uploading (that is the per-file image state), delivered
@@ -130,8 +149,12 @@ _Avoid_: send failed (different concept — see below)
 
 **Send Failed**:
 A Message Submission has not obtained Message Acceptance and requires an idempotent retry. Per-message, not per-file,
-and applies to every user-authored message type; it does not prove that the Chat Message is absent from room history.
+and applies to every user-authored message type; it does not prove that the Chat Message is absent from room history or that the server rejected it.
 _Avoid_: upload failed (different concept — see above)
+
+**Rejected**:
+A Message Submission has received Message Rejection and cannot succeed unchanged. It is terminal for that submission, unlike Send Failed.
+_Avoid_: Send Failed, Upload Failed
 
 ### Stickers
 

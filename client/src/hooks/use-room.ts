@@ -59,6 +59,7 @@ export function useRoom({
   const [aiTyping, setAiTyping] = useState(false);
 
   const pingIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const activeSocketRef = useRef<WebSocket | null>(null);
   const roomRealtimeTotalRef = useRef(0);
   const chatRef = useRef<ReturnType<typeof useRoomChat> | null>(null);
 
@@ -82,6 +83,7 @@ export function useRoom({
     `${import.meta.env.VITE_API_URL}/room/${id}/ws?tab_id=${getTabId()}`,
     {
       onOpen: (_, instance) => {
+        activeSocketRef.current = instance;
         if (pingIntervalRef.current) {
           clearInterval(pingIntervalRef.current);
         }
@@ -99,7 +101,9 @@ export function useRoom({
         }, 1000 * 5);
         onOpen?.();
       },
-      onClose: () => {
+      onClose: (_, instance) => {
+        if (activeSocketRef.current !== instance) return;
+        activeSocketRef.current = null;
         if (pingIntervalRef.current) {
           clearInterval(pingIntervalRef.current);
         }
@@ -127,6 +131,10 @@ export function useRoom({
           }
           case "messageAcceptance": {
             chatRef.current?.handleMessageAcceptance(m.data);
+            break;
+          }
+          case "messageRejection": {
+            chatRef.current?.handleMessageRejection(m.data);
             break;
           }
           case "aiTyping": {
@@ -172,12 +180,13 @@ export function useRoom({
     chatRef.current = chat;
   }, [chat]);
 
-  const { sendImages, sendSticker } = useRoomImages({
-    userId: user.id,
-    setChats: chat.setChats,
-    sendSubmission: chat.sendSubmission,
-    requestStickToBottom: chat.requestStickToBottom,
-  });
+  const { sendImages, sendSticker, retryImageUpload, confirmUploadedImages } =
+    useRoomImages({
+      userId: user.id,
+      setChats: chat.setChats,
+      sendSubmission: chat.sendSubmission,
+      requestStickToBottom: chat.requestStickToBottom,
+    });
 
   const notifications = useRoomNotifications({ users });
 
@@ -304,7 +313,11 @@ export function useRoom({
     onSend,
     setTyping,
     sendSticker,
+    retryImageUpload,
+    confirmUploadedImages,
     retrySubmission: chat.retrySubmission,
+    cancelSubmission: chat.cancelSubmission,
+    removeSubmission: chat.removeSubmission,
     stickToBottom: chat.stickToBottom,
     unreadCount: chat.unreadCount,
     scrollToBottom: chat.scrollToBottom,

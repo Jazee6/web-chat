@@ -22,9 +22,13 @@ import { api, cn, formatChatListTime } from "@/lib/utils.ts";
 import {
   Bot,
   CircleAlert,
+  CircleArrowUp,
+  Clock3,
   Copy,
   HeartPlus,
+  Pencil,
   Reply,
+  Trash2,
   TriangleAlert,
 } from "lucide-react";
 import {
@@ -37,7 +41,6 @@ import {
 } from "react";
 import Zoom from "react-medium-image-zoom";
 import "react-medium-image-zoom/dist/styles.css";
-import { toast } from "sonner";
 import type { ReplyRef, RoomStats, UIChatMessage } from "web-chat-share";
 
 const ChatImage = ({ src, alt }: { src: string; alt: string }) => {
@@ -229,6 +232,17 @@ const LocalChatImage = ({ file }: { file: File }) => {
 
 const isReplyable = (message: UIChatMessage) => !message.submissionId;
 
+const parseImageKeys = (content: string): string[] => {
+  try {
+    const keys: unknown = JSON.parse(content);
+    return Array.isArray(keys)
+      ? keys.filter((key): key is string => typeof key === "string")
+      : [];
+  } catch {
+    return [];
+  }
+};
+
 // Best-effort scroll + flash to a replied-to message. No-ops when the
 // antecedent isn't in the loaded DOM (paginated out) — the snapshot Quote
 // still renders; only the jump gives up. See ADR 0003.
@@ -356,6 +370,11 @@ const ChatList = memo(
     onReply,
     onMention,
     onRetry,
+    onCancel,
+    onEditRejected,
+    onRemove,
+    onRetryUpload,
+    onConfirmImages,
   }: {
     chats: UIChatMessage[];
     className?: string;
@@ -366,11 +385,15 @@ const ChatList = memo(
     onReply?: (message: UIChatMessage) => void;
     onMention?: (name: string) => void;
     onRetry?: (submissionId: string) => void;
+    onCancel?: (submissionId: string) => void;
+    onEditRejected?: (message: UIChatMessage) => void;
+    onRemove?: (submissionId: string) => void;
+    onRetryUpload?: (submissionId: string, index: number) => void;
+    onConfirmImages?: (submissionId: string) => void;
   }) => {
-    const favoriteSticker = useFavoriteSticker();
+    const favoriteSticker = useFavoriteSticker(userId);
     const onFavoriteSticker = (key: string) => {
       favoriteSticker.mutate(key);
-      toast.success("Saved to stickers");
     };
     const groups = useMemo(() => {
       const res: {
@@ -583,29 +606,43 @@ const ChatList = memo(
 
                                                   {uploadFailed && (
                                                     <div className="absolute inset-0 bg-amber-500/30 flex items-center justify-center">
-                                                      <TriangleAlert className="text-amber-500" />
+                                                      <button
+                                                        type="button"
+                                                        title="Upload failed. Retry this image"
+                                                        aria-label="Upload failed. Retry this image"
+                                                        className="rounded-full text-amber-500"
+                                                        onClick={() =>
+                                                          c.submissionId &&
+                                                          onRetryUpload?.(
+                                                            c.submissionId,
+                                                            index,
+                                                          )
+                                                        }
+                                                      >
+                                                        <TriangleAlert />
+                                                      </button>
                                                     </div>
                                                   )}
                                                 </div>
                                               ),
                                           )
-                                        : (
-                                            JSON.parse(c.content) as string[]
-                                          ).map((i, index) => (
-                                            <ImageWithFavorite
-                                              key={i}
-                                              storageKey={i}
-                                              message={c}
-                                              onFavorite={onFavoriteSticker}
-                                              onReply={onReply}
-                                              canReply={isReplyable(c)}
-                                            >
-                                              <ChatImage
-                                                src={`${import.meta.env.VITE_API_URL}/room/images/${i}`}
-                                                alt={`image_${index}`}
-                                              />
-                                            </ImageWithFavorite>
-                                          ))}
+                                        : parseImageKeys(c.content).map(
+                                            (i, index) => (
+                                              <ImageWithFavorite
+                                                key={`${i}_${index}`}
+                                                storageKey={i}
+                                                message={c}
+                                                onFavorite={onFavoriteSticker}
+                                                onReply={onReply}
+                                                canReply={isReplyable(c)}
+                                              >
+                                                <ChatImage
+                                                  src={`${import.meta.env.VITE_API_URL}/room/images/${i}`}
+                                                  alt={`image_${index}`}
+                                                />
+                                              </ImageWithFavorite>
+                                            ),
+                                          )}
                                     </div>
                                   </div>
                                 )}
@@ -621,6 +658,80 @@ const ChatList = memo(
                                     <CircleAlert className="size-4" />
                                   </button>
                                 )}
+
+                                {c.sendState === "waiting" &&
+                                  c.submissionId && (
+                                    <button
+                                      type="button"
+                                      title={
+                                        c.canCancelSend
+                                          ? "Waiting for connection. Click to cancel"
+                                          : "Waiting for connection"
+                                      }
+                                      aria-label={
+                                        c.canCancelSend
+                                          ? "Waiting for connection. Click to cancel"
+                                          : "Waiting for connection"
+                                      }
+                                      disabled={!c.canCancelSend}
+                                      className="self-center shrink-0 rounded-full text-muted-foreground transition hover:text-destructive focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                                      onClick={() =>
+                                        onCancel?.(c.submissionId!)
+                                      }
+                                    >
+                                      <Clock3 className="size-4" />
+                                    </button>
+                                  )}
+
+                                {c.sendState === "rejected" &&
+                                  c.submissionId && (
+                                    <button
+                                      type="button"
+                                      title={
+                                        c.rejectionReason ===
+                                        "submission_conflict"
+                                          ? "This message conflicts with an earlier submission"
+                                          : c.type === "text"
+                                            ? "Message rejected. Click to edit"
+                                            : "Image message rejected. Click to remove"
+                                      }
+                                      aria-label={
+                                        c.type === "text"
+                                          ? "Message rejected. Edit"
+                                          : "Image message rejected. Remove"
+                                      }
+                                      className="self-center shrink-0 rounded-full text-destructive transition hover:brightness-75 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                                      onClick={() =>
+                                        c.type === "text"
+                                          ? onEditRejected?.(c)
+                                          : onRemove?.(c.submissionId!)
+                                      }
+                                    >
+                                      {c.type === "text" ? (
+                                        <Pencil className="size-4" />
+                                      ) : (
+                                        <Trash2 className="size-4" />
+                                      )}
+                                    </button>
+                                  )}
+
+                                {c.type === "image" &&
+                                  !c.sendState &&
+                                  c.submissionId &&
+                                  c.localFiles?.length &&
+                                  c.localFiles.every(({ key }) => !!key) && (
+                                    <button
+                                      type="button"
+                                      title="Send uploaded images"
+                                      aria-label="Send uploaded images"
+                                      className="self-center shrink-0 rounded-full text-primary transition hover:brightness-75 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                                      onClick={() =>
+                                        onConfirmImages?.(c.submissionId!)
+                                      }
+                                    >
+                                      <CircleArrowUp className="size-4" />
+                                    </button>
+                                  )}
 
                                 <div className="text-muted-foreground brightness-75 text-xs self-end opacity-0 peer-hover:opacity-100 transition-opacity">
                                   {new Date(c.createdAt)

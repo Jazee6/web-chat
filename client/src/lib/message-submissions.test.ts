@@ -1,5 +1,9 @@
 import { describe, expect, test } from "bun:test";
-import type { ChatMessage, UIChatMessage } from "web-chat-share";
+import type {
+  ChatMessage,
+  HistoryChatMessage,
+  UIChatMessage,
+} from "web-chat-share";
 import {
   mergeInitialHistory,
   reconcileMessageAcceptance,
@@ -108,6 +112,62 @@ describe("Message Acceptance reconciliation", () => {
       }),
     ).toEqual([{ ...canonical, renderKey: "submission-id" }]);
   });
+
+  test("preserves local image previews after acceptance", () => {
+    const localFiles = [
+      {
+        file: new File(["image"], "image.png", { type: "image/png" }),
+        isUploading: false,
+        key: "a".repeat(64),
+      },
+    ];
+    const canonical = message("server-id", {
+      type: "image",
+      content: JSON.stringify(["a".repeat(64)]),
+    });
+
+    expect(
+      reconcileMessageAcceptance(
+        [
+          message("submission-id", {
+            type: "image",
+            submissionId: "submission-id",
+            localFiles,
+          }),
+        ],
+        { submissionId: "submission-id", message: canonical },
+      ),
+    ).toEqual([{ ...canonical, renderKey: "submission-id", localFiles }]);
+  });
+
+  test("moves local image previews onto a canonical message loaded before a late acceptance", () => {
+    const localFiles = [
+      {
+        file: new File(["image"], "image.png", { type: "image/png" }),
+        isUploading: false,
+        key: "a".repeat(64),
+      },
+    ];
+    const canonical = message("server-id", {
+      type: "image",
+      content: JSON.stringify(["a".repeat(64)]),
+      renderKey: "canonical-render-key",
+    });
+
+    expect(
+      reconcileMessageAcceptance(
+        [
+          canonical,
+          message("submission-id", {
+            type: "image",
+            submissionId: "submission-id",
+            localFiles,
+          }),
+        ],
+        { submissionId: "submission-id", message: canonical },
+      ),
+    ).toEqual([{ ...canonical, localFiles }]);
+  });
 });
 
 describe("initial history merge", () => {
@@ -125,5 +185,76 @@ describe("initial history merge", () => {
     expect(
       mergeInitialHistory([message("old"), pending, failed], history),
     ).toEqual([...history, pending, failed]);
+  });
+
+  test("reconciles sender-only submission ids and strips them from canonical history", () => {
+    const optimistic = message("submission-id", {
+      submissionId: "submission-id",
+      sendState: "waiting",
+    });
+    const history: HistoryChatMessage[] = [
+      {
+        ...message("server-id", { content: "accepted" }),
+        submissionId: "submission-id",
+      },
+    ];
+
+    expect(mergeInitialHistory([optimistic], history)).toEqual([
+      {
+        ...message("server-id", { content: "accepted" }),
+        renderKey: "submission-id",
+      },
+    ]);
+  });
+
+  test("keeps only submissions not already represented in history", () => {
+    const accepted = message("accepted-local", {
+      submissionId: "accepted-submission",
+      sendState: "waiting",
+    });
+    const queued = message("queued", {
+      submissionId: "queued-submission",
+      sendState: "waiting",
+    });
+    const canonical = {
+      ...message("server-id"),
+      submissionId: "accepted-submission",
+    };
+
+    expect(mergeInitialHistory([accepted, queued], [canonical])).toEqual([
+      { ...message("server-id"), renderKey: "accepted-submission" },
+      queued,
+    ]);
+  });
+
+  test("preserves local image previews when history compensates for a lost acceptance", () => {
+    const localFiles = [
+      {
+        file: new File(["image"], "image.png", { type: "image/png" }),
+        isUploading: false,
+        key: "a".repeat(64),
+      },
+    ];
+    const optimistic = message("submission-id", {
+      type: "image",
+      submissionId: "submission-id",
+      localFiles,
+    });
+    const canonical: HistoryChatMessage = {
+      ...message("server-id", {
+        type: "image",
+        content: JSON.stringify(["a".repeat(64)]),
+      }),
+      submissionId: "submission-id",
+    };
+    const { submissionId: _, ...canonicalMessage } = canonical;
+
+    expect(mergeInitialHistory([optimistic], [canonical])).toEqual([
+      {
+        ...canonicalMessage,
+        renderKey: "submission-id",
+        localFiles,
+      },
+    ]);
   });
 });

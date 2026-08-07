@@ -49,6 +49,8 @@ export const sendMessageSchema = z.object({
   message: z.string().trim().max(2048),
 });
 
+export const storageKeySchema = z.hash("sha256", { enc: "base64url" });
+
 // Mirrors ReplyRef in share/lib/index.ts. Stored as an opaque JSON blob on the
 // message row; the server never reads into it. See ADR 0003.
 export const replyRefSchema = z
@@ -63,32 +65,52 @@ export const replyRefSchema = z
     message: "User replies require a userId",
   });
 
-export const messageSubmissionSchema = z.object({
+const submissionFields = {
   submissionId: z.uuid(),
-  type: z.enum(["text", "image"]),
-  content: z.string(),
   replyTo: replyRefSchema.optional(),
-});
+};
+
+const imageContentSchema = z.string().refine((content) => {
+  try {
+    return z
+      .array(storageKeySchema)
+      .min(1)
+      .max(5)
+      .safeParse(JSON.parse(content)).success;
+  } catch {
+    return false;
+  }
+}, "Image content must be a JSON array of 1 to 5 storage keys");
+
+export const messageSubmissionSchema = z.discriminatedUnion("type", [
+  z.object({
+    ...submissionFields,
+    type: z.literal("text"),
+    content: z.string().trim().min(1).max(2048),
+  }),
+  z.object({
+    ...submissionFields,
+    type: z.literal("image"),
+    content: imageContentSchema,
+  }),
+]);
 
 export const getRoomInfoSchema = z.object({
   id: z.string().min(1),
 });
 
 export const getPresignedUrlSchema = z.object({
-  sha256List: z
-    .array(z.hash("sha256", { enc: "base64url" }))
-    .min(1)
-    .max(5),
+  sha256List: z.array(storageKeySchema).min(1).max(5),
 });
 
 export const getImageSchema = z.object({
-  key: z.hash("sha256", { enc: "base64url" }),
+  key: storageKeySchema,
 });
 
 // A sticker references an image already in storage by its sha256 key. See
 // CONTEXT.md "Stickers" and ADR 0004.
 export const favoriteStickerSchema = z.object({
-  key: z.hash("sha256", { enc: "base64url" }),
+  key: storageKeySchema,
 });
 
 export const stickerIdSchema = z.object({

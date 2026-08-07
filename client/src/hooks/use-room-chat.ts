@@ -16,7 +16,9 @@ import {
 import {
   type ChatMessage,
   gm,
+  type HistoryChatMessage,
   type MessageAcceptance,
+  type MessageRejection,
   type MessageSubmission,
   type ReplyRef,
   type RoomStats,
@@ -45,10 +47,13 @@ type UseRoomChatReturn = {
   sendText: (content: string, replyTo?: ReplyRef) => void;
   sendSubmission: (submission: MessageSubmission) => void;
   retrySubmission: (submissionId: string) => void;
+  cancelSubmission: (submissionId: string) => void;
+  removeSubmission: (submissionId: string) => void;
   handleMessageAcceptance: (data: MessageAcceptance) => void;
+  handleMessageRejection: (data: MessageRejection) => void;
   handleDisconnect: () => void;
-  handleInitHistory: (data: ChatMessage[]) => void;
-  handleHistory: (data: ChatMessage[]) => void;
+  handleInitHistory: (data: HistoryChatMessage[]) => void;
+  handleHistory: (data: HistoryChatMessage[]) => void;
   handleMessage: (data: ChatMessage) => void;
   handleRoomStats: (data: RoomStats) => void;
   stickToBottom: boolean;
@@ -87,9 +92,12 @@ export function useRoomChat({
       {
         submission: MessageSubmission;
         timeoutId: ReturnType<typeof setTimeout> | null;
+        state: "waiting" | "sending" | "failed";
+        attempted: boolean;
       }
     >(),
   );
+  const resumePendingSubmissionsRef = useRef<() => void>(() => {});
 
   useLayoutEffect(() => {
     readyStateRef.current = readyState;
@@ -160,27 +168,31 @@ export function useRoomChat({
   }, []);
 
   const handleInitHistory = useCallback(
-    (data: ChatMessage[]) => {
+    (data: HistoryChatMessage[]) => {
       setIsLoading(false);
-      if (data.length < 25) {
-        setHasMore(false);
-      }
-      if (data.length === 0) {
-        return;
-      }
+      setHasMore(data.length === 25);
+      data.forEach(({ submissionId }) => {
+        if (!submissionId) return;
+        const pending = pendingSubmissionsRef.current.get(submissionId);
+        if (pending?.timeoutId) clearTimeout(pending.timeoutId);
+        pendingSubmissionsRef.current.delete(submissionId);
+      });
       setChats((chats) => mergeInitialHistory(chats, data));
-      oldestChatTimeRef.current = data[0].createdAt;
-      fetchMissingUsers(
-        data.flatMap((c) =>
-          c.authorType === "user" && c.userId ? [c.userId] : [],
-        ),
-      );
+      if (data.length > 0) {
+        oldestChatTimeRef.current = data[0].createdAt;
+        fetchMissingUsers(
+          data.flatMap((c) =>
+            c.authorType === "user" && c.userId ? [c.userId] : [],
+          ),
+        );
+      }
+      resumePendingSubmissionsRef.current();
     },
     [fetchMissingUsers],
   );
 
   const handleHistory = useCallback(
-    (data: ChatMessage[]) => {
+    (data: HistoryChatMessage[]) => {
       if (data.length < 25) {
         setHasMore(false);
       }
@@ -193,7 +205,15 @@ export function useRoomChat({
       }
       setChats((chats) => {
         const existingIds = new Set(chats.map((chat) => chat.id));
-        return [...data.filter((chat) => !existingIds.has(chat.id)), ...chats];
+        return [
+          ...data
+            .filter((chat) => !existingIds.has(chat.id))
+            .map(({ submissionId, ...chat }) => {
+              void submissionId;
+              return chat;
+            }),
+          ...chats,
+        ];
       });
       oldestChatTimeRef.current = data[0].createdAt;
       debouncedFetchMissingUsers(
@@ -308,18 +328,35 @@ export function useRoomChat({
     };
   }, [isLoading, loaderRef, sendMessage, hasMore]);
 
-  const markSubmissionFailed = useCallback((submissionId: string) => {
-    const pending = pendingSubmissionsRef.current.get(submissionId);
-    if (pending?.timeoutId) clearTimeout(pending.timeoutId);
-    if (pending) pending.timeoutId = null;
-    setChats((chats) =>
-      chats.map((chat) =>
-        chat.submissionId === submissionId
-          ? { ...chat, sendState: "failed" }
-          : chat,
-      ),
-    );
-  }, []);
+  const setSubmissionState = useCallback(
+    (submissionId: string, sendState: "waiting" | "sending" | "failed") => {
+      const pending = pendingSubmissionsRef.current.get(submissionId);
+      if (pending) pending.state = sendState;
+      setChats((chats) =>
+        chats.map((chat) =>
+          chat.submissionId === submissionId
+            ? {
+                ...chat,
+                sendState,
+                canCancelSend:
+                  sendState === "waiting" && !!pending && !pending.attempted,
+              }
+            : chat,
+        ),
+      );
+    },
+    [],
+  );
+
+  const markSubmissionFailed = useCallback(
+    (submissionId: string) => {
+      const pending = pendingSubmissionsRef.current.get(submissionId);
+      if (pending?.timeoutId) clearTimeout(pending.timeoutId);
+      if (pending) pending.timeoutId = null;
+      setSubmissionState(submissionId, "failed");
+    },
+    [setSubmissionState],
+  );
 
   const sendSubmission = useCallback(
     (submission: MessageSubmission) => {
@@ -327,30 +364,33 @@ export function useRoomChat({
         submission.submissionId,
       );
       if (previous?.timeoutId) clearTimeout(previous.timeoutId);
-      pendingSubmissionsRef.current.set(submission.submissionId, {
-        submission,
-        timeoutId: null,
-      });
-
-      setChats((chats) =>
-        chats.map((chat) =>
-          chat.submissionId === submission.submissionId
-            ? { ...chat, sendState: "sending" }
-            : chat,
-        ),
+      pendingSubmissionsRef.current.set(
+        submission.submissionId,
+        previous ?? {
+          submission,
+          timeoutId: null,
+          state: "waiting",
+          attempted: false,
+        },
       );
 
       if (readyStateRef.current !== WebSocket.OPEN) {
-        markSubmissionFailed(submission.submissionId);
+        setSubmissionState(submission.submissionId, "waiting");
         return;
       }
 
+      const pendingBeforeSend = pendingSubmissionsRef.current.get(
+        submission.submissionId,
+      );
+      if (pendingBeforeSend) pendingBeforeSend.attempted = true;
       try {
         sendMessage(gm({ type: "send", data: submission }));
       } catch {
-        markSubmissionFailed(submission.submissionId);
+        setSubmissionState(submission.submissionId, "waiting");
         return;
       }
+
+      setSubmissionState(submission.submissionId, "sending");
 
       const pending = pendingSubmissionsRef.current.get(
         submission.submissionId,
@@ -361,8 +401,16 @@ export function useRoomChat({
         ACCEPTANCE_TIMEOUT_MS,
       );
     },
-    [markSubmissionFailed, sendMessage],
+    [markSubmissionFailed, sendMessage, setSubmissionState],
   );
+
+  useLayoutEffect(() => {
+    resumePendingSubmissionsRef.current = () => {
+      pendingSubmissionsRef.current.forEach((pending) => {
+        if (pending.state === "waiting") sendSubmission(pending.submission);
+      });
+    };
+  }, [sendSubmission]);
 
   const retrySubmission = useCallback(
     (submissionId: string) => {
@@ -372,6 +420,25 @@ export function useRoomChat({
     [sendSubmission],
   );
 
+  const removeSubmission = useCallback((submissionId: string) => {
+    const pending = pendingSubmissionsRef.current.get(submissionId);
+    if (pending?.timeoutId) clearTimeout(pending.timeoutId);
+    pendingSubmissionsRef.current.delete(submissionId);
+    setChats((chats) =>
+      chats.filter((chat) => chat.submissionId !== submissionId),
+    );
+  }, []);
+
+  const cancelSubmission = useCallback(
+    (submissionId: string) => {
+      const pending = pendingSubmissionsRef.current.get(submissionId);
+      if (pending?.state === "waiting" && !pending.attempted) {
+        removeSubmission(submissionId);
+      }
+    },
+    [removeSubmission],
+  );
+
   const handleMessageAcceptance = useCallback((data: MessageAcceptance) => {
     const pending = pendingSubmissionsRef.current.get(data.submissionId);
     if (pending?.timeoutId) clearTimeout(pending.timeoutId);
@@ -379,13 +446,32 @@ export function useRoomChat({
     setChats((chats) => reconcileMessageAcceptance(chats, data));
   }, []);
 
+  const handleMessageRejection = useCallback((data: MessageRejection) => {
+    const pending = pendingSubmissionsRef.current.get(data.submissionId);
+    if (pending?.timeoutId) clearTimeout(pending.timeoutId);
+    pendingSubmissionsRef.current.delete(data.submissionId);
+    setChats((chats) =>
+      chats.map((chat) =>
+        chat.submissionId === data.submissionId
+          ? {
+              ...chat,
+              sendState: "rejected",
+              rejectionReason: data.reason,
+            }
+          : chat,
+      ),
+    );
+  }, []);
+
   const handleDisconnect = useCallback(() => {
     pendingSubmissionsRef.current.forEach((pending, submissionId) => {
       if (pending.timeoutId) clearTimeout(pending.timeoutId);
       pending.timeoutId = null;
-      markSubmissionFailed(submissionId);
+      if (pending.state === "sending") {
+        setSubmissionState(submissionId, "waiting");
+      }
     });
-  }, [markSubmissionFailed]);
+  }, [setSubmissionState]);
 
   const sendText = useCallback(
     (content: string, replyTo?: ReplyRef) => {
@@ -396,7 +482,8 @@ export function useRoomChat({
         {
           id: submissionId,
           submissionId,
-          sendState: "sending",
+          sendState:
+            readyStateRef.current === WebSocket.OPEN ? "sending" : "waiting",
           authorType: "user",
           userId,
           type: "text",
@@ -423,7 +510,10 @@ export function useRoomChat({
     sendText,
     sendSubmission,
     retrySubmission,
+    cancelSubmission,
+    removeSubmission,
     handleMessageAcceptance,
+    handleMessageRejection,
     handleDisconnect,
     handleInitHistory,
     handleHistory,

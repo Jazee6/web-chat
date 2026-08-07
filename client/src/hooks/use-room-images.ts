@@ -1,6 +1,6 @@
 import { api, calculateSHA256, convertImageToWebP } from "@/lib/utils.ts";
 import ky from "ky";
-import { type Dispatch, type SetStateAction } from "react";
+import { type Dispatch, type SetStateAction, useRef } from "react";
 import type {
   MessageSubmission,
   ReplyRef,
@@ -23,6 +23,13 @@ type UseRoomImagesReturn = {
   // Sticker fast path: the image already exists under its storage key. See
   // ADR 0004; retries reuse this key through the Message Submission registry.
   sendSticker: (key: string) => void;
+  retryImageUpload: (submissionId: string, index: number) => Promise<void>;
+  confirmUploadedImages: (submissionId: string) => void;
+};
+
+type ImageBatch = {
+  files: { file: File; key?: string }[];
+  replyTo?: ReplyRef;
 };
 
 export function useRoomImages({
@@ -31,6 +38,119 @@ export function useRoomImages({
   sendSubmission,
   requestStickToBottom,
 }: UseRoomImagesParams): UseRoomImagesReturn {
+  const imageBatchesRef = useRef(new Map<string, ImageBatch>());
+
+  const confirmUploadedImages = (submissionId: string) => {
+    const batch = imageBatchesRef.current.get(submissionId);
+    if (!batch || batch.files.some(({ key }) => !key)) return;
+    const content = JSON.stringify(batch.files.map(({ key }) => key!));
+    imageBatchesRef.current.delete(submissionId);
+    sendSubmission({
+      submissionId,
+      type: "image",
+      content,
+      replyTo: batch.replyTo,
+    });
+  };
+
+  const uploadBatchFiles = async (
+    submissionId: string,
+    indexes: number[],
+  ): Promise<boolean> => {
+    const batch = imageBatchesRef.current.get(submissionId);
+    if (!batch) return false;
+
+    setChats((previous) =>
+      previous.map((chat) =>
+        chat.submissionId === submissionId
+          ? {
+              ...chat,
+              localFiles: chat.localFiles?.map((localFile, index) =>
+                indexes.includes(index)
+                  ? {
+                      ...localFile,
+                      isUploading: true,
+                      uploadFailed: false,
+                    }
+                  : localFile,
+              ),
+            }
+          : chat,
+      ),
+    );
+
+    const prepared = await Promise.all(
+      indexes.map(async (index) => {
+        try {
+          const converted = await convertImageToWebP(batch.files[index].file);
+          return {
+            index,
+            file: converted,
+            key: await calculateSHA256(converted),
+          };
+        } catch {
+          return { index, error: true as const };
+        }
+      }),
+    );
+    const ready = prepared.flatMap((result) =>
+      "key" in result ? [result] : [],
+    );
+    const failedIndexes = new Set(
+      prepared.flatMap((result) => ("error" in result ? [result.index] : [])),
+    );
+
+    if (ready.length > 0) {
+      try {
+        const presigned = await api
+          .post<
+            { url: string | null; key: string }[]
+          >("room/upload/presigned", { json: { sha256List: ready.map(({ key }) => key) } })
+          .json();
+        const uploaded = await Promise.allSettled(
+          presigned.map(async ({ url, key }, index) => {
+            if (url) await ky.put(url, { body: ready[index].file });
+            return { index: ready[index].index, key };
+          }),
+        );
+        uploaded.forEach((result, index) => {
+          if (result.status === "fulfilled") {
+            batch.files[result.value.index].key = result.value.key;
+          } else {
+            failedIndexes.add(ready[index].index);
+          }
+        });
+      } catch {
+        ready.forEach(({ index }) => failedIndexes.add(index));
+      }
+    }
+
+    const content = JSON.stringify(
+      batch.files.flatMap(({ key }) => (key ? [key] : [])),
+    );
+    setChats((previous) =>
+      previous.map((chat) =>
+        chat.submissionId === submissionId
+          ? {
+              ...chat,
+              content,
+              localFiles: chat.localFiles?.map((localFile, index) =>
+                indexes.includes(index)
+                  ? {
+                      ...localFile,
+                      isUploading: false,
+                      key: batch.files[index].key,
+                      uploadFailed: failedIndexes.has(index),
+                    }
+                  : localFile,
+              ),
+            }
+          : chat,
+      ),
+    );
+    return batch.files.every(({ key }) => !!key);
+  };
+
   // A Reply attaches to exactly one message: the text caption if present,
   // otherwise the image. Image and caption are independent submissions.
   const sendImages = async (
@@ -41,6 +161,11 @@ export function useRoomImages({
     const imageSubmissionId = crypto.randomUUID();
     const textSubmissionId = textMessage ? crypto.randomUUID() : undefined;
     const replyOnText = !!textMessage;
+
+    imageBatchesRef.current.set(imageSubmissionId, {
+      files: rawImages.map((file) => ({ file })),
+      replyTo: replyOnText ? undefined : replyTo,
+    });
 
     requestStickToBottom();
     setChats((previous) => {
@@ -90,119 +215,16 @@ export function useRoomImages({
       }
     };
 
-    const convertedResults = await Promise.allSettled(
-      rawImages.map(convertImageToWebP),
+    const allUploaded = await uploadBatchFiles(
+      imageSubmissionId,
+      rawImages.map((_, index) => index),
     );
-    const converted: {
-      originalIndex: number;
-      file: File;
-    }[] = [];
-    convertedResults.forEach((result, index) => {
-      if (result.status === "fulfilled") {
-        converted.push({ originalIndex: index, file: result.value });
-      }
-    });
-
-    const hashResults = await Promise.allSettled(
-      converted.map(async ({ originalIndex, file }) => ({
-        originalIndex,
-        file,
-        key: await calculateSHA256(file),
-      })),
-    );
-    const hashed = hashResults.flatMap((result) =>
-      result.status === "fulfilled" ? [result.value] : [],
-    );
-
-    const failedIndexes = new Set<number>();
-    convertedResults.forEach((result, index) => {
-      if (result.status === "rejected") failedIndexes.add(index);
-    });
-    hashResults.forEach((result, index) => {
-      if (result.status === "rejected") {
-        failedIndexes.add(converted[index].originalIndex);
-      }
-    });
-
-    let presigned: { url: string | null; key: string }[];
-    try {
-      if (hashed.length === 0) throw new Error("No images ready to upload");
-      presigned = await api
-        .post<
-          { url: string | null; key: string }[]
-        >("room/upload/presigned", { json: { sha256List: hashed.map(({ key }) => key) } })
-        .json();
-    } catch {
-      hashed.forEach(({ originalIndex }) => failedIndexes.add(originalIndex));
-      setChats((previous) =>
-        previous.map((chat) =>
-          chat.id === imageSubmissionId
-            ? {
-                ...chat,
-                localFiles: chat.localFiles?.map((localFile, index) =>
-                  failedIndexes.has(index)
-                    ? {
-                        ...localFile,
-                        isUploading: false,
-                        uploadFailed: true,
-                      }
-                    : localFile,
-                ),
-              }
-            : chat,
-        ),
-      );
-      submitText();
-      return;
-    }
-
-    const uploadResults = await Promise.allSettled(
-      presigned.map(async ({ url, key }, index) => {
-        if (url) await ky.put(url, { body: hashed[index].file });
-        return { originalIndex: hashed[index].originalIndex, key };
-      }),
-    );
-    const uploaded = uploadResults.flatMap((result, index) => {
-      if (result.status === "fulfilled") return [result.value];
-      failedIndexes.add(hashed[index].originalIndex);
-      return [];
-    });
-    const uploadedByIndex = new Map(
-      uploaded.map(({ originalIndex, key }) => [originalIndex, key]),
-    );
-    const storageKeys = uploaded.map(({ key }) => key);
-    const content = JSON.stringify(storageKeys);
-
-    setChats((previous) =>
-      previous.map((chat) =>
-        chat.id === imageSubmissionId
-          ? {
-              ...chat,
-              content,
-              localFiles: chat.localFiles?.map((localFile, index) => {
-                const key = uploadedByIndex.get(index);
-                return key
-                  ? { ...localFile, isUploading: false, key }
-                  : {
-                      ...localFile,
-                      isUploading: false,
-                      uploadFailed: true,
-                    };
-              }),
-            }
-          : chat,
-      ),
-    );
-
-    if (storageKeys.length > 0) {
-      sendSubmission({
-        submissionId: imageSubmissionId,
-        type: "image",
-        content,
-        replyTo: replyOnText ? undefined : replyTo,
-      });
-    }
+    if (allUploaded) confirmUploadedImages(imageSubmissionId);
     submitText();
+  };
+
+  const retryImageUpload = async (submissionId: string, index: number) => {
+    await uploadBatchFiles(submissionId, [index]);
   };
 
   const sendSticker = (key: string) => {
@@ -225,5 +247,10 @@ export function useRoomImages({
     sendSubmission({ submissionId, type: "image", content });
   };
 
-  return { sendImages, sendSticker };
+  return {
+    sendImages,
+    sendSticker,
+    retryImageUpload,
+    confirmUploadedImages,
+  };
 }

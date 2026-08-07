@@ -36,6 +36,11 @@ export interface ChatMessage {
   replyTo?: ReplyRef;
 }
 
+export interface HistoryChatMessage extends ChatMessage {
+  // Included only in history sent to the user who created the submission.
+  submissionId?: string;
+}
+
 export interface UIChatMessage extends ChatMessage {
   // Stable across optimistic-to-canonical reconciliation so React does not
   // remount the message and replay its entrance animation.
@@ -43,7 +48,9 @@ export interface UIChatMessage extends ChatMessage {
   // Client-only correlation for a Message Submission. Removed when the full
   // server Chat Message replaces the optimistic entry. See ADR 0009.
   submissionId?: string;
-  sendState?: "sending" | "failed";
+  sendState?: "waiting" | "sending" | "failed" | "rejected";
+  canCancelSend?: boolean;
+  rejectionReason?: MessageRejection["reason"];
   localFiles?: {
     file: File;
     isUploading: boolean;
@@ -67,6 +74,11 @@ export interface MessageSubmission {
 export interface MessageAcceptance {
   submissionId: string;
   message: ChatMessage;
+}
+
+export interface MessageRejection {
+  submissionId: string;
+  reason: "invalid_submission" | "submission_conflict";
 }
 
 // A Sticker is an image a user has favorited from chat for quick reuse. It
@@ -121,11 +133,11 @@ export type ServerMessage =
     }
   | {
       type: "initHistory";
-      data: ChatMessage[];
+      data: HistoryChatMessage[];
     }
   | {
       type: "history";
-      data: ChatMessage[];
+      data: HistoryChatMessage[];
     }
   | {
       type: "message";
@@ -134,6 +146,10 @@ export type ServerMessage =
   | {
       type: "messageAcceptance";
       data: MessageAcceptance;
+    }
+  | {
+      type: "messageRejection";
+      data: MessageRejection;
     }
   | {
       type: "aiTyping";

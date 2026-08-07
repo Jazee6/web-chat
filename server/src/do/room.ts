@@ -11,12 +11,18 @@ import {
   ServerMessage,
   type ChatMessage,
   type ClientMessage,
+  type HistoryChatMessage,
   type ServerRealtimeStatus,
 } from "web-chat-share";
 import { createWorkersAI } from "workers-ai-provider";
 // @ts-ignore
 import migrations from "../../drizzle/room/migrations.js";
 import { createExaWebSearch } from "../lib/exa-web-search";
+import {
+  getRejectedSubmissionId,
+  getVisibleSubmissionId,
+  isSameSubmissionPayload,
+} from "../lib/message-submission";
 import {
   AI_CONTEXT_LIMIT,
   clearPendingAiInvocations,
@@ -49,6 +55,17 @@ const toClientMessage = (row: MessageRow): ChatMessage => ({
   createdAt: row.createdAt.toISOString(),
   replyTo: row.replyTo ?? undefined,
 });
+
+const toHistoryMessage = (
+  row: MessageRow,
+  userId: string,
+): HistoryChatMessage => {
+  const submissionId = getVisibleSubmissionId(row, userId);
+  return {
+    ...toClientMessage(row),
+    ...(submissionId ? { submissionId } : {}),
+  };
+};
 
 interface WsAttachment {
   session: WsSession;
@@ -339,6 +356,15 @@ export class Room extends DurableObject<Env> {
     ws.send(gm({ type: "aiError", data: { code } }));
   }
 
+  sendMessageRejection(
+    ws: WebSocket,
+    submissionId: string,
+    reason: "invalid_submission" | "submission_conflict",
+  ) {
+    if (ws.readyState !== WebSocket.OPEN) return;
+    ws.send(gm({ type: "messageRejection", data: { submissionId, reason } }));
+  }
+
   async getAiContext(): Promise<MessageRow[]> {
     return this.db
       .select()
@@ -525,20 +551,29 @@ export class Room extends DurableObject<Env> {
 
   async webSocketMessage(ws: WebSocket, message: string) {
     if (this.deleted) return;
-    const parsed = clientMessageSchema.safeParse(
-      (() => {
-        try {
-          return JSON.parse(message);
-        } catch {
-          return null;
-        }
-      })(),
-    );
-    if (!parsed.success) return;
+    let payload: unknown;
+    try {
+      payload = JSON.parse(message);
+    } catch {
+      return;
+    }
+    const parsed = clientMessageSchema.safeParse(payload);
+    if (!parsed.success) {
+      const submissionId = getRejectedSubmissionId(payload);
+      if (submissionId !== undefined) {
+        this.sendMessageRejection(ws, submissionId, "invalid_submission");
+      }
+      return;
+    }
     const clientMessage: ClientMessage = parsed.data;
 
     switch (clientMessage.type) {
       case "join": {
+        const session = this.sessions.get(ws);
+        if (!session) {
+          this.handleDisconnect(ws);
+          return;
+        }
         this.broadcastRoomStats();
         this.broadcastRoomRealTime();
 
@@ -561,7 +596,9 @@ export class Room extends DurableObject<Env> {
         ws.send(
           gm({
             type: "initHistory",
-            data: history.reverse().map(toClientMessage),
+            data: history
+              .reverse()
+              .map((row) => toHistoryMessage(row, session.id)),
           }),
         );
         break;
@@ -602,6 +639,11 @@ export class Room extends DurableObject<Env> {
             .limit(1)
             .then((rows) => rows[0]));
         if (!data) return;
+
+        if (!isSameSubmissionPayload(data, clientMessage.data)) {
+          this.sendMessageRejection(ws, submissionId, "submission_conflict");
+          break;
+        }
 
         if (ws.readyState === WebSocket.OPEN) {
           try {
@@ -649,6 +691,11 @@ export class Room extends DurableObject<Env> {
         break;
       }
       case "loadHistory": {
+        const session = this.sessions.get(ws);
+        if (!session) {
+          this.handleDisconnect(ws);
+          return;
+        }
         const before = clientMessage.data.before;
         const beforeDate = new Date(before);
         if (isNaN(beforeDate.getTime())) {
@@ -663,7 +710,9 @@ export class Room extends DurableObject<Env> {
         ws.send(
           gm({
             type: "history",
-            data: moreHistory.reverse().map(toClientMessage),
+            data: moreHistory
+              .reverse()
+              .map((row) => toHistoryMessage(row, session.id)),
           }),
         );
         break;
