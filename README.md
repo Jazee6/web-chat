@@ -48,28 +48,6 @@ bun run db:generate:auth
 bun run db:push:d1
 ```
 
-### 部署到 Cloudflare Workers
-
-```bash
-cd server
-# 可选：为 Room AI 启用 Web Search
-bunx wrangler secret put EXA_API_KEY
-# 可选：在 wrangler.jsonc 或 Cloudflare Dashboard 中设置 AI_GATEWAY_ID
-bun run deploy
-```
-
-### 测试
-
-```bash
-cd server
-bun test
-bun run test:integration
-
-cd ../client
-bun test
-bun run build
-```
-
 ## 环境变量列表
 
 ### 服务端 (`server/.env`)

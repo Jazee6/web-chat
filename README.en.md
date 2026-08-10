@@ -50,28 +50,6 @@ bun run db:generate:auth
 bun run db:push:d1
 ```
 
-### Deploy to Cloudflare Workers
-
-```bash
-cd server
-# Optional: enable Web Search for Room AI
-bunx wrangler secret put EXA_API_KEY
-# Optional: set AI_GATEWAY_ID in wrangler.jsonc or Cloudflare Dashboard
-bun run deploy
-```
-
-### Tests
-
-```bash
-cd server
-bun test
-bun run test:integration
-
-cd ../client
-bun test
-bun run build
-```
-
 ## Environment Variables
 
 ### Server (`server/.env`)
