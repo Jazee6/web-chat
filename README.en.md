@@ -50,10 +50,6 @@ bun run db:generate:auth
 bun run db:push:d1
 ```
 
-On the first 1.5 deployment, the hourly Cron automatically backfills references from existing room messages, Stickers,
-and R2 images. Unreferenced image reclamation starts automatically only after the backfill completes and another 24
-hours pass; no images are physically deleted while backfill is in progress.
-
 ### Deploy to Cloudflare Workers
 
 ```bash

@@ -48,9 +48,6 @@ bun run db:generate:auth
 bun run db:push:d1
 ```
 
-1.5 首次部署会由每小时 Cron 自动回填已有房间消息、Sticker 与 R2 图片引用。回填全部完成并再等待 24 小时后，
-无引用图片回收会自动启用；回填期间不会物理删除图片。
-
 ### 部署到 Cloudflare Workers
 
 ```bash
