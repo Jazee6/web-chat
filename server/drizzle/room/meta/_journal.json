@@ -36,6 +36,13 @@
       "when": 1785416374372,
       "tag": "0004_yummy_gateway",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "6",
+      "when": 1786377600000,
+      "tag": "0005_room_history_search",
+      "breakpoints": true
     }
   ]
 }

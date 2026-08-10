@@ -3,6 +3,7 @@ import {
   mergeInitialHistory,
   reconcileMessageAcceptance,
 } from "@/lib/message-submissions.ts";
+import { getHistoryCursor, type HistoryCursor } from "@/lib/room-history.ts";
 import {
   type Dispatch,
   type RefObject,
@@ -36,6 +37,7 @@ type UseRoomChatParams = {
   sendMessage: (msg: string) => void;
   readyState: number;
   fetchMissingUsers: (ids: string[]) => void;
+  isHistoricalView: boolean;
 };
 
 type UseRoomChatReturn = {
@@ -70,6 +72,7 @@ export function useRoomChat({
   sendMessage,
   readyState,
   fetchMissingUsers,
+  isHistoricalView,
 }: UseRoomChatParams): UseRoomChatReturn {
   const [isLoading, setIsLoading] = useState(true);
   const [roomStats, setRoomStats] = useState<RoomStats>();
@@ -78,7 +81,7 @@ export function useRoomChat({
   const [stickToBottom, setStickToBottom] = useState(true);
   const [unreadCount, setUnreadCount] = useState(0);
 
-  const oldestChatTimeRef = useRef<string | null>(null);
+  const oldestChatCursorRef = useRef<HistoryCursor | null>(null);
   const previousScrollHeightRef = useRef<number>(0);
   const isLoadingHistoryRef = useRef(false);
   const stickToBottomRef = useRef(true);
@@ -86,6 +89,7 @@ export function useRoomChat({
   const pendingUserIdsRef = useRef<Set<string>>(new Set());
   const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const readyStateRef = useRef(readyState);
+  const isHistoricalViewRef = useRef(isHistoricalView);
   const pendingSubmissionsRef = useRef(
     new Map<
       string,
@@ -103,8 +107,18 @@ export function useRoomChat({
     readyStateRef.current = readyState;
   }, [readyState]);
 
+  useLayoutEffect(() => {
+    isHistoricalViewRef.current = isHistoricalView;
+  }, [isHistoricalView]);
+
   const setStick = useCallback((next: boolean) => {
-    if (stickToBottomRef.current === next) return;
+    if (stickToBottomRef.current === next) {
+      if (next && unreadCountRef.current !== 0) {
+        unreadCountRef.current = 0;
+        setUnreadCount(0);
+      }
+      return;
+    }
     stickToBottomRef.current = next;
     setStickToBottom(next);
     if (next && unreadCountRef.current !== 0) {
@@ -179,7 +193,7 @@ export function useRoomChat({
       });
       setChats((chats) => mergeInitialHistory(chats, data));
       if (data.length > 0) {
-        oldestChatTimeRef.current = data[0].createdAt;
+        oldestChatCursorRef.current = getHistoryCursor(data[0]);
         fetchMissingUsers(
           data.flatMap((c) =>
             c.authorType === "user" && c.userId ? [c.userId] : [],
@@ -215,7 +229,7 @@ export function useRoomChat({
           ...chats,
         ];
       });
-      oldestChatTimeRef.current = data[0].createdAt;
+      oldestChatCursorRef.current = getHistoryCursor(data[0]);
       debouncedFetchMissingUsers(
         data.flatMap((c) =>
           c.authorType === "user" && c.userId ? [c.userId] : [],
@@ -233,7 +247,7 @@ export function useRoomChat({
       if (data.authorType === "user" && data.userId) {
         debouncedFetchMissingUsers([data.userId]);
       }
-      if (!stickToBottomRef.current) {
+      if (isHistoricalViewRef.current || !stickToBottomRef.current) {
         unreadCountRef.current += 1;
         setUnreadCount(unreadCountRef.current);
       }
@@ -243,16 +257,16 @@ export function useRoomChat({
 
   // Initial scroll to bottom once history loaded
   useEffect(() => {
-    if (isLoading) return;
+    if (isLoading || isHistoricalView) return;
     const el = chatListRef.current;
     if (!el) return;
     el.scrollTo({ top: el.scrollHeight, behavior: "instant" });
-  }, [isLoading, chatListRef]);
+  }, [chatListRef, isHistoricalView, isLoading]);
 
   // Scroll listener: track user intent (stick vs free)
   useEffect(() => {
     const el = chatListRef.current;
-    if (!el || isLoading) return;
+    if (!el || isLoading || isHistoricalView) return;
 
     const onScroll = () => {
       const stick =
@@ -262,14 +276,14 @@ export function useRoomChat({
 
     el.addEventListener("scroll", onScroll, { passive: true });
     return () => el.removeEventListener("scroll", onScroll);
-  }, [chatListRef, isLoading, setStick]);
+  }, [chatListRef, isHistoricalView, isLoading, setStick]);
 
   // ResizeObserver on the inner content (its height tracks content growth;
   // the scroll container's box stays the same size).
   useEffect(() => {
     const el = chatListRef.current;
     const content = contentRef.current;
-    if (!el || !content || isLoading) return;
+    if (!el || !content || isLoading || isHistoricalView) return;
 
     const observer = new ResizeObserver(() => {
       const action = decideScrollAction({
@@ -295,25 +309,25 @@ export function useRoomChat({
 
     observer.observe(content);
     return () => observer.disconnect();
-  }, [chatListRef, contentRef, isLoading]);
+  }, [chatListRef, contentRef, isHistoricalView, isLoading]);
 
   // Infinite scroll: load history when loader is visible
   useEffect(() => {
-    if (!loaderRef.current || isLoading) return;
+    if (!loaderRef.current || isLoading || isHistoricalView) return;
 
     const observer = new IntersectionObserver((entries) => {
       entries.forEach((entry) => {
         if (
           entry.isIntersecting &&
-          oldestChatTimeRef.current &&
+          oldestChatCursorRef.current &&
           !isLoadingHistoryRef.current &&
           hasMore
         ) {
           sendMessage(
-            gm({
+            JSON.stringify({
               type: "loadHistory",
               data: {
-                before: oldestChatTimeRef.current,
+                before: oldestChatCursorRef.current,
               },
             }),
           );
@@ -326,7 +340,7 @@ export function useRoomChat({
     return () => {
       observer.disconnect();
     };
-  }, [isLoading, loaderRef, sendMessage, hasMore]);
+  }, [hasMore, isHistoricalView, isLoading, loaderRef, sendMessage]);
 
   const setSubmissionState = useCallback(
     (submissionId: string, sendState: "waiting" | "sending" | "failed") => {

@@ -143,7 +143,7 @@
 
 /* One-shot highlight when jumping to a message via its Quote. The class is
    added then removed on animationend (with a setTimeout backstop); see
-   flashMessage in chat-list.tsx. */
+   flashMessage in lib/flash-message.ts. */
 @keyframes reply-flash {
     0% {
         background-color: color-mix(in oklch, var(--primary) 18%, transparent);

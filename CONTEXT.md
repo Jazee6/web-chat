@@ -93,6 +93,30 @@ _Avoid_: bot message, announcement
 A single authored utterance in a room, identified by a server-generated id. A user may send text or images; the Room AI sends text only. Its author type explicitly distinguishes a user from the Room AI.
 _Avoid_: post, entry
 
+**Room History Search**:
+A search of all persistent text Chat Messages in the current room. It includes messages authored by users and the Room AI, but excludes System Messages and image content. After surrounding whitespace is removed, a query contains 3 to 100 Unicode code points and matches a continuous substring of a message's own text. ASCII English letters are compared without regard to case; all other characters are compared as written. Reply snapshots do not participate, and the search does not imply token, fuzzy, pinyin, semantic, width-normalized, accent-normalized, or traditional/simplified Chinese matching. Matches are presented newest first and may be opened in their conversation context. Searching and opening context do not count as Room Activity.
+_Avoid_: global search, loaded-message search, Web Search, semantic search
+
+**Room History Search Readiness**:
+Whether a room's complete retained history is available to Room History Search. A room is Ready when that complete view is searchable, Preparing while the view is being built, and Search Unavailable after preparation or maintenance fails. A new empty room is Ready immediately. An existing room remains usable while its history is prepared, but search reports that it is preparing rather than returning incomplete matches. Newly accepted searchable messages are included when readiness is reached. A failure while preparing or maintaining search must not prevent Message Acceptance; search instead becomes unavailable, offers a retry, and may return to Preparing while its complete view of retained history is rebuilt.
+_Avoid_: partial search, room availability, search results
+
+**History Search Match**:
+A persistent text Chat Message that satisfies a Room History Search query.
+_Avoid_: search result (may mean its rendered presentation), context message
+
+**History Search Snapshot**:
+The stable set of History Search Matches eligible for one submitted query, bounded by the room history that exists when the query is submitted. Messages accepted later do not enter that snapshot; submitting a query again creates a new snapshot. Its query and results exist only in the current room page and are discarded on refresh or when leaving the room.
+_Avoid_: live results, search cache
+
+**History Search Context**:
+A continuous window containing a History Search Match, up to 12 earlier and 12 later room-history items. It preserves the room's original history, including image Chat Messages and System Messages that cannot themselves be History Search Matches. It is opened from a search result so the user can understand the matching Chat Message in its original conversation.
+_Avoid_: search result, filtered history
+
+**Historical Context View**:
+The room view displaying a History Search Context separately from the latest, live conversation. It preserves the user's search state, identifies the matching message, and provides a way back to the latest conversation without presenting discontinuous history as one continuous sequence.
+_Avoid_: search results, live conversation, merged history
+
 **Message Retention**:
 An accepted Chat Message remains in room history for as long as its room exists; it has no independent expiry. Owner-requested Room Deletion or Room Expiration ends the retention of all its Chat Messages.
 _Avoid_: message expiry, temporary history

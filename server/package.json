@@ -5,6 +5,7 @@
     "dev": "wrangler dev",
     "test": "bun test",
     "test:integration": "vitest run",
+    "benchmark:search": "vitest run --config vitest.benchmark.config.ts",
     "deploy": "wrangler deploy --minify",
     "cf-typegen": "wrangler types --env-interface CloudflareBindings",
     "db:push:d1": "drizzle-kit push && drizzle-kit generate && bunx wrangler d1 migrations apply web-chat",

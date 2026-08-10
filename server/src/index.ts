@@ -17,7 +17,9 @@ import {
   getUserInfoSchema,
   linkPreviewQuerySchema,
   publicRoomPaginationSchema,
+  roomContextRequestSchema,
   roomIdSchema,
+  roomSearchRequestSchema,
   stickerIdSchema,
   updateRoomAiSchema,
   updateRoomVisibilitySchema,
@@ -119,7 +121,7 @@ app.use(
     origin: process.env.SITE_URL,
     allowHeaders: ["Content-Type", "Authorization"],
     allowMethods: ["POST", "GET", "OPTIONS", "DELETE", "PUT", "PATCH"],
-    exposeHeaders: ["Content-Length"],
+    exposeHeaders: ["Content-Length", "Retry-After"],
     maxAge: 600,
     credentials: true,
   }),
@@ -333,6 +335,59 @@ app.get("/room/:id/ws", zValidator("param", roomIdSchema), async (c) => {
   url.searchParams.set("user_id", c.get("user").id);
   return stub.fetch(url, c.req.raw);
 });
+
+app.post(
+  "/room/:id/search",
+  zValidator("param", roomIdSchema),
+  zValidator("json", roomSearchRequestSchema),
+  async (c) => {
+    const { id } = c.req.valid("param");
+    const room = await getDb(c.env.web_chat)
+      .select({ id: roomTable.id })
+      .from(roomTable)
+      .where(and(eq(roomTable.id, id), isNull(roomTable.deletionRequestedAt)))
+      .limit(1)
+      .then((rows) => rows[0]);
+    if (!room) throw new HTTPException(404, { message: "Room not found" });
+
+    const result = await c.env.ROOM.get(c.env.ROOM.idFromString(id)).search(
+      c.get("user").id,
+      c.req.valid("json"),
+    );
+    if ("rateLimited" in result) {
+      const response = c.json(
+        { code: "SEARCH_RATE_LIMITED", message: "Too many search requests" },
+        429,
+      );
+      response.headers.set("Retry-After", String(result.retryAfter));
+      return response;
+    }
+    return c.json(result);
+  },
+);
+
+app.post(
+  "/room/:id/context",
+  zValidator("param", roomIdSchema),
+  zValidator("json", roomContextRequestSchema),
+  async (c) => {
+    const { id } = c.req.valid("param");
+    const room = await getDb(c.env.web_chat)
+      .select({ id: roomTable.id })
+      .from(roomTable)
+      .where(and(eq(roomTable.id, id), isNull(roomTable.deletionRequestedAt)))
+      .limit(1)
+      .then((rows) => rows[0]);
+    if (!room) throw new HTTPException(404, { message: "Room not found" });
+
+    const result = await c.env.ROOM.get(c.env.ROOM.idFromString(id)).context(
+      c.get("user").id,
+      c.req.valid("json"),
+    );
+    if (!result) throw new HTTPException(404, { message: "Message not found" });
+    return c.json(result);
+  },
+);
 
 app.delete("/room/:id", zValidator("param", roomIdSchema), async (c) => {
   const { id } = c.req.valid("param");

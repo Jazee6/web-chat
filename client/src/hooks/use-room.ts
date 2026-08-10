@@ -36,6 +36,7 @@ export function useRoom({
   contentRef,
   loaderRef,
   onOpen,
+  isHistoricalView,
 }: {
   id: string;
   user: User;
@@ -43,6 +44,7 @@ export function useRoom({
   contentRef: RefObject<HTMLDivElement | null>;
   loaderRef: RefObject<HTMLDivElement | null>;
   onOpen?: () => void;
+  isHistoricalView: boolean;
 }) {
   const { users, fetchMissingUsers } = useUserInfo();
   const [settings] = useSettings();
@@ -177,6 +179,7 @@ export function useRoom({
     sendMessage,
     readyState,
     fetchMissingUsers,
+    isHistoricalView,
   });
   useLayoutEffect(() => {
     chatRef.current = chat;

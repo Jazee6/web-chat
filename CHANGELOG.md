@@ -1,5 +1,27 @@
 # Changelog
 
+## [1.6.0] - 2026-08-10
+
+### Added
+
+- Added Room History Search for the complete retained text history of the current room, with a Command entry point,
+  stable result snapshots, and context windows around older messages.
+- Added explicit search index `Preparing` and `Search Unavailable` states. Existing rooms remain usable for chat while
+  their search index is prepared in background batches, and an unavailable index can be rebuilt.
+
+### Fixed
+
+- Fixed compound-cursor pagination for ordinary room history, search results, and historical context so pages do not omit
+  messages created in the same millisecond.
+
+### Upgrade notes
+
+- Under the existing design, the Room Durable Object SQLite migration is applied automatically when the room object wakes;
+  no per-room manual migration is expected.
+- Existing rooms can continue to chat during preparation, but their complete history search is not Ready until background
+  batches finish. Search reports its preparation or unavailable state rather than returning partial results.
+- This release requires no new manual migration for Cron or D1.
+
 ## [1.5.0] - 2026-08-10
 
 ### Added

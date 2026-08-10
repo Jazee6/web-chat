@@ -16,8 +16,10 @@ Live Demo: https://chat.jaze.top
   types and utilities)
 - **Serverless Backend**: Built with Cloudflare Workers + Hono framework
 - **Real-time Communication**: WebRTC calling powered by `Realtime SFU/TURN`
-- **Durable Objects**: Room state management using Cloudflare Durable Objects (Durable SQLite)
-- **D1 Database**: User and chat history storage via Cloudflare D1, with Drizzle ORM for data modeling and migrations
+- **Durable Objects**: Room state and chat history stored in each room's Durable Object SQLite database
+- **D1 Database**: User and room metadata stored via Cloudflare D1, with Drizzle ORM for data modeling and migrations
+- **Room History Search**: Search the complete text history of the current room with stable result snapshots, historical
+  context, and index readiness status
 - **Modern Frontend Experience**: React 19 + Vite + TypeScript + Tailwind CSS 4 + Shadcn UI
 - **Security & Authentication**: Integrated `better-auth` for authentication
 - **Object Storage**: Cloudflare R2 / S3-compatible storage for image and file uploads with preview support

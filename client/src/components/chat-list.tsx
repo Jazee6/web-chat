@@ -17,6 +17,7 @@ import { Skeleton } from "@/components/ui/skeleton.tsx";
 import { Spinner } from "@/components/ui/spinner.tsx";
 import { useFavoriteSticker } from "@/hooks/use-stickers.ts";
 import type { User } from "@/lib/auth-client.ts";
+import { flashMessage } from "@/lib/flash-message.ts";
 import { findMentionRanges } from "@/lib/mentions.ts";
 import { api, cn, formatChatListTime } from "@/lib/utils.ts";
 import {
@@ -241,22 +242,6 @@ const parseImageKeys = (content: string): string[] => {
   } catch {
     return [];
   }
-};
-
-// Best-effort scroll + flash to a replied-to message. No-ops when the
-// antecedent isn't in the loaded DOM (paginated out) — the snapshot Quote
-// still renders; only the jump gives up. See ADR 0003.
-const flashMessage = (id: string) => {
-  const el = document.getElementById(id);
-  if (!el) return;
-  el.scrollIntoView({ behavior: "smooth", block: "center" });
-  el.classList.add("reply-flash");
-  const cleanup = () => {
-    el.classList.remove("reply-flash");
-    clearTimeout(timer);
-  };
-  const timer = setTimeout(cleanup, 1600);
-  el.addEventListener("animationend", cleanup, { once: true });
 };
 
 // Silent copy (Q2: no toast). Text → the user's current selection if it lives

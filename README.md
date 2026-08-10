@@ -14,8 +14,9 @@ Live Demo: https://chat.jaze.top
 - **Monorepo 架构**：包含 `client`（前端）、`server`（后端）、`share`（共享类型与工具）三个工作区
 - **Serverless 后端**：基于 Cloudflare Workers + Hono 框架构建
 - **实时通信**：基于 `Realtime SFU/TURN` 实现 WebRTC 通话
-- **Durable Objects**：使用 Cloudflare Durable Objects（Durable SQLite）管理房间状态
-- **D1 数据库**：使用 Cloudflare D1 存储用户与聊天记录，搭配 Drizzle ORM 进行数据建模与迁移
+- **Durable Objects**：使用 Cloudflare Durable Objects（Durable SQLite）管理房间状态并存储房间历史
+- **D1 数据库**：使用 Cloudflare D1 存储用户与房间元数据，搭配 Drizzle ORM 进行数据建模与迁移
+- **房间历史搜索**：搜索当前房间的完整文字历史，支持稳定结果快照、旧消息上下文和索引状态提示
 - **现代前端体验**：React 19 + Vite + TypeScript + Tailwind CSS 4 + Shadcn UI
 - **安全与认证**：集成 `better-auth` 提供身份验证
 - **对象存储**：支持 Cloudflare R2 / S3 兼容存储，实现图片与文件的上传与预览

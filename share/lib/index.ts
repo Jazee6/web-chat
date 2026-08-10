@@ -36,9 +36,38 @@ export interface ChatMessage {
   replyTo?: ReplyRef;
 }
 
+export interface RoomHistoryCursor {
+  createdAt: string;
+  id: string;
+}
+
 export interface HistoryChatMessage extends ChatMessage {
   // Included only in history sent to the user who created the submission.
   submissionId?: string;
+}
+
+export type RoomSearchReadiness = "ready" | "preparing" | "unavailable";
+
+export interface RoomSearchReadinessResponse {
+  readiness: RoomSearchReadiness;
+}
+
+export interface RoomSearchReadyResponse extends RoomSearchReadinessResponse {
+  readiness: "ready";
+  messages: HistoryChatMessage[];
+  snapshot: RoomHistoryCursor;
+  nextCursor: RoomHistoryCursor | null;
+  hasMore: boolean;
+}
+
+export type RoomSearchResponse =
+  | RoomSearchReadinessResponse
+  | RoomSearchReadyResponse;
+
+export interface RoomContextResponse {
+  messages: HistoryChatMessage[];
+  hasMoreBefore: boolean;
+  hasMoreAfter: boolean;
 }
 
 export interface UIChatMessage extends ChatMessage {
@@ -184,7 +213,7 @@ export type ClientMessage =
   | {
       type: "loadHistory";
       data: {
-        before: string;
+        before: RoomHistoryCursor;
       };
     }
   | {

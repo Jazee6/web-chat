@@ -38,6 +38,61 @@ export const roomIdSchema = z.object({
   id: z.string().min(1),
 });
 
+export const roomHistoryCursorSchema = z
+  .object({
+    createdAt: z.string().datetime({ offset: true }),
+    id: z.string().min(1),
+  })
+  .strict();
+
+const searchQuerySchema = z
+  .string()
+  .trim()
+  .refine((query) => {
+    const codePointLength = [...query].length;
+    return codePointLength >= 3 && codePointLength <= 100;
+  }, "Query must contain 3 to 100 Unicode code points after trimming");
+
+export const roomSearchRequestSchema = z.discriminatedUnion("action", [
+  z.object({ action: z.literal("status") }).strict(),
+  z
+    .object({
+      action: z.literal("search"),
+      query: searchQuerySchema,
+      snapshot: roomHistoryCursorSchema.optional(),
+      cursor: roomHistoryCursorSchema.optional(),
+    })
+    .strict()
+    .refine((value) => !value.cursor || !!value.snapshot, {
+      message: "A cursor requires a snapshot",
+      path: ["snapshot"],
+    }),
+  z.object({ action: z.literal("retry") }).strict(),
+]);
+
+export const roomContextRequestSchema = z.discriminatedUnion("action", [
+  z
+    .object({
+      action: z.literal("initial"),
+      targetId: z.string().min(1),
+    })
+    .strict(),
+  z
+    .object({
+      action: z.literal("before"),
+      targetId: z.string().min(1),
+      cursor: roomHistoryCursorSchema,
+    })
+    .strict(),
+  z
+    .object({
+      action: z.literal("after"),
+      targetId: z.string().min(1),
+      cursor: roomHistoryCursorSchema,
+    })
+    .strict(),
+]);
+
 export const getUserInfoSchema = z.object({
   ids: z.preprocess(
     (v: string) => v.split(","),
@@ -64,6 +119,9 @@ export const replyRefSchema = z
   .refine((value) => value.authorType !== "user" || !!value.userId, {
     message: "User replies require a userId",
   });
+
+export type RoomSearchRequest = z.infer<typeof roomSearchRequestSchema>;
+export type RoomContextRequest = z.infer<typeof roomContextRequestSchema>;
 
 const submissionFields = {
   submissionId: z.uuid(),
@@ -150,9 +208,11 @@ export const clientMessageSchema = z.discriminatedUnion("type", [
   }),
   z.object({
     type: z.literal("loadHistory"),
-    data: z.object({
-      before: z.string(),
-    }),
+    data: z
+      .object({
+        before: roomHistoryCursorSchema,
+      })
+      .strict(),
   }),
   z.object({
     type: z.literal("userStatus"),

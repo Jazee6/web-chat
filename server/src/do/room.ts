@@ -1,6 +1,6 @@
 import { generateText, isStepCount, type ModelMessage } from "ai";
 import { DurableObject } from "cloudflare:workers";
-import { and, desc, eq, lt, ne } from "drizzle-orm";
+import { and, asc, desc, eq, gt, lt, ne, or } from "drizzle-orm";
 import { drizzle, DrizzleSqliteDODatabase } from "drizzle-orm/durable-sqlite";
 import { migrate } from "drizzle-orm/durable-sqlite/migrator";
 import { v7 } from "uuid";
@@ -12,6 +12,12 @@ import {
   type ChatMessage,
   type ClientMessage,
   type HistoryChatMessage,
+  type RoomContextRequest,
+  type RoomContextResponse,
+  type RoomHistoryCursor,
+  type RoomSearchReadiness,
+  type RoomSearchRequest,
+  type RoomSearchResponse,
   type ServerRealtimeStatus,
 } from "web-chat-share";
 import { createWorkersAI } from "workers-ai-provider";
@@ -48,6 +54,80 @@ type Env = Cloudflare.Env & {
 type WsSession = RoomUser;
 
 type MessageRow = typeof messageTable.$inferSelect;
+
+type SearchStateRow = {
+  readiness: RoomSearchReadiness;
+  boundaryCreatedAt: number | null;
+  boundaryId: string | null;
+  cursorCreatedAt: number | null;
+  cursorId: string | null;
+  batchSize: number;
+  failureCount: number;
+  retryAt: number | null;
+};
+
+type SearchBackfillRow = {
+  rowid: number;
+  id: string;
+  createdAt: number;
+  content: string;
+};
+
+type SearchResultRow = {
+  id: string;
+  createdAt: number;
+};
+
+type SearchRpcResponse =
+  | RoomSearchResponse
+  | {
+      rateLimited: true;
+      retryAfter: number;
+    };
+
+const SEARCH_BATCH_MAX = 500;
+const SEARCH_BATCH_TARGET_MS = 25;
+const SEARCH_RATE_LIMIT = 5;
+const SEARCH_RATE_WINDOW_MS = 1_000;
+const SEARCH_RETRY_BASE_MS = 1_000;
+const SEARCH_RETRY_MAX_MS = 5 * 60 * 1_000;
+const EMPTY_SEARCH_SNAPSHOT: RoomHistoryCursor = {
+  createdAt: new Date(0).toISOString(),
+  id: "0",
+};
+
+const asciiFold = (value: string): string =>
+  value.replace(/[A-Z]/g, (letter) => letter.toLowerCase());
+
+const quoteFtsQuery = (value: string): string =>
+  `"${value.replaceAll('"', '""')}"`;
+
+const toCursor = (createdAt: number, id: string): RoomHistoryCursor => ({
+  createdAt: new Date(createdAt).toISOString(),
+  id,
+});
+
+const cursorDate = (cursor: RoomHistoryCursor): Date =>
+  new Date(cursor.createdAt);
+
+const beforeCursor = (cursor: RoomHistoryCursor) => {
+  const date = cursorDate(cursor);
+  return or(
+    lt(messageTable.createdAt, date),
+    and(eq(messageTable.createdAt, date), lt(messageTable.id, cursor.id)),
+  );
+};
+
+const afterCursor = (cursor: RoomHistoryCursor) => {
+  const date = cursorDate(cursor);
+  return or(
+    gt(messageTable.createdAt, date),
+    and(eq(messageTable.createdAt, date), gt(messageTable.id, cursor.id)),
+  );
+};
+
+const rowCursor = (row: MessageRow): RoomHistoryCursor =>
+  toCursor(row.createdAt.getTime(), row.id);
 
 // Maps a message row to the wire ChatMessage shape. The replyTo column is
 // JSON-mode, so drizzle already parsed it into a ReplyRef (or null) — coerce
@@ -119,6 +199,7 @@ export class Room extends DurableObject<Env> {
   aiEnabled: boolean | undefined;
   activeAiAbortController: AbortController | undefined;
   deleted = false;
+  searchRequests = new Map<string, number[]>();
 
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
@@ -140,7 +221,535 @@ export class Room extends DurableObject<Env> {
       ),
     );
 
-    void ctx.blockConcurrencyWhile(async () => migrate(this.db, migrations));
+    void ctx.blockConcurrencyWhile(async () => {
+      await migrate(this.db, migrations);
+      await this.initializeSearch();
+    });
+  }
+
+  readSearchState = (): SearchStateRow | undefined =>
+    this.storage.sql
+      .exec<SearchStateRow>(
+        "SELECT readiness, boundaryCreatedAt, boundaryId, cursorCreatedAt, cursorId, batchSize, failureCount, retryAt FROM search_state WHERE id = 1",
+      )
+      .toArray()[0];
+
+  getLatestSearchBoundary = (): RoomHistoryCursor | undefined => {
+    const row = this.storage.sql
+      .exec<{
+        createdAt: number;
+        id: string;
+      }>(
+        "SELECT createdAt, id FROM message ORDER BY createdAt DESC, id DESC LIMIT 1",
+      )
+      .toArray()[0];
+    return row ? toCursor(row.createdAt, row.id) : undefined;
+  };
+
+  scheduleSearchAlarm = async (at: number): Promise<void> => {
+    if (!this.deleted) await this.storage.setAlarm(at);
+  };
+
+  async initializeSearch(): Promise<void> {
+    try {
+      const state = this.readSearchState();
+      if (!state) return;
+
+      if (state.readiness === "preparing" && state.boundaryCreatedAt === null) {
+        this.storage.transactionSync(() => {
+          const boundary = this.getLatestSearchBoundary();
+          if (!boundary) {
+            this.storage.sql.exec(
+              "UPDATE search_state SET readiness = 'ready', boundaryCreatedAt = NULL, boundaryId = NULL, cursorCreatedAt = NULL, cursorId = NULL, failureCount = 0, retryAt = NULL WHERE id = 1",
+            );
+            return;
+          }
+          this.storage.sql.exec(
+            "UPDATE search_state SET boundaryCreatedAt = ?, boundaryId = ?, cursorCreatedAt = NULL, cursorId = NULL WHERE id = 1",
+            new Date(boundary.createdAt).getTime(),
+            boundary.id,
+          );
+        });
+      }
+
+      const current = this.readSearchState();
+      if (current?.readiness === "preparing") {
+        await this.scheduleSearchAlarm(Date.now());
+      } else if (current?.readiness === "unavailable") {
+        await this.scheduleSearchAlarm(
+          Math.max(Date.now(), current.retryAt ?? Date.now()),
+        );
+      }
+    } catch (error) {
+      this.markSearchUnavailable(error);
+    }
+  }
+
+  consumeSearchRateLimit = (
+    userId: string,
+  ): { allowed: true } | { allowed: false; retryAfter: number } => {
+    const now = Date.now();
+    const recent = (this.searchRequests.get(userId) ?? []).filter(
+      (timestamp) => now - timestamp < SEARCH_RATE_WINDOW_MS,
+    );
+    if (recent.length >= SEARCH_RATE_LIMIT) {
+      const oldest = recent[0] ?? now;
+      return {
+        allowed: false,
+        retryAfter: Math.max(
+          1,
+          Math.ceil((oldest + SEARCH_RATE_WINDOW_MS - now) / 1_000),
+        ),
+      };
+    }
+    recent.push(now);
+    this.searchRequests.set(userId, recent);
+    return { allowed: true };
+  };
+
+  getSearchStatus = (): RoomSearchResponse => {
+    try {
+      return { readiness: this.readSearchState()?.readiness ?? "unavailable" };
+    } catch (error) {
+      console.error("Failed to read room history search status", error);
+      return { readiness: "unavailable" };
+    }
+  };
+
+  async beginSearchRebuild(): Promise<void> {
+    try {
+      let preparing = false;
+      this.storage.transactionSync(() => {
+        this.storage.sql.exec(
+          "CREATE VIRTUAL TABLE IF NOT EXISTS message_search_fts USING fts5(content, content='', tokenize='trigram case_sensitive 1')",
+        );
+        this.storage.sql.exec(
+          "INSERT INTO message_search_fts(message_search_fts) VALUES ('delete-all')",
+        );
+        const boundary = this.getLatestSearchBoundary();
+        if (!boundary) {
+          this.storage.sql.exec(
+            "UPDATE search_state SET readiness = 'ready', boundaryCreatedAt = NULL, boundaryId = NULL, cursorCreatedAt = NULL, cursorId = NULL, failureCount = 0, retryAt = NULL WHERE id = 1",
+          );
+          return;
+        }
+        preparing = true;
+        this.storage.sql.exec(
+          "UPDATE search_state SET readiness = 'preparing', boundaryCreatedAt = ?, boundaryId = ?, cursorCreatedAt = NULL, cursorId = NULL, failureCount = 0, retryAt = NULL, batchSize = MIN(batchSize, ?) WHERE id = 1",
+          new Date(boundary.createdAt).getTime(),
+          boundary.id,
+          SEARCH_BATCH_MAX,
+        );
+      });
+      if (preparing) await this.scheduleSearchAlarm(Date.now());
+    } catch (error) {
+      console.error("Failed to start room history search rebuild", error);
+      this.markSearchUnavailable(error);
+    }
+  }
+
+  markSearchUnavailable = (error: unknown): void => {
+    try {
+      let retryAt: number | undefined;
+      this.storage.transactionSync(() => {
+        const state = this.readSearchState();
+        if (!state) return;
+        const failureCount = state.failureCount + 1;
+        const delay = Math.min(
+          SEARCH_RETRY_MAX_MS,
+          SEARCH_RETRY_BASE_MS * 2 ** Math.min(failureCount - 1, 8),
+        );
+        retryAt = Date.now() + delay;
+        this.storage.sql.exec(
+          "UPDATE search_state SET readiness = 'unavailable', failureCount = ?, retryAt = ? WHERE id = 1",
+          failureCount,
+          retryAt,
+        );
+      });
+      if (retryAt !== undefined) {
+        this.ctx.waitUntil(this.scheduleSearchAlarm(retryAt));
+      }
+    } catch (stateError) {
+      console.error(
+        "Failed to persist room history search failure",
+        stateError,
+      );
+    }
+    console.error("Room history search is unavailable", error);
+  };
+
+  maintainSearchIndex = (row: MessageRow): void => {
+    if (row.authorType === "system" || row.type !== "text") return;
+    try {
+      const state = this.readSearchState();
+      if (!state || state.readiness === "unavailable") return;
+      const rowid = this.storage.sql
+        .exec<{
+          rowid: number;
+        }>("SELECT rowid FROM message WHERE id = ?", row.id)
+        .toArray()[0]?.rowid;
+      if (rowid === undefined) return;
+      this.storage.transactionSync(() => {
+        const current = this.readSearchState();
+        if (!current || current.readiness === "unavailable") return;
+        this.storage.sql.exec(
+          "INSERT OR REPLACE INTO message_search_fts(rowid, content) VALUES (?, ?)",
+          rowid,
+          asciiFold(row.content),
+        );
+      });
+    } catch (error) {
+      this.markSearchUnavailable(error);
+    }
+  };
+
+  async runSearchBackfill(): Promise<void> {
+    try {
+      await this.runSearchBackfillStep();
+    } catch (error) {
+      this.markSearchUnavailable(error);
+    }
+  }
+
+  async runSearchBackfillStep(): Promise<void> {
+    if (this.deleted) return;
+    const startedAt = performance.now();
+    let state = this.readSearchState();
+    if (!state || state.readiness === "ready") return;
+
+    if (state.readiness === "unavailable") {
+      if (state.retryAt && state.retryAt > Date.now()) {
+        await this.scheduleSearchAlarm(state.retryAt);
+        return;
+      }
+      await this.beginSearchRebuild();
+      state = this.readSearchState();
+      if (!state || state.readiness !== "preparing") return;
+    }
+
+    if (state.boundaryCreatedAt === null || state.boundaryId === null) {
+      await this.beginSearchRebuild();
+      state = this.readSearchState();
+      if (
+        !state ||
+        state.readiness !== "preparing" ||
+        state.boundaryCreatedAt === null ||
+        state.boundaryId === null
+      ) {
+        return;
+      }
+    }
+
+    const limit = Math.min(SEARCH_BATCH_MAX, Math.max(1, state.batchSize));
+    const boundaryCreatedAt = state.boundaryCreatedAt;
+    const boundaryId = state.boundaryId;
+    const boundaryClause =
+      "(m.createdAt < ? OR (m.createdAt = ? AND m.id <= ?))";
+    const cursorClause =
+      state.cursorCreatedAt === null || state.cursorId === null
+        ? "1 = 1"
+        : "(m.createdAt > ? OR (m.createdAt = ? AND m.id > ?))";
+    const params =
+      state.cursorCreatedAt === null || state.cursorId === null
+        ? [boundaryCreatedAt, boundaryCreatedAt, boundaryId, limit]
+        : [
+            state.cursorCreatedAt,
+            state.cursorCreatedAt,
+            state.cursorId,
+            boundaryCreatedAt,
+            boundaryCreatedAt,
+            boundaryId,
+            limit,
+          ];
+    const rows = this.storage.sql
+      .exec<SearchBackfillRow>(
+        `SELECT m.rowid AS rowid, m.id, m.createdAt, m.content
+         FROM message AS m
+         WHERE m.authorType IN ('user', 'ai')
+           AND m.type = 'text'
+           AND ${cursorClause}
+           AND ${boundaryClause}
+         ORDER BY m.createdAt ASC, m.id ASC
+         LIMIT ?`,
+        ...params,
+      )
+      .toArray();
+    try {
+      this.storage.transactionSync(() => {
+        for (const row of rows) {
+          this.storage.sql.exec(
+            "INSERT OR REPLACE INTO message_search_fts(rowid, content) VALUES (?, ?)",
+            row.rowid,
+            asciiFold(row.content),
+          );
+        }
+        if (rows.length === 0) {
+          const missing = this.storage.sql
+            .exec<{ rowid: number }>(
+              `SELECT m.rowid
+               FROM message AS m
+               WHERE m.authorType IN ('user', 'ai')
+                 AND m.type = 'text'
+                 AND NOT EXISTS (
+                   SELECT 1 FROM message_search_fts AS f WHERE f.rowid = m.rowid
+                 )
+               LIMIT 1`,
+            )
+            .toArray()[0];
+          const boundary = missing ? this.getLatestSearchBoundary() : undefined;
+          if (boundary) {
+            this.storage.sql.exec(
+              "UPDATE search_state SET readiness = 'preparing', boundaryCreatedAt = ?, boundaryId = ?, cursorCreatedAt = NULL, cursorId = NULL WHERE id = 1",
+              new Date(boundary.createdAt).getTime(),
+              boundary.id,
+            );
+          } else {
+            this.storage.sql.exec(
+              "UPDATE search_state SET readiness = 'ready', boundaryCreatedAt = NULL, boundaryId = NULL, cursorCreatedAt = NULL, cursorId = NULL, failureCount = 0, retryAt = NULL WHERE id = 1",
+            );
+          }
+        } else {
+          const last = rows.at(-1)!;
+          this.storage.sql.exec(
+            "UPDATE search_state SET cursorCreatedAt = ?, cursorId = ? WHERE id = 1",
+            last.createdAt,
+            last.id,
+          );
+        }
+      });
+    } catch (error) {
+      this.markSearchUnavailable(error);
+      return;
+    }
+
+    if (rows.length === 0) {
+      if (this.readSearchState()?.readiness === "preparing") {
+        await this.scheduleSearchAlarm(Date.now());
+      }
+      return;
+    }
+
+    const elapsed = Math.max(1, performance.now() - startedAt);
+    const nextBatchSize =
+      elapsed > SEARCH_BATCH_TARGET_MS
+        ? Math.max(1, Math.floor((limit * SEARCH_BATCH_TARGET_MS) / elapsed))
+        : elapsed < SEARCH_BATCH_TARGET_MS / 2
+          ? Math.min(SEARCH_BATCH_MAX, limit * 2)
+          : limit;
+    if (nextBatchSize !== limit) {
+      this.storage.sql.exec(
+        "UPDATE search_state SET batchSize = ? WHERE id = 1 AND readiness = 'preparing'",
+        nextBatchSize,
+      );
+    }
+    await this.scheduleSearchAlarm(Date.now());
+  }
+
+  async search(
+    userId: string,
+    request: RoomSearchRequest,
+  ): Promise<SearchRpcResponse> {
+    if (request.action === "status") return this.getSearchStatus();
+    if (request.action === "retry") {
+      if (this.readSearchState()?.readiness !== "unavailable") {
+        return this.getSearchStatus();
+      }
+      await this.beginSearchRebuild();
+      return this.getSearchStatus();
+    }
+
+    const rate = this.consumeSearchRateLimit(userId);
+    if (!rate.allowed)
+      return { rateLimited: true, retryAfter: rate.retryAfter };
+
+    const state = this.readSearchState();
+    if (!state || state.readiness !== "ready") {
+      return { readiness: state?.readiness ?? "unavailable" };
+    }
+
+    const snapshot =
+      request.snapshot ??
+      this.getLatestSearchBoundary() ??
+      EMPTY_SEARCH_SNAPSHOT;
+    const snapshotTime = cursorDate(snapshot).getTime();
+    const query = quoteFtsQuery(asciiFold(request.query));
+    const cursor = request.cursor;
+    const cursorTime = cursor ? cursorDate(cursor).getTime() : undefined;
+    if (
+      !Number.isFinite(snapshotTime) ||
+      (cursor && !Number.isFinite(cursorTime))
+    ) {
+      return { readiness: "unavailable" };
+    }
+
+    try {
+      const cursorClause = cursor
+        ? "AND (m.createdAt < ? OR (m.createdAt = ? AND m.id < ?))"
+        : "";
+      const params = cursor
+        ? [
+            query,
+            snapshotTime,
+            snapshotTime,
+            snapshot.id,
+            cursorTime!,
+            cursorTime!,
+            cursor.id,
+            26,
+          ]
+        : [query, snapshotTime, snapshotTime, snapshot.id, 26];
+      const candidates = this.storage.sql
+        .exec<SearchResultRow>(
+          `SELECT m.id, m.createdAt
+           FROM message_search_fts AS f
+           JOIN message AS m ON m.rowid = f.rowid
+           WHERE message_search_fts MATCH ?
+             AND m.authorType IN ('user', 'ai')
+             AND m.type = 'text'
+             AND (m.createdAt < ? OR (m.createdAt = ? AND m.id <= ?))
+             ${cursorClause}
+           ORDER BY m.createdAt DESC, m.id DESC
+           LIMIT ?`,
+          ...params,
+        )
+        .toArray();
+      const pageCandidates = candidates.slice(0, 25);
+      const rows = await this.db
+        .select()
+        .from(messageTable)
+        .where(
+          pageCandidates.length > 0
+            ? or(...pageCandidates.map((row) => eq(messageTable.id, row.id)))
+            : eq(messageTable.id, "__no_search_result__"),
+        );
+      const rowsById = new Map(rows.map((row) => [row.id, row]));
+      const messages = pageCandidates.flatMap((row) => {
+        const message = rowsById.get(row.id);
+        return message ? [toHistoryMessage(message, userId)] : [];
+      });
+      const last = pageCandidates.at(-1);
+      return {
+        readiness: "ready",
+        messages,
+        snapshot,
+        nextCursor:
+          candidates.length > 25 && last
+            ? toCursor(last.createdAt, last.id)
+            : null,
+        hasMore: candidates.length > 25,
+      };
+    } catch (error) {
+      this.markSearchUnavailable(error);
+      return { readiness: "unavailable" };
+    }
+  }
+
+  async context(
+    userId: string,
+    request: RoomContextRequest,
+  ): Promise<RoomContextResponse | null> {
+    const target = await this.db
+      .select()
+      .from(messageTable)
+      .where(eq(messageTable.id, request.targetId))
+      .limit(1)
+      .then((rows) => rows[0]);
+    if (!target) return null;
+
+    let messages: MessageRow[];
+    let hasMoreBefore: boolean;
+    let hasMoreAfter: boolean;
+    if (request.action === "initial") {
+      const [before, after] = await Promise.all([
+        this.db
+          .select()
+          .from(messageTable)
+          .where(beforeCursor(rowCursor(target)))
+          .orderBy(desc(messageTable.createdAt), desc(messageTable.id))
+          .limit(12),
+        this.db
+          .select()
+          .from(messageTable)
+          .where(afterCursor(rowCursor(target)))
+          .orderBy(asc(messageTable.createdAt), asc(messageTable.id))
+          .limit(12),
+      ]);
+      messages = [...before.reverse(), target, ...after];
+      const first = messages[0];
+      const last = messages.at(-1);
+      hasMoreBefore =
+        !!first &&
+        (await this.db
+          .select({ id: messageTable.id })
+          .from(messageTable)
+          .where(beforeCursor(rowCursor(first)))
+          .limit(1)
+          .then((rows) => rows.length > 0));
+      hasMoreAfter =
+        !!last &&
+        (await this.db
+          .select({ id: messageTable.id })
+          .from(messageTable)
+          .where(afterCursor(rowCursor(last)))
+          .limit(1)
+          .then((rows) => rows.length > 0));
+    } else if (request.action === "before") {
+      const page = await this.db
+        .select()
+        .from(messageTable)
+        .where(beforeCursor(request.cursor))
+        .orderBy(desc(messageTable.createdAt), desc(messageTable.id))
+        .limit(26);
+      messages = page.slice(0, 25).reverse();
+      const first = messages[0];
+      const last = messages.at(-1);
+      hasMoreBefore = page.length > 25;
+      hasMoreAfter = last
+        ? await this.db
+            .select({ id: messageTable.id })
+            .from(messageTable)
+            .where(afterCursor(rowCursor(last)))
+            .limit(1)
+            .then((rows) => rows.length > 0)
+        : await this.db
+            .select({ id: messageTable.id })
+            .from(messageTable)
+            .where(afterCursor(request.cursor))
+            .limit(1)
+            .then((rows) => rows.length > 0);
+      if (!first) hasMoreBefore = false;
+    } else {
+      const page = await this.db
+        .select()
+        .from(messageTable)
+        .where(afterCursor(request.cursor))
+        .orderBy(asc(messageTable.createdAt), asc(messageTable.id))
+        .limit(26);
+      messages = page.slice(0, 25);
+      const first = messages[0];
+      const last = messages.at(-1);
+      hasMoreAfter = page.length > 25;
+      hasMoreBefore = first
+        ? await this.db
+            .select({ id: messageTable.id })
+            .from(messageTable)
+            .where(beforeCursor(rowCursor(first)))
+            .limit(1)
+            .then((rows) => rows.length > 0)
+        : await this.db
+            .select({ id: messageTable.id })
+            .from(messageTable)
+            .where(beforeCursor(request.cursor))
+            .limit(1)
+            .then((rows) => rows.length > 0);
+      if (!last) hasMoreAfter = false;
+    }
+
+    return {
+      messages: messages.map((row) => toHistoryMessage(row, userId)),
+      hasMoreBefore,
+      hasMoreAfter,
+    };
   }
 
   async getLatestActivity(): Promise<Date | null> {
@@ -502,6 +1111,7 @@ export class Room extends DurableObject<Env> {
             })
             .returning()
             .then((rows) => rows[0]);
+          this.maintainSearchIndex(response);
           this.broadcast({ type: "message", data: toClientMessage(response) });
         } catch (error) {
           console.error("Room AI generation failed", error);
@@ -705,6 +1315,7 @@ export class Room extends DurableObject<Env> {
         // effects belong to the first persistence. See ADR 0009.
         if (!inserted) break;
         if (this.deleted) break;
+        this.maintainSearchIndex(data);
         // Discovery ordering is a best-effort projection. A failed D1 update
         // must never turn an accepted Chat Message into a send failure.
         this.ctx.waitUntil(
@@ -740,14 +1351,10 @@ export class Room extends DurableObject<Env> {
           return;
         }
         const before = clientMessage.data.before;
-        const beforeDate = new Date(before);
-        if (isNaN(beforeDate.getTime())) {
-          return;
-        }
         const moreHistory = await this.db
           .select()
           .from(messageTable)
-          .where(lt(messageTable.createdAt, beforeDate))
+          .where(beforeCursor(before))
           .orderBy(desc(messageTable.createdAt), desc(messageTable.id))
           .limit(25);
         ws.send(
@@ -959,7 +1566,7 @@ export class Room extends DurableObject<Env> {
     return true;
   }
 
-  alarm() {
-    console.log("Alarm triggered, clearing storage");
+  async alarm() {
+    await this.runSearchBackfill();
   }
 }
