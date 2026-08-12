@@ -1,6 +1,8 @@
-interface UserStatus {
+export interface UserStatus {
   user?: "active" | "idle";
   screen?: "locked" | "unlocked";
+  // Tab Visibility (Page Visibility API). Orthogonal to user/screen — see ADR 0012.
+  tab?: "visible" | "hidden";
   typing?: boolean;
 }
 

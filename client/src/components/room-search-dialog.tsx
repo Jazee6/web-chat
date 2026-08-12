@@ -160,6 +160,7 @@ const RoomSearchDialog = ({
   const controllerRef = useRef<AbortController | null>(null);
   const scrollTopRef = useRef(0);
   const listRef = useRef<HTMLDivElement>(null);
+  const [compositionActive, setCompositionActive] = useState(false);
 
   const abortActiveRequest = useCallback(() => {
     requestIdRef.current += 1;
@@ -197,7 +198,7 @@ const RoomSearchDialog = ({
   );
 
   const performSearch = useCallback(
-    async (normalized: string, action: "status" | "retry" = "status") => {
+    async (normalized: string, action: "search" | "retry" = "search") => {
       abortActiveRequest();
       const requestId = requestIdRef.current;
       const controller = new AbortController();
@@ -210,18 +211,20 @@ const RoomSearchDialog = ({
       resetPagination();
 
       try {
-        const statusResponse = await requestSearch(
-          roomId,
-          { action },
-          controller.signal,
-        );
-        if (requestId !== requestIdRef.current) return;
+        if (action === "retry") {
+          const retryResponse = await requestSearch(
+            roomId,
+            { action: "retry" },
+            controller.signal,
+          );
+          if (requestId !== requestIdRef.current) return;
 
-        const readiness = getReadiness(statusResponse);
-        if (readiness !== "ready") {
-          setResults([]);
-          setPhase(readiness);
-          return;
+          const readiness = getReadiness(retryResponse);
+          if (readiness !== "ready") {
+            setResults([]);
+            setPhase(readiness);
+            return;
+          }
         }
 
         const response = await requestSearch(
@@ -358,6 +361,7 @@ const RoomSearchDialog = ({
   );
 
   useEffect(() => {
+    if (compositionActive) return;
     const validation = validateSearchQuery(draft);
     if (validation.state !== "valid") return;
 
@@ -365,10 +369,11 @@ const RoomSearchDialog = ({
 
     const timer = window.setTimeout(() => {
       if (validation.normalized === queryRef.current) return;
+      if (compositionActive) return;
       void performSearch(validation.normalized);
     }, 300);
     return () => window.clearTimeout(timer);
-  }, [draft, performSearch]);
+  }, [draft, performSearch, compositionActive]);
 
   useEffect(() => {
     const ids = results.flatMap((message) =>
@@ -435,6 +440,7 @@ const RoomSearchDialog = ({
 
   const handleInputChange = (value: string) => {
     setDraft(value);
+    if (compositionActive) return;
     const validation = validateSearchQuery(value);
     if (validation.state === "valid") {
       if (validation.normalized !== queryRef.current) setPhase("loading");
@@ -445,6 +451,13 @@ const RoomSearchDialog = ({
 
   const handleInputKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
     if (event.key !== "Enter") return;
+    if (
+      compositionActive ||
+      event.nativeEvent.isComposing ||
+      event.nativeEvent.keyCode === 229
+    ) {
+      return;
+    }
     event.preventDefault();
     event.stopPropagation();
     const validation = validateSearchQuery(draft);
@@ -530,17 +543,21 @@ const RoomSearchDialog = ({
           value={draft}
           onValueChange={handleInputChange}
           onKeyDown={handleInputKeyDown}
+          onCompositionStart={() => {
+            setCompositionActive(true);
+          }}
+          onCompositionEnd={() => {
+            setCompositionActive(false);
+          }}
           placeholder="Search room history..."
           aria-label="Search room history"
+          trailing={
+            phase === "loading" && results.length > 0 ? (
+              <Spinner className="size-4 opacity-50" />
+            ) : null
+          }
         />
         <CommandList ref={listRef} className="max-h-[min(70dvh,32rem)]">
-          {phase === "loading" && results.length > 0 && (
-            <div className="flex items-center gap-2 px-3 py-2 text-xs text-muted-foreground">
-              <Spinner />
-              Searching...
-            </div>
-          )}
-
           {phase === "preparing" && results.length > 0 && (
             <div className="flex items-center gap-2 px-3 py-2 text-xs text-muted-foreground">
               <Spinner />
@@ -571,7 +588,10 @@ const RoomSearchDialog = ({
           )}
 
           {results.length > 0 && (
-            <CommandGroup heading="Matches">
+            <CommandGroup
+              heading="Matches"
+              className="[&_[cmdk-group-items]]:flex [&_[cmdk-group-items]]:flex-col [&_[cmdk-group-items]]:gap-1"
+            >
               {results.map((message) => (
                 <ResultItem
                   key={message.id}

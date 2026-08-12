@@ -186,6 +186,7 @@ export const linkPreviewQuerySchema = z.object({
 export const userStatusSchema = z.object({
   user: z.enum(["active", "idle"]).optional(),
   screen: z.enum(["locked", "unlocked"]).optional(),
+  tab: z.enum(["visible", "hidden"]).optional(),
   typing: z.boolean().optional(),
 });
 

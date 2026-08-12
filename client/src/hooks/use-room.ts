@@ -59,6 +59,14 @@ export function useRoom({
   // See ADR 0002: no heartbeat; cleared by disconnect, not by a timeout.
   const [typing, setTyping] = useState(false);
   const [aiTyping, setAiTyping] = useState(false);
+  // Tab Visibility drives the `tab` User Status axis (ADR 0012). State-driven so
+  // the presence effect re-sends it on WS reconnect, mirroring user/screen.
+  const [tabState, setTabState] = useState<"visible" | "hidden">(
+    () =>
+      typeof document !== "undefined" && document.visibilityState === "hidden"
+        ? "hidden"
+        : "visible",
+  );
 
   const pingIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const activeSocketRef = useRef<WebSocket | null>(null);
@@ -250,10 +258,11 @@ export function useRoom({
         data: {
           user: userState,
           screen: screenState,
+          tab: tabState,
         },
       }),
     );
-  }, [screenState, settings.showStatus, userState, readyState, sendMessage]);
+  }, [screenState, settings.showStatus, userState, tabState, readyState, sendMessage]);
 
   // Broadcast typing. Defaults on: new users via the settings defaultValue,
   // existing users (whose stored settings predate the field and see `undefined`,
@@ -280,6 +289,7 @@ export function useRoom({
 
   useEffect(() => {
     const handleVisibilityChange = () => {
+      setTabState(document.visibilityState === "visible" ? "visible" : "hidden");
       if (document.visibilityState === "visible") {
         notifications.clearNotifications();
         setFaviconState({ hasRealtime: roomRealtimeTotalRef.current > 0 });

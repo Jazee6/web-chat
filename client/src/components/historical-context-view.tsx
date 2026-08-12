@@ -7,7 +7,6 @@ import {
   EmptyHeader,
   EmptyTitle,
 } from "@/components/ui/empty.tsx";
-import { Separator } from "@/components/ui/separator.tsx";
 import { Spinner } from "@/components/ui/spinner.tsx";
 import { flashMessage } from "@/lib/flash-message.ts";
 import type { User } from "better-auth";
@@ -27,13 +26,11 @@ type HistoricalContextViewProps = {
   userId: string;
   users: Record<string, User>;
   roomStats?: RoomStats;
-  unreadCount: number;
   onLoadBefore: () => Promise<void>;
   onLoadAfter: () => Promise<void>;
   onRetryInitial: () => void;
   onRetryBefore: () => void;
   onRetryAfter: () => void;
-  onBackToLatest: () => void;
 };
 
 const HistoricalContextView = ({
@@ -48,13 +45,11 @@ const HistoricalContextView = ({
   userId,
   users,
   roomStats,
-  unreadCount,
   onLoadBefore,
   onLoadAfter,
   onRetryInitial,
   onRetryBefore,
   onRetryAfter,
-  onBackToLatest,
 }: HistoricalContextViewProps) => {
   const scrollRef = useRef<HTMLDivElement>(null);
   const beforeSentinelRef = useRef<HTMLDivElement>(null);
@@ -159,37 +154,24 @@ const HistoricalContextView = ({
     }
 
     flashedTargetRef.current = targetId;
-    const frame = window.requestAnimationFrame(() => flashMessage(targetId));
+    const frame = window.requestAnimationFrame(() =>
+      flashMessage(targetId, {
+        block: "start",
+        behavior: "instant",
+        scrollMarginTop: 64,
+      }),
+    );
     return () => window.cancelAnimationFrame(frame);
   }, [loadingInitial, messages, targetId]);
 
   return (
     <div className="flex min-h-0 flex-1 flex-col pt-16">
-      <div className="flex shrink-0 items-center justify-between gap-3 px-3 py-2">
-        <div className="min-w-0">
-          <p className="truncate text-sm font-medium">Historical context</p>
-          <p className="truncate text-xs text-muted-foreground">
-            Search result context, separate from the latest messages
-          </p>
-        </div>
-        <Button
-          size="sm"
-          variant="outline"
-          onClick={onBackToLatest}
-          className="shrink-0"
-        >
-          <ArrowDown data-icon="inline-start" />
-          {unreadCount > 0
-            ? `Back to latest (${unreadCount} new)`
-            : "Back to latest"}
-        </Button>
-      </div>
-      <Separator />
-
       <div
         ref={scrollRef}
         className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden scrollbar scrollbar-gutter-both"
       >
+        <div aria-hidden className="h-14" />
+
         {loadingInitial ? (
           <div className="flex min-h-64 items-center justify-center gap-2">
             <Spinner />

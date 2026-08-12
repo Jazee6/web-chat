@@ -89,6 +89,7 @@ const RoomStateDialog = ({
                     <AvatarBadge
                       className={cn(
                         "size-1.5! bg-green-500",
+                        status?.tab === "visible" && "size-2!",
                         status?.user === "idle" ? "bg-yellow-500" : "",
                         status?.screen === "locked" ? "bg-neutral-500" : "",
                       )}

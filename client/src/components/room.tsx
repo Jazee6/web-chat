@@ -12,6 +12,7 @@ import RoomSettingsDialog from "@/components/room-settings-dialog.tsx";
 import RoomStateDialog from "@/components/room-state-dialog.tsx";
 import ShareButton from "@/components/share-button.tsx";
 import { Button } from "@/components/ui/button.tsx";
+import { Separator } from "@/components/ui/separator.tsx";
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar.tsx";
 import { Spinner } from "@/components/ui/spinner.tsx";
 import { useIncomingCall } from "@/hooks/use-incoming-call.ts";
@@ -31,7 +32,13 @@ import {
 } from "@/lib/room-history.ts";
 import { appName } from "@/lib/utils.ts";
 import type { User } from "better-auth";
-import { ChevronDown, PictureInPicture, Search, Settings } from "lucide-react";
+import {
+  ArrowDown,
+  ChevronDown,
+  PictureInPicture,
+  Search,
+  Settings,
+} from "lucide-react";
 import {
   lazy,
   Suspense,
@@ -390,7 +397,13 @@ const Room = ({
     (message: ChatMessage) => {
       if (!historicalContext && document.getElementById(message.id)) {
         closeSearch();
-        window.requestAnimationFrame(() => flashMessage(message.id));
+        window.requestAnimationFrame(() =>
+          flashMessage(message.id, {
+            block: "start",
+            behavior: "instant",
+            scrollMarginTop: 64,
+          }),
+        );
         return;
       }
       closeSearch();
@@ -522,74 +535,102 @@ const Room = ({
           onOpenChange={setRealtimeSidebarOpen}
         >
           <SidebarInset>
-            <header className="h-16 absolute top-0 w-full z-10 rounded-t-xl app-blur">
-              {roomStats && (
-                <div className="max-w-3xl max-md:px-2 mx-auto h-full flex items-center justify-between relative">
-                  <div className="max-[1080px]:ml-12">{roomInfo?.name}</div>
+            <header className="absolute top-0 z-10 w-full rounded-t-xl app-blur">
+              <div className="h-16">
+                {roomStats && (
+                  <div className="max-w-3xl max-md:px-2 mx-auto h-full flex items-center justify-between relative">
+                    <div className="max-[1080px]:ml-12">{roomInfo?.name}</div>
 
-                  <div className="absolute left-1/2 -translate-x-1/2">
-                    <RealtimeLand
-                      data={roomRealtime}
-                      onClick={() => setRealtimeSidebarOpen(true)}
-                    />
-                  </div>
+                    <div className="absolute left-1/2 -translate-x-1/2">
+                      <RealtimeLand
+                        data={roomRealtime}
+                        onClick={() => setRealtimeSidebarOpen(true)}
+                      />
+                    </div>
 
-                  <div className="flex items-center">
-                    <Button
-                      size="icon-sm"
-                      className="rounded-full"
-                      variant="ghost"
-                      onClick={openSearch}
-                      title="Search room history (Ctrl+F)"
-                    >
-                      <Search />
-                      <span className="sr-only">Search room history</span>
-                    </Button>
-                    {roomInfo?.userId === user.id && (
+                    <div className="flex items-center">
                       <Button
                         size="icon-sm"
                         className="rounded-full"
                         variant="ghost"
-                        onClick={() => setRoomSettingsDialogOpen(true)}
+                        onClick={openSearch}
+                        title="Search room history (Ctrl+F)"
                       >
-                        <Settings />
-                        <span className="sr-only">Room settings</span>
+                        <Search />
+                        <span className="sr-only">Search room history</span>
                       </Button>
-                    )}
-                    <AddFavoritesButton
-                      id={id}
-                      added={!!roomInfo?.isFavorite}
-                      disabled={roomInfo?.userId === user.id}
-                    />
-                    {"documentPictureInPicture" in window && (
+                      {roomInfo?.userId === user.id && (
+                        <Button
+                          size="icon-sm"
+                          className="rounded-full"
+                          variant="ghost"
+                          onClick={() => setRoomSettingsDialogOpen(true)}
+                        >
+                          <Settings />
+                          <span className="sr-only">Room settings</span>
+                        </Button>
+                      )}
+                      <AddFavoritesButton
+                        id={id}
+                        added={!!roomInfo?.isFavorite}
+                        disabled={roomInfo?.userId === user.id}
+                      />
+                      {"documentPictureInPicture" in window && (
+                        <Button
+                          size="icon-sm"
+                          className="rounded-full"
+                          variant="ghost"
+                          onClick={onTogglePip}
+                        >
+                          <PictureInPicture />
+                        </Button>
+                      )}
+                      {"share" in navigator && !isPipActive && (
+                        <ShareButton title={`${roomInfo?.name} - ${appName}`} />
+                      )}
+
                       <Button
-                        size="icon-sm"
-                        className="rounded-full"
-                        variant="ghost"
-                        onClick={onTogglePip}
+                        className="rounded-full size-6 ml-1"
+                        disabled={isPipActive}
+                        onClick={() => setRoomStateDialogOpen(true)}
                       >
-                        <PictureInPicture />
+                        {roomStats.users.length}
                       </Button>
-                    )}
-                    {"share" in navigator && !isPipActive && (
-                      <ShareButton title={`${roomInfo?.name} - ${appName}`} />
-                    )}
 
-                    <Button
-                      className="rounded-full size-6 ml-1"
-                      disabled={isPipActive}
-                      onClick={() => setRoomStateDialogOpen(true)}
-                    >
-                      {roomStats.users.length}
-                    </Button>
-
-                    <RoomStateDialog
-                      roomStats={roomStats}
-                      roomInfo={roomInfo}
-                      open={roomStateDialogOpen}
-                      onOpenChange={setRoomStateDialogOpen}
-                    />
+                      <RoomStateDialog
+                        roomStats={roomStats}
+                        roomInfo={roomInfo}
+                        open={roomStateDialogOpen}
+                        onOpenChange={setRoomStateDialogOpen}
+                      />
+                    </div>
                   </div>
+                )}
+              </div>
+              {historicalContext && (
+                <div className="relative h-14">
+                  <div className="mx-auto flex h-full w-full max-w-3xl items-center justify-between gap-3 max-md:px-2">
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-medium">
+                        Historical context
+                      </p>
+                      <p className="truncate text-xs text-muted-foreground">
+                        Search result context, separate from the latest messages
+                      </p>
+                    </div>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={backToLatest}
+                      className="shrink-0"
+                    >
+                      <ArrowDown data-icon="inline-start" />
+                      {unreadCount > 0
+                        ? `Back to latest (${unreadCount} new)`
+                        : "Back to latest"}
+                    </Button>
+                  </div>
+                  <Separator className="pointer-events-none absolute inset-x-0 bottom-0" />
                 </div>
               )}
             </header>
@@ -608,13 +649,11 @@ const Room = ({
                   userId={user.id}
                   users={users}
                   roomStats={roomStats}
-                  unreadCount={unreadCount}
                   onLoadBefore={loadBeforeContext}
                   onLoadAfter={loadAfterContext}
                   onRetryInitial={retryInitialContext}
                   onRetryBefore={() => void loadBeforeContext()}
                   onRetryAfter={() => void loadAfterContext()}
-                  onBackToLatest={backToLatest}
                 />
               ) : chats ? (
                 <div

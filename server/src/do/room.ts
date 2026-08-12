@@ -558,14 +558,14 @@ export class Room extends DurableObject<Env> {
       return this.getSearchStatus();
     }
 
-    const rate = this.consumeSearchRateLimit(userId);
-    if (!rate.allowed)
-      return { rateLimited: true, retryAfter: rate.retryAfter };
-
     const state = this.readSearchState();
     if (!state || state.readiness !== "ready") {
       return { readiness: state?.readiness ?? "unavailable" };
     }
+
+    const rate = this.consumeSearchRateLimit(userId);
+    if (!rate.allowed)
+      return { rateLimited: true, retryAfter: rate.retryAfter };
 
     const snapshot =
       request.snapshot ??

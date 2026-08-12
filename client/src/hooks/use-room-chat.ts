@@ -23,7 +23,9 @@ import {
   type MessageSubmission,
   type ReplyRef,
   type RoomStats,
+  type RoomUser,
   type UIChatMessage,
+  type UserStatus,
 } from "web-chat-share";
 
 const STICK_THRESHOLD_PX = 256;
@@ -175,10 +177,52 @@ export function useRoomChat({
   }, []);
 
   const handleRoomStats = useCallback((data: RoomStats) => {
-    setRoomStats({
-      ...data,
-      users: [...new Map(data.users.map((u) => [u.id, u])).values()],
-    });
+    // A member can hold multiple WebSocket sessions (e.g. the room open in two
+    // tabs → two entries with the same id). Merge per ADR 0012: any-visible wins
+    // for `tab`, any-true wins for `typing`; `user`/`screen` come from the same
+    // physical device across tabs so take the first defined. The prior whole-
+    // object last-wins could let a hidden tab's status overwrite a visible one.
+    const groups = new Map<string, RoomUser[]>();
+    for (const u of data.users) {
+      const arr = groups.get(u.id);
+      if (arr) arr.push(u);
+      else groups.set(u.id, [u]);
+    }
+    const users: RoomUser[] = [];
+    for (const [id, group] of groups) {
+      if (group.length === 1) {
+        users.push(group[0]);
+        continue;
+      }
+      let anyVisible = false;
+      let anyHidden = false;
+      let anyTyping = false;
+      let user: UserStatus["user"];
+      let screen: UserStatus["screen"];
+      let hasStatus = false;
+      for (const u of group) {
+        const s = u.status;
+        if (!s) continue;
+        hasStatus = true;
+        if (s.tab === "visible") anyVisible = true;
+        else if (s.tab === "hidden") anyHidden = true;
+        if (s.typing) anyTyping = true;
+        if (s.user && !user) user = s.user;
+        if (s.screen && !screen) screen = s.screen;
+      }
+      if (!hasStatus) {
+        users.push({ id });
+        continue;
+      }
+      const status: UserStatus = {};
+      if (anyVisible) status.tab = "visible";
+      else if (anyHidden) status.tab = "hidden";
+      if (anyTyping) status.typing = true;
+      if (user) status.user = user;
+      if (screen) status.screen = screen;
+      users.push({ id, status });
+    }
+    setRoomStats({ ...data, users });
   }, []);
 
   const handleInitHistory = useCallback(

@@ -101,6 +101,10 @@ _Avoid_: global search, loaded-message search, Web Search, semantic search
 Whether a room's complete retained history is available to Room History Search. A room is Ready when that complete view is searchable, Preparing while the view is being built, and Search Unavailable after preparation or maintenance fails. A new empty room is Ready immediately. An existing room remains usable while its history is prepared, but search reports that it is preparing rather than returning incomplete matches. Newly accepted searchable messages are included when readiness is reached. A failure while preparing or maintaining search must not prevent Message Acceptance; search instead becomes unavailable, offers a retry, and may return to Preparing while its complete view of retained history is rebuilt.
 _Avoid_: partial search, room availability, search results
 
+**Room History Search Rate Budget**:
+A short-window per-user limit on how many Room History Search `search` actions a single user may issue against one room before the server asks them to wait. When the budget is exhausted the response names a retry time; readiness probes (`status`) and rebuild triggers (`retry`) do not consume it. Its purpose is to keep interactive search responsive for everyone in a room when one user is typing rapidly, not to constrain normal use.
+_Avoid_: search quota, throttle (those imply longer windows or persistent counts)
+
 **History Search Match**:
 A persistent text Chat Message that satisfies a Room History Search query.
 _Avoid_: search result (may mean its rendered presentation), context message
@@ -266,7 +270,15 @@ _Avoid_: connect/disconnect (WebSocket-level events, not Call-level)
 ### Presence
 
 **User Status**:
-A room member's transient, peer-visible state: activity (`active`/`idle`), screen (`locked`/`unlocked`), and whether they
-are typing. Exists only while the member's session is live; not persisted, not part of message history. Distinct from the
-Call's realtime status.
+A room member's transient, peer-visible state: activity (`active`/`idle`), screen (`locked`/`unlocked`), Tab Visibility
+(`visible`/`hidden`), and whether they are typing. Exists only while the member's session is live; not persisted, not part
+of message history. Distinct from the Call's realtime status.
 _Avoid_: presence, online state
+
+**Tab Visibility**:
+The User Status dimension reporting whether the room's browser tab is in the foreground (`visible`) or not (`hidden`),
+sourced from the Page Visibility API. Orthogonal to activity and screen state: a member may be device-active while their
+tab is hidden, or device-idle while their tab is visible. Shared only while the member has opted in via Show My Status;
+unlike activity and screen state it requires no browser permission. When a member has the room open in multiple tabs, the
+reported value is `visible` if any of them is visible.
+_Avoid_: focus (that implies window-level focus, a different signal), attention, online

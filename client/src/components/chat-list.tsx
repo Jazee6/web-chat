@@ -336,6 +336,7 @@ const MessageAvatar = ({
       <AvatarBadge
         className={cn(
           "size-1.5! bg-green-500",
+          roomUser.status?.tab === "visible" && "size-2!",
           roomUser.status?.user === "idle" && "bg-yellow-500",
           roomUser.status?.screen === "locked" && "bg-neutral-500",
         )}
