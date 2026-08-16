@@ -80,6 +80,10 @@ export interface UIChatMessage extends ChatMessage {
   // server Chat Message replaces the optimistic entry. See ADR 0009.
   submissionId?: string;
   sendState?: "waiting" | "sending" | "failed" | "rejected";
+  // Delayed reveal of the Sending state: the spinner only appears after a
+  // short debounce (SPINNER_DELAY_MS) so quickly-acked messages never flash
+  // it. Presentation only — not a distinct submission state.
+  showSpinner?: boolean;
   canCancelSend?: boolean;
   rejectionReason?: MessageRejection["reason"];
   localFiles?: {

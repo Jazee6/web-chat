@@ -30,6 +30,11 @@ import {
 
 const STICK_THRESHOLD_PX = 256;
 const ACCEPTANCE_TIMEOUT_MS = 10_000;
+// How long a message stays in the Sending state before its side spinner is
+// revealed. Quickly-acked messages (the common case) resolve before this fires
+// and never show a spinner, avoiding flicker. Matches the convention used by
+// most chat UIs and keeps the blind window short.
+const SPINNER_DELAY_MS = 500;
 
 type UseRoomChatParams = {
   chatListRef: RefObject<HTMLDivElement | null>;
@@ -98,6 +103,10 @@ export function useRoomChat({
       {
         submission: MessageSubmission;
         timeoutId: ReturnType<typeof setTimeout> | null;
+        // Debounce timer for the delayed spinner reveal. Cleared on every
+        // sendState change and on unmount; the reveal callback also rechecks
+        // sendState so a late fire after acceptance is a harmless no-op.
+        spinnerTimerId: ReturnType<typeof setTimeout> | null;
         state: "waiting" | "sending" | "failed";
         attempted: boolean;
       }
@@ -169,8 +178,9 @@ export function useRoomChat({
       if (debounceTimerRef.current) {
         clearTimeout(debounceTimerRef.current);
       }
-      pendingSubmissions.forEach(({ timeoutId }) => {
+      pendingSubmissions.forEach(({ timeoutId, spinnerTimerId }) => {
         if (timeoutId) clearTimeout(timeoutId);
+        if (spinnerTimerId) clearTimeout(spinnerTimerId);
       });
       pendingSubmissions.clear();
     };
@@ -390,18 +400,46 @@ export function useRoomChat({
     (submissionId: string, sendState: "waiting" | "sending" | "failed") => {
       const pending = pendingSubmissionsRef.current.get(submissionId);
       if (pending) pending.state = sendState;
+
+      // The spinner is a delayed reveal of the Sending state: it only appears
+      // after SPINNER_DELAY_MS, so quickly-acked messages never flash it.
+      // Reset the reveal on every transition — the new state either restarts
+      // the debounce (sending) or hides the spinner outright.
+      if (pending?.spinnerTimerId) {
+        clearTimeout(pending.spinnerTimerId);
+        pending.spinnerTimerId = null;
+      }
+
       setChats((chats) =>
         chats.map((chat) =>
           chat.submissionId === submissionId
             ? {
                 ...chat,
                 sendState,
+                showSpinner: false,
                 canCancelSend:
                   sendState === "waiting" && !!pending && !pending.attempted,
               }
             : chat,
         ),
       );
+
+      // Arm the reveal only on entering Sending. The callback rechecks
+      // sendState so a fire after a later transition (acceptance, failure,
+      // disconnect) is a no-op even if a cleanup path missed clearing it.
+      if (sendState === "sending" && pending) {
+        pending.spinnerTimerId = setTimeout(() => {
+          pending.spinnerTimerId = null;
+          setChats((chats) =>
+            chats.map((chat) =>
+              chat.submissionId === submissionId &&
+              chat.sendState === "sending"
+                ? { ...chat, showSpinner: true }
+                : chat,
+            ),
+          );
+        }, SPINNER_DELAY_MS);
+      }
     },
     [],
   );
@@ -422,11 +460,16 @@ export function useRoomChat({
         submission.submissionId,
       );
       if (previous?.timeoutId) clearTimeout(previous.timeoutId);
+      if (previous?.spinnerTimerId) {
+        clearTimeout(previous.spinnerTimerId);
+        previous.spinnerTimerId = null;
+      }
       pendingSubmissionsRef.current.set(
         submission.submissionId,
         previous ?? {
           submission,
           timeoutId: null,
+          spinnerTimerId: null,
           state: "waiting",
           attempted: false,
         },

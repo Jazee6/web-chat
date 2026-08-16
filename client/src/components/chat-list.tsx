@@ -538,7 +538,6 @@ const ChatList = memo(
                                 className={cn(
                                   "flex gap-1 ani-slide-top min-w-0 transition-opacity",
                                   isMe ? "flex-row-reverse" : "",
-                                  c.sendState === "sending" && "opacity-60",
                                 )}
                               >
                                 {c.type === "text" && (
@@ -633,12 +632,17 @@ const ChatList = memo(
                                   </div>
                                 )}
 
+                                {c.sendState === "sending" &&
+                                  c.showSpinner && (
+                                    <Spinner className="self-end shrink-0 text-muted-foreground" />
+                                  )}
+
                                 {c.sendState === "failed" && c.submissionId && (
                                   <button
                                     type="button"
                                     title="发送失败，点击重试"
                                     aria-label="发送失败，点击重试"
-                                    className="self-center shrink-0 rounded-full text-destructive transition hover:brightness-75 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                                    className="self-end shrink-0 rounded-full text-destructive transition hover:brightness-75 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                                     onClick={() => onRetry?.(c.submissionId!)}
                                   >
                                     <CircleAlert className="size-4" />
@@ -660,7 +664,7 @@ const ChatList = memo(
                                           : "Waiting for connection"
                                       }
                                       disabled={!c.canCancelSend}
-                                      className="self-center shrink-0 rounded-full text-muted-foreground transition hover:text-destructive focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                                      className="self-end shrink-0 rounded-full text-muted-foreground transition hover:text-destructive focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                                       onClick={() =>
                                         onCancel?.(c.submissionId!)
                                       }
@@ -686,7 +690,7 @@ const ChatList = memo(
                                           ? "Message rejected. Edit"
                                           : "Image message rejected. Remove"
                                       }
-                                      className="self-center shrink-0 rounded-full text-destructive transition hover:brightness-75 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                                      className="self-end shrink-0 rounded-full text-destructive transition hover:brightness-75 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                                       onClick={() =>
                                         c.type === "text"
                                           ? onEditRejected?.(c)
@@ -710,7 +714,7 @@ const ChatList = memo(
                                       type="button"
                                       title="Send uploaded images"
                                       aria-label="Send uploaded images"
-                                      className="self-center shrink-0 rounded-full text-primary transition hover:brightness-75 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                                      className="self-end shrink-0 rounded-full text-primary transition hover:brightness-75 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                                       onClick={() =>
                                         onConfirmImages?.(c.submissionId!)
                                       }
