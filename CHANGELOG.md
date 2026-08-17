@@ -1,5 +1,23 @@
 # Changelog
 
+## [1.6.1] - 2026-08-16
+
+### Changed
+
+- A message in the Sending state now reveals a side spinner (`Loader2Icon`) next to
+  it only after a 500ms debounce, so quickly-acknowledged messages never flash it.
+  The prior `opacity-60` fade during Sending is removed; the 0–500ms blind window is
+  accepted. Waiting for Connection keeps its `Clock3` with cancel affordance — the
+  spinner is Sending-only, matching the two distinct states in `CONTEXT.md`.
+- All per-message status icons (failed, waiting, rejected, retry-send) moved from
+  `self-center` to `self-end` to align with the hover timestamp.
+
+### Fixed
+
+- Fixed a spinner flash on fast accepts: the spinner timer is armed only on entering
+  Sending and is cleared on every transition and on unmount; the delayed reveal
+  callback re-checks `sendState`, so a late fire after acceptance is a harmless no-op.
+
 ## [1.6.0] - 2026-08-12
 
 ### Added
