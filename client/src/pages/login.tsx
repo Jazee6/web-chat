@@ -19,7 +19,7 @@ const Login = () => {
         providerId: "easy-auth",
         callbackURL: redirectURL
           ? decodeURIComponent(redirectURL)
-          : location.origin,
+          : `${location.origin}/rooms`,
       })
       .finally(() => setIsLoading(false));
   };

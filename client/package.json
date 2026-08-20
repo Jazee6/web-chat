@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc -b && vite build",
+    "build": "tsc -b && vite build && bun run scripts/prerender-landing.ts",
+    "generate:og": "bun run scripts/generate-og.ts",
     "lint": "eslint .",
     "preview": "vite preview"
   },

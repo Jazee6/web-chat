@@ -1,0 +1,7 @@
+User-agent: *
+Allow: /
+Disallow: /rooms
+Disallow: /room/
+Disallow: /settings
+
+Sitemap: https://chat.jaze.top/sitemap.xml

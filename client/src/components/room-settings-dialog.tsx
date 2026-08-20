@@ -88,7 +88,7 @@ const RoomSettingsDialog = ({
           queryClient.invalidateQueries({ queryKey: ["room"] }),
           queryClient.invalidateQueries({ queryKey: ["publicRooms"] }),
         ]);
-        navigate("/");
+        navigate("/rooms");
       },
     });
   };

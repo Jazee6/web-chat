@@ -1,0 +1,24 @@
+# Web Chat
+
+> Real-time web chat rooms and browser voice calls, running at the edge on Cloudflare. Free and open-source.
+
+Web Chat is a serverless real-time chat and calling application. Users create shared rooms to exchange text and images, search the full retained history of a room, and join browser-based multi-party voice calls — no app install required.
+
+Key facts:
+- Live demo: https://chat.jaze.top
+- Source code: https://github.com/Jazee6/web-chat
+- License: open-source (see repository)
+- Pricing: free
+- Self-hostable on Cloudflare Workers, Durable Objects, D1, and R2
+
+Highlights:
+- Real-time text and image messaging with idempotent, reliable delivery
+- Browser voice calls via WebRTC and a managed SFU
+- Full per-room text-history search with stable snapshots and context windows
+- Stickers and reply quotes
+- Automatic cleanup: inactive rooms expire after 30 days; unreferenced images reclaimed after a 24-hour safety window
+- Edge-native: requests served from the nearest Cloudflare location; room state co-located in Durable Object SQLite
+
+Getting started: sign in, create a room, and share its link.
+
+Full details: https://chat.jaze.top/llms-full.txt

@@ -208,7 +208,7 @@ const Room = ({
 
   const handleRoomNotFound = useCallback(() => {
     closeSearch();
-    navigate("/room");
+    navigate("/rooms");
   }, [closeSearch, navigate]);
 
   const loadInitialContext = useCallback(

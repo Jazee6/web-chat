@@ -1,5 +1,25 @@
 # Changelog
 
+## [1.7.0] - 2026-08-20
+
+### Added
+
+- Added a public marketing landing page at `/`, prerendered into the SPA shell at build time so
+  search engines and AI answer engines receive full content without executing JavaScript. The
+  page introduces the product and its edge-native stack (features, tech overview, FAQ, screenshot)
+  with sign-in and GitHub CTAs. See ADR 0014.
+- Added SEO/GEO assets: `robots.txt`, build-generated `sitemap.xml`, Open Graph/Twitter meta,
+  JSON-LD structured data (`WebApplication`, `FAQPage`), and `llms.txt`/`llms-full.txt` for
+  generative engines. Canonical and sitemap URLs are rewritten from the `SITE_URL` env var at
+  build time when set.
+
+### Changed
+
+- Public Room Discovery moved from `/` to `/rooms`; the legacy `/room` path redirects there and
+  `/room/:id` room links are unchanged. Signed-in visitors hitting `/` are bounced straight to
+  the room catalogue - first by an inline cookie check in the built `index.html`, then by the
+  landing route as fallback.
+
 ## [1.6.1] - 2026-08-16
 
 ### Changed

@@ -4,7 +4,123 @@
     <meta charset="UTF-8"/>
     <link rel="icon" type="image/svg+xml" href="/icon.svg"/>
     <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-    <title>Web Chat</title>
+
+    <!-- Primary SEO -->
+    <title>Web Chat - Real-time chat rooms at the edge</title>
+    <meta
+        name="description"
+        content="Web Chat is a free, open-source real-time chat and calling app built on Cloudflare's edge. Share text and images, search full room history, and join browser voice calls - serverless, low-latency, and self-hostable."
+    />
+    <meta name="keywords" content="real-time chat, web chat, chat rooms, group chat, serverless chat, cloudflare chat, voice chat, browser voice call, room history search, open source chat, self-hostable chat, low latency chat"/>
+    <meta name="author" content="Jazee"/>
+    <meta name="robots" content="index, follow"/>
+    <link rel="canonical" href="https://chat.jaze.top/"/>
+
+    <!-- Open Graph -->
+    <meta property="og:type" content="website"/>
+    <meta property="og:site_name" content="Web Chat"/>
+    <meta property="og:title" content="Web Chat - Real-time chat rooms at the edge"/>
+    <meta
+        property="og:description"
+        content="A free, open-source real-time chat and calling app on Cloudflare's edge. Text, images, voice calls, and full room history search. Serverless and self-hostable."
+    />
+    <meta property="og:url" content="https://chat.jaze.top/"/>
+    <meta property="og:image" content="https://chat.jaze.top/og.png"/>
+    <meta property="og:image:width" content="1200"/>
+    <meta property="og:image:height" content="630"/>
+    <meta property="og:image:type" content="image/png"/>
+    <meta property="og:image:alt" content="Web Chat - real-time chat rooms at the edge"/>
+
+    <!-- Twitter Card -->
+    <meta name="twitter:card" content="summary_large_image"/>
+    <meta name="twitter:title" content="Web Chat - Real-time chat rooms at the edge"/>
+    <meta
+        name="twitter:description"
+        content="A free, open-source real-time chat and calling app on Cloudflare's edge. Serverless, low-latency, and self-hostable."
+    />
+    <meta name="twitter:image" content="https://chat.jaze.top/og.png"/>
+
+    <link rel="sitemap" href="/sitemap.xml"/>
+
+    <!-- Structured data -->
+    <script type="application/ld+json">
+    {
+        "@context": "https://schema.org",
+        "@graph": [
+            {
+                "@type": "WebApplication",
+                "name": "Web Chat",
+                "url": "https://chat.jaze.top/",
+                "applicationCategory": "CommunicationApplication",
+                "operatingSystem": "Web",
+                "browserRequirements": "Requires a modern web browser",
+                "description": "Free, open-source real-time chat and calling app built on Cloudflare's edge. Real-time text and images, browser voice calls, full room history search, and automatic data cleanup.",
+                "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
+                "softwareVersion": "1.7.0",
+                "codeRepository": "https://github.com/Jazee6/web-chat",
+                "license": "https://github.com/Jazee6/web-chat/blob/main/LICENSE",
+                "featureList": [
+                    "Real-time text and image messaging",
+                    "Browser-based multi-party voice calls",
+                    "Full room history search",
+                    "Stickers and reply quotes",
+                    "Automatic inactive-room and image cleanup",
+                    "Self-hostable on Cloudflare"
+                ]
+            },
+            {
+                "@type": "Organization",
+                "name": "Web Chat",
+                "url": "https://chat.jaze.top/"
+            },
+            {
+                "@type": "FAQPage",
+                "mainEntity": [
+                    {
+                        "@type": "Question",
+                        "name": "What is Web Chat?",
+                        "acceptedAnswer": { "@type": "Answer", "text": "Web Chat is a free, open-source real-time chat and calling app. You create shared rooms, exchange text and images, and join browser-based voice calls - no app install required beyond a quick sign-in." }
+                    },
+                    {
+                        "@type": "Question",
+                        "name": "Do I need to install anything?",
+                        "acceptedAnswer": { "@type": "Answer", "text": "No. Web Chat runs entirely in your browser. Voice calls use WebRTC and a managed SFU, so you join a room and start talking without plugins or desktop software." }
+                    },
+                    {
+                        "@type": "Question",
+                        "name": "How do I get started?",
+                        "acceptedAnswer": { "@type": "Answer", "text": "Click Get Started to sign in, then create a room and share its link. Anyone with the link can join the same room from any device." }
+                    },
+                    {
+                        "@type": "Question",
+                        "name": "Why is it fast?",
+                        "acceptedAnswer": { "@type": "Answer", "text": "It runs on Cloudflare Workers, so traffic is served from the edge location nearest each user. Room state lives in a Durable Object with co-located SQLite, avoiding a separate database round trip for every message." }
+                    },
+                    {
+                        "@type": "Question",
+                        "name": "Where is my data stored?",
+                        "acceptedAnswer": { "@type": "Answer", "text": "Room metadata lives in Cloudflare D1, room state and history in Durable Object SQLite, and images in Cloudflare R2 or any S3-compatible store. Everything stays inside the Cloudflare ecosystem you deploy to." }
+                    },
+                    {
+                        "@type": "Question",
+                        "name": "Can I self-host it?",
+                        "acceptedAnswer": { "@type": "Answer", "text": "Yes. Web Chat is fully open-source and ships with deployment scripts for Cloudflare Workers, D1, R2 and Durable Objects. Clone the repository and follow the README to run your own instance." }
+                    },
+                    {
+                        "@type": "Question",
+                        "name": "How long are messages and images kept?",
+                        "acceptedAnswer": { "@type": "Answer", "text": "Messages remain for as long as their room exists. Rooms with no user activity for 30 consecutive days are deleted, and images no longer referenced by any message are reclaimed after a 24-hour safety window." }
+                    },
+                    {
+                        "@type": "Question",
+                        "name": "Can I search old messages?",
+                        "acceptedAnswer": { "@type": "Answer", "text": "Yes. Each room has full text-history search with stable result snapshots and context windows around older matches, so you can find and reopen past conversations in place." }
+                    }
+                ]
+            }
+        ]
+    }
+    </script>
 </head>
 <body class="dark">
 <div id="root"></div>

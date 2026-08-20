@@ -1,0 +1,38 @@
+# Web Chat — Full Project Brief for AI Assistants
+
+Web Chat is a free, open-source, serverless real-time web chat and calling application built on the Cloudflare ecosystem. It uses a monorepo architecture with three workspaces: `client` (frontend), `server` (backend), and `share` (shared types and utilities).
+
+## Links
+- Live demo: https://chat.jaze.top
+- Source code: https://github.com/Jazee6/web-chat
+- Self-hosting guide: deployment section of the repository README
+
+## What it does
+Users create shared rooms and invite others by link. Within a room they exchange text and images, reply to earlier messages, save images as stickers, search the complete retained text history, and start multi-party browser voice calls.
+
+## Architecture
+- **Frontend**: React 19 + Vite + TypeScript + Tailwind CSS 4 + shadcn/ui (client-rendered SPA). The marketing landing page is prerendered at build time for SEO.
+- **Backend**: Cloudflare Workers + Hono framework (serverless).
+- **Realtime**: WebRTC voice calls via a managed SFU/TURN.
+- **State & storage**: Cloudflare Durable Objects (per-room strongly-consistent state with co-located SQLite), D1 (user and room metadata via Drizzle ORM), and R2 / S3-compatible object storage for images.
+- **Auth**: better-auth with a generic OAuth provider.
+
+## Feature set
+- Real-time text and image messaging with idempotent message acceptance — retries do not produce duplicate messages.
+- Reply quotes captured as snapshots at send time, rendering on every device even when the antecedent has scrolled out of the local paginated window.
+- Sticker library: any image can be saved and reused by reference (bytes stored once).
+- Room history search: trigram projection of all retained text messages with stable result snapshots and ±12-item context windows; explicit Preparing and Search Unavailable readiness states.
+- Multi-party voice calls with a grace window so brief WebSocket reconnects are invisible to peers.
+- Transient presence/status: per-member activity, screen state, tab visibility, and typing — session-only, not persisted.
+
+## Data lifecycle
+- Messages persist for the lifetime of their room; there is no per-message expiry.
+- Rooms with no user-authored messages for 30 consecutive days are deleted at the next scheduled cleanup.
+- Images with no business reference are reclaimed from object storage 24 hours after their last reference disappears.
+- Room deletion is irreversible and removes metadata, history, favorite relationships, and image references.
+
+## Why it is fast
+Traffic is served from the Cloudflare edge location nearest each user. Each room is a single Durable Object holding its live state and SQLite history, so a message does not incur a separate database round trip.
+
+## Self-hosting
+Fully open-source. Clone the repository, create Cloudflare D1, R2, Durable Objects, and a RealtimeKit SFU/TURN, run the provided database migrations, configure environment variables, and deploy with the included build scripts.

@@ -1,6 +1,7 @@
 import { lazy, Suspense } from "react";
-import { BrowserRouter, Route, Routes } from "react-router";
+import { BrowserRouter, Navigate, Route, Routes } from "react-router";
 
+const Landing = lazy(() => import("@/landing/landing.tsx"));
 const Index = lazy(() => import("@/pages"));
 const Layout = lazy(() => import("@/pages/layout.tsx"));
 const Login = lazy(() => import("@/pages/login.tsx"));
@@ -17,10 +18,17 @@ function App() {
         }
       >
         <Routes>
+          <Route path="/" element={<Landing />} />
+
           <Route path="/login" element={<Login />} />
 
           <Route element={<Layout />}>
-            <Route path="/room?/:id?" element={<Index />} />
+            <Route path="/rooms" element={<Index />} />
+
+            {/* Legacy room-list path; rooms keep their /room/:id links. */}
+            <Route path="/room" element={<Navigate to="/rooms" replace />} />
+
+            <Route path="/room/:id" element={<Index />} />
 
             <Route path="/settings" element={<Settings />} />
           </Route>

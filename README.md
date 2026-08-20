@@ -78,6 +78,7 @@ bun run db:push:d1
 | 名称         | 描述          |
 | ------------ | ------------- |
 | VITE_API_URL | 后端 API 地址 |
+| SITE_URL     | 站点公开地址（可选；构建时用于生成 canonical/OG/sitemap 等 SEO 资产，默认为官方站地址） |
 
 ## 赞助
 
