@@ -18,6 +18,9 @@ export const authConfig: BetterAuthOptions = {
           discoveryUrl: `${process.env.EASY_AUTH_URL}/api/auth/.well-known/openid-configuration`,
           clientId: process.env.EASY_AUTH_CLIENT_ID,
           clientSecret: process.env.EASY_AUTH_CLIENT_SECRET,
+          // Easy Auth registers Web clients with client_secret_basic; the
+          // default "post" makes the token exchange fail with invalid_client.
+          authentication: "basic",
           pkce: true,
           scopes: ["openid", "profile", "email"],
           overrideUserInfo: true,
