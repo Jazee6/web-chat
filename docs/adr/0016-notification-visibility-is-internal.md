@@ -1,0 +1,3 @@
+# Room Visibility for notifications is internal, not User Status
+
+Room Message Notifications must be suppressed whenever the recipient has the room visible on any device, even when they have disabled peer-visible User Status. Subscribed room sessions therefore report a separate transient Room Visibility signal: the Room Durable Object may use it only for notification suppression, never persist it or expose it to peers. Reusing Tab Visibility was rejected because its Show My Status privacy gate would either leak an opted-out status or produce duplicate notifications for users actively reading the room.

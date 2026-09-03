@@ -13,6 +13,7 @@ import {
   useSidebar,
 } from "@/components/ui/sidebar";
 import { authClient } from "@/lib/auth-client.ts";
+import { unregisterCurrentBrowserPush } from "@/lib/push.ts";
 import {
   ChevronsUpDown,
   Cog,
@@ -33,8 +34,14 @@ export function NavUser({
 }) {
   const { isMobile } = useSidebar();
 
-  const onLogOut = () => {
-    authClient.signOut();
+  const onLogOut = async () => {
+    try {
+      await unregisterCurrentBrowserPush();
+    } catch (error) {
+      console.error("Failed to unregister push before logout", error);
+    } finally {
+      await authClient.signOut();
+    }
   };
 
   return (

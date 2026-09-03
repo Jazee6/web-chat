@@ -22,6 +22,10 @@ interface __BaseEnv_CloudflareBindings {
 	CLOUDFLARE_R2_SECRET_ACCESS_KEY: string;
 	EXA_API_KEY: string;
 	ROOM: DurableObjectNamespace<import("./src/index").Room>;
+	NOTIFICATION_QUEUE?: Queue<any>;
+	VAPID_PUBLIC_KEY?: string;
+	VAPID_PRIVATE_KEY?: string;
+	VAPID_SUBJECT?: string;
 }
 declare namespace Cloudflare {
 	interface GlobalProps {

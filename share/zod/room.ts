@@ -219,6 +219,12 @@ export const clientMessageSchema = z.discriminatedUnion("type", [
     type: z.literal("userStatus"),
     data: userStatusSchema,
   }),
+  z.object({
+    type: z.literal("roomVisibility"),
+    data: z.object({
+      visible: z.boolean(),
+    }),
+  }),
   z.object({ type: z.literal("realtimeJoin") }),
   z.object({
     type: z.literal("realtimeUpdate"),

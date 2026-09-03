@@ -1,0 +1,3 @@
+# Fan out Room Message Notifications through Cloudflare Queues
+
+Accepted user messages enqueue notification work instead of sending Web Push inline. Queue work pages Push Destinations into batches below the Workers Free external-subrequest limit, expires after five minutes, and never affects Message Acceptance; individual endpoint failures are not retried and permanently invalid endpoints are removed. Cloudflare Queues may redeliver after infrastructure failure, so message ids provide idempotency and one notification tag per room collapses duplicate or successive displays. Direct fanout was rejected because roughly 100 subscribers with multiple destinations can exceed the Free plan's 50 external subrequests per invocation.

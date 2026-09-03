@@ -7,6 +7,7 @@ import {
   uniqueIndex,
 } from "drizzle-orm/sqlite-core";
 import { v7 } from "uuid";
+import { user } from "./auth";
 
 export const roomTable = sqliteTable(
   "room",
@@ -55,7 +56,74 @@ export const favoriteRoomTable = sqliteTable("favorite_room", {
 
 export const roomRelations = relations(roomTable, ({ many }) => ({
   favoriteRooms: many(favoriteRoomTable),
+  notificationSubscriptions: many(roomNotificationSubscriptionTable),
 }));
+
+export const roomNotificationSubscriptionTable = sqliteTable(
+  "room_notification_subscription",
+  {
+    id: text()
+      .primaryKey()
+      .$defaultFn(() => v7()),
+    userId: text()
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    roomId: text()
+      .notNull()
+      .references(() => roomTable.id, { onDelete: "cascade" }),
+    createdAt: integer({ mode: "timestamp_ms" })
+      .notNull()
+      .$defaultFn(() => new Date()),
+  },
+  (table) => [
+    uniqueIndex("room_notification_subscription_user_room_unique").on(
+      table.userId,
+      table.roomId,
+    ),
+    index("room_notification_subscription_room_idx").on(table.roomId),
+    index("room_notification_subscription_user_idx").on(table.userId),
+  ],
+);
+
+export const roomNotificationSubscriptionRelations = relations(
+  roomNotificationSubscriptionTable,
+  ({ one }) => ({
+    room: one(roomTable, {
+      fields: [roomNotificationSubscriptionTable.roomId],
+      references: [roomTable.id],
+    }),
+  }),
+);
+
+export const pushDestinationTable = sqliteTable(
+  "push_destination",
+  {
+    id: text()
+      .primaryKey()
+      .$defaultFn(() => v7()),
+    userId: text()
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    endpoint: text().notNull(),
+    p256dh: text().notNull(),
+    auth: text().notNull(),
+    deviceLabel: text().notNull(),
+    createdAt: integer({ mode: "timestamp_ms" })
+      .notNull()
+      .$defaultFn(() => new Date()),
+    lastUsedAt: integer({ mode: "timestamp_ms" })
+      .notNull()
+      .$defaultFn(() => new Date()),
+  },
+  (table) => [
+    uniqueIndex("push_destination_endpoint_unique").on(table.endpoint),
+    index("push_destination_user_idx").on(table.userId),
+    index("push_destination_user_last_used_idx").on(
+      table.userId,
+      table.lastUsedAt,
+    ),
+  ],
+);
 
 // A user's personal Sticker Library — images favorited from chat for quick
 // reuse, referenced by their storage key (sha256). Per-user, cross-room. The

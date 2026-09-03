@@ -42,6 +42,10 @@ import {
   hasRoomAiMention,
 } from "../lib/room-ai";
 import {
+  isEligibleForNotification,
+  RoomVisibilityTracker,
+} from "../lib/room-notifications";
+import {
   messageTable,
   roomAiCooldownTable,
   roomSettingTable,
@@ -49,6 +53,7 @@ import {
 type Env = Cloudflare.Env & {
   EXA_API_KEY?: string;
   AI_GATEWAY_ID?: string;
+  NOTIFICATION_QUEUE?: Queue<any>;
 };
 
 type WsSession = RoomUser;
@@ -157,6 +162,7 @@ interface WsAttachment {
   session: WsSession;
   realtime?: ServerRealtimeStatus;
   tabId?: string;
+  notificationVisible?: boolean;
   // Set on a reconnecting socket whose Call entry was stolen by a later tab.
   // realtimeJoin must then silently fail instead of evicting the active tab.
   // See ADR 0001.
@@ -200,6 +206,7 @@ export class Room extends DurableObject<Env> {
   activeAiAbortController: AbortController | undefined;
   deleted = false;
   searchRequests = new Map<string, number[]>();
+  roomVisibility = new RoomVisibilityTracker<WebSocket>();
 
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
@@ -211,6 +218,9 @@ export class Room extends DurableObject<Env> {
       if (attachment) {
         this.sessions.set(ws, attachment.session);
         if (attachment.realtime) this.realtime.set(ws, attachment.realtime);
+        if (attachment.notificationVisible) {
+          this.roomVisibility.set(attachment.session.id, ws, true);
+        }
       }
     });
 
@@ -233,6 +243,22 @@ export class Room extends DurableObject<Env> {
         "SELECT readiness, boundaryCreatedAt, boundaryId, cursorCreatedAt, cursorId, batchSize, failureCount, retryAt FROM search_state WHERE id = 1",
       )
       .toArray()[0];
+
+  private setUserVisibility(userId: string, ws: WebSocket, visible: boolean) {
+    const attachment = (ws.deserializeAttachment() ?? {}) as WsAttachment;
+    ws.serializeAttachment({ ...attachment, notificationVisible: visible });
+    this.roomVisibility.set(userId, ws, visible);
+  }
+
+  private removeSocketVisibility(ws: WebSocket) {
+    const session = this.sessions.get(ws);
+    if (!session) return;
+    this.setUserVisibility(session.id, ws, false);
+  }
+
+  async getVisibleUsers(userIds: string[]): Promise<string[]> {
+    return this.roomVisibility.getVisibleUsers(userIds);
+  }
 
   getLatestSearchBoundary = (): RoomHistoryCursor | undefined => {
     const row = this.storage.sql
@@ -1339,6 +1365,22 @@ export class Room extends DurableObject<Env> {
           },
           [ws],
         );
+        if (this.env.NOTIFICATION_QUEUE && isEligibleForNotification(data)) {
+          const roomId = this.ctx.id.toString();
+          this.ctx.waitUntil(
+            this.env.NOTIFICATION_QUEUE.send({
+              type: "fanout_page",
+              roomId,
+              messageId: data.id,
+              senderId: meta.id,
+              messageType: type,
+              content: data.content,
+              createdAt: data.createdAt.getTime(),
+            }).catch((error) => {
+              console.error("Failed to enqueue notification fanout", error);
+            }),
+          );
+        }
         if (type === "text" && hasRoomAiMention(content)) {
           await this.enqueueAiInvocation(ws, meta.id, data);
         }
@@ -1384,6 +1426,15 @@ export class Room extends DurableObject<Env> {
         this.storeSession(ws, s);
 
         this.broadcastRoomStats();
+        break;
+      }
+      case "roomVisibility": {
+        const session = this.sessions.get(ws);
+        if (!session) {
+          this.handleDisconnect(ws);
+          return;
+        }
+        this.setUserVisibility(session.id, ws, clientMessage.data.visible);
         break;
       }
       case "realtimeJoin": {
@@ -1453,6 +1504,7 @@ export class Room extends DurableObject<Env> {
   // to come back before evicting and broadcasting Left. Otherwise this
   // collapses to the same cleanup the old handleDisconnect did.
   handleSocketDrop(ws: WebSocket) {
+    this.removeSocketVisibility(ws);
     const tabId = this.getTabId(ws);
     const realtime = this.realtime.get(ws);
 
@@ -1484,6 +1536,7 @@ export class Room extends DurableObject<Env> {
   }
 
   handleDisconnect(ws: WebSocket) {
+    this.removeSocketVisibility(ws);
     ws.serializeAttachment(null);
     this.realtime.delete(ws);
     this.sessions.delete(ws);
@@ -1495,6 +1548,7 @@ export class Room extends DurableObject<Env> {
 
   async clearStorage() {
     this.deleted = true;
+    this.roomVisibility.clear();
     this.activeAiAbortController?.abort();
     clearPendingAiInvocations(this.aiQueue);
     await this.ctx.storage.deleteAll();

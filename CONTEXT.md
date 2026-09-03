@@ -194,6 +194,24 @@ itself: every Reply carries a Quote, and clicking the Quote jumps to the anteced
 is a `[图片]` text label, or `[图片] x N` for a multi-image antecedent — never the image itself.
 _Avoid_: reply (the relationship), citation
 
+### Notifications
+
+**Room Message Notification**:
+A browser-system notification for an accepted Chat Message authored by another user when the recipient subscribes to that room and has no visible tab showing it on any device. It identifies the room and sender and previews text or `[图片]`; self-authored, Room AI, and System Messages do not qualify.
+_Avoid_: offline notification, background notification, desktop notification
+
+**Room Notification Subscription**:
+A user's explicit, account-wide choice to receive Room Message Notifications for one room. It is independent of Favorite Room and applies through every Push Destination registered to that user.
+_Avoid_: Favorite Room, room membership, device subscription
+
+**Push Destination**:
+A browser installation that a user has authorized to receive Room Message Notifications. A user may have multiple Push Destinations, and a destination is not itself a choice about which rooms to follow.
+_Avoid_: Room Notification Subscription, device, session
+
+**Room Visibility**:
+Whether a user has a subscribed room visible in at least one live browser tab across all devices; any visible tab makes the room visible. It is a transient, notification-internal signal that is neither persisted nor exposed to peers, and is distinct from the opt-in Tab Visibility in User Status.
+_Avoid_: online status, presence, Tab Visibility
+
 ### Sending and image lifecycle states
 
 These are distinct states. Calling all of them "上传失败" causes confusion — pick the right one.

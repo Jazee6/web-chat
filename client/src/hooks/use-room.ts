@@ -6,6 +6,7 @@ import { useRoomImages } from "@/hooks/use-room-images.ts";
 import { useRoomNotifications } from "@/hooks/use-room-notifications.ts";
 import useSettings from "@/hooks/use-settings.ts";
 import { useUserInfo } from "@/hooks/use-user-info.ts";
+import { clearRoomNotifications } from "@/lib/push.ts";
 import { getTabId } from "@/lib/tab-id.ts";
 import { api, appName } from "@/lib/utils.ts";
 import { useQuery } from "@tanstack/react-query";
@@ -61,19 +62,20 @@ export function useRoom({
   const [aiTyping, setAiTyping] = useState(false);
   // Tab Visibility drives the `tab` User Status axis (ADR 0012). State-driven so
   // the presence effect re-sends it on WS reconnect, mirroring user/screen.
-  const [tabState, setTabState] = useState<"visible" | "hidden">(
-    () =>
-      typeof document !== "undefined" && document.visibilityState === "hidden"
-        ? "hidden"
-        : "visible",
+  const [tabState, setTabState] = useState<"visible" | "hidden">(() =>
+    typeof document !== "undefined" && document.visibilityState === "hidden"
+      ? "hidden"
+      : "visible",
   );
 
   const pingIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const activeSocketRef = useRef<WebSocket | null>(null);
   const roomRealtimeTotalRef = useRef(0);
   const chatRef = useRef<ReturnType<typeof useRoomChat> | null>(null);
+  const connectedRoomIdRef = useRef<string | null>(null);
+  const reportedNotificationSubscriptionRef = useRef(false);
 
-  const { data: roomInfo } = useQuery({
+  const { data: roomInfo, isFetching: isRoomInfoFetching } = useQuery({
     queryKey: ["roomInfo", id],
     queryFn: () => api.get<RoomInfo>(`room/${id}/info`).json(),
   });
@@ -88,10 +90,12 @@ export function useRoom({
     sendMessage,
     readyState,
     connect,
+    disconnect,
     webSocketIns: ws,
   } = useWebSocket(
     `${import.meta.env.VITE_API_URL}/room/${id}/ws?tab_id=${getTabId()}`,
     {
+      manual: true,
       onOpen: (_, instance) => {
         activeSocketRef.current = instance;
         if (pingIntervalRef.current) {
@@ -136,7 +140,7 @@ export function useRoom({
           }
           case "message": {
             chatRef.current?.handleMessage(m.data);
-            notifications.notifyOnMessage(m.data);
+            notifications.handleIncomingMessage(m.data);
             break;
           }
           case "messageAcceptance": {
@@ -178,6 +182,21 @@ export function useRoom({
       },
     },
   );
+
+  useEffect(() => {
+    reportedNotificationSubscriptionRef.current = false;
+    return disconnect;
+  }, [id, disconnect]);
+
+  // Wait for the account's room subscription preference before opening the
+  // socket, so an already-visible subscribed room is never briefly reported as
+  // hidden. Notification visibility is not sent for unsubscribed rooms.
+  useEffect(() => {
+    if (roomInfo && !isRoomInfoFetching && connectedRoomIdRef.current !== id) {
+      connectedRoomIdRef.current = id;
+      connect();
+    }
+  }, [roomInfo, isRoomInfoFetching, id, connect]);
 
   const chat = useRoomChat({
     chatListRef,
@@ -222,7 +241,35 @@ export function useRoom({
     chat.removeSubmission(submissionId);
   };
 
-  const notifications = useRoomNotifications({ users });
+  const notifications = useRoomNotifications({ roomId: id, userId: user.id });
+
+  useEffect(() => {
+    if (readyState !== WebSocket.OPEN) return;
+
+    if (roomInfo?.isSubscribed) {
+      reportedNotificationSubscriptionRef.current = true;
+      sendMessage(
+        gm({
+          type: "roomVisibility",
+          data: { visible: document.visibilityState === "visible" },
+        }),
+      );
+      return;
+    }
+
+    // Clear visibility previously reported by this socket when the account
+    // unsubscribes. An initially unsubscribed room sends no visibility signal.
+    if (reportedNotificationSubscriptionRef.current) {
+      reportedNotificationSubscriptionRef.current = false;
+      sendMessage(gm({ type: "roomVisibility", data: { visible: false } }));
+    }
+  }, [readyState, roomInfo?.isSubscribed, sendMessage]);
+
+  useEffect(() => {
+    if (document.visibilityState === "visible") {
+      void clearRoomNotifications(id);
+    }
+  }, [id]);
 
   const roomStats = chat.roomStats;
 
@@ -262,7 +309,14 @@ export function useRoom({
         },
       }),
     );
-  }, [screenState, settings.showStatus, userState, tabState, readyState, sendMessage]);
+  }, [
+    screenState,
+    settings.showStatus,
+    userState,
+    tabState,
+    readyState,
+    sendMessage,
+  ]);
 
   // Broadcast typing. Defaults on: new users via the settings defaultValue,
   // existing users (whose stored settings predate the field and see `undefined`,
@@ -289,19 +343,29 @@ export function useRoom({
 
   useEffect(() => {
     const handleVisibilityChange = () => {
-      setTabState(document.visibilityState === "visible" ? "visible" : "hidden");
-      if (document.visibilityState === "visible") {
+      const isVisible = document.visibilityState === "visible";
+      setTabState(isVisible ? "visible" : "hidden");
+      if (isVisible) {
         notifications.clearNotifications();
         setFaviconState({ hasRealtime: roomRealtimeTotalRef.current > 0 });
 
-        if (readyState !== WebSocket.OPEN) {
+        if (roomInfo && !isRoomInfoFetching && readyState !== WebSocket.OPEN) {
           connect();
         }
+      }
+
+      if (roomInfo?.isSubscribed && readyState === WebSocket.OPEN) {
+        sendMessage(
+          gm({
+            type: "roomVisibility",
+            data: { visible: isVisible },
+          }),
+        );
       }
     };
 
     const handleOnline = () => {
-      if (readyState !== WebSocket.OPEN) {
+      if (roomInfo && !isRoomInfoFetching && readyState !== WebSocket.OPEN) {
         connect();
       }
     };
@@ -313,7 +377,15 @@ export function useRoom({
       document.removeEventListener("visibilitychange", handleVisibilityChange);
       removeEventListener("online", handleOnline);
     };
-  }, [connect, readyState, notifications, setFaviconState]);
+  }, [
+    connect,
+    readyState,
+    notifications,
+    setFaviconState,
+    roomInfo,
+    isRoomInfoFetching,
+    sendMessage,
+  ]);
 
   const onSend = async (
     data: z.infer<typeof sendMessageSchema> & {
@@ -321,10 +393,6 @@ export function useRoom({
       replyTo?: ReplyRef;
     },
   ) => {
-    if ("Notification" in window && Notification.permission === "default") {
-      await Notification.requestPermission();
-    }
-
     const { message, images: rawImages, replyTo } = data;
 
     if (rawImages.length > 0) {

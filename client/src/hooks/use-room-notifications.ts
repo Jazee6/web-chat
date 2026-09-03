@@ -1,55 +1,43 @@
 import { useRoomFavicon } from "@/hooks/use-room-favicon.ts";
-import { getNotificationBody, pushNotification } from "@/lib/utils.ts";
-import type { User } from "better-auth";
-import { useCallback, useRef } from "react";
+import { clearRoomNotifications } from "@/lib/push.ts";
+import { useCallback } from "react";
 import type { ChatMessage } from "web-chat-share";
 
 type UseRoomNotificationsParams = {
-  users: Record<string, User>;
+  roomId: string;
+  userId: string;
 };
 
 type UseRoomNotificationsReturn = {
-  notifyOnMessage: (message: ChatMessage) => void;
+  handleIncomingMessage: (message: ChatMessage) => void;
   clearNotifications: () => void;
 };
 
 export function useRoomNotifications({
-  users,
+  roomId,
+  userId,
 }: UseRoomNotificationsParams): UseRoomNotificationsReturn {
-  const notificationListRef = useRef<Notification[]>([]);
   const { setFaviconState, clearUnread } = useRoomFavicon();
 
-  const notifyOnMessage = useCallback(
+  const handleIncomingMessage = useCallback(
     (message: ChatMessage) => {
       if (
         document.visibilityState === "visible" ||
-        message.authorType === "system"
+        message.authorType === "system" ||
+        message.userId === userId
       ) {
         return;
       }
 
       setFaviconState({ hasUnread: true });
-
-      const u = message.userId ? users[message.userId] : undefined;
-      const n = pushNotification(
-        message.authorType === "ai" ? "AI" : (u?.name ?? "New Message"),
-        {
-          body: getNotificationBody(message),
-          icon: u?.image ?? "/icon.svg",
-        },
-      );
-      if (n) {
-        notificationListRef.current.push(n);
-      }
     },
-    [users, setFaviconState],
+    [setFaviconState, userId],
   );
 
   const clearNotifications = useCallback(() => {
-    notificationListRef.current.forEach((n) => n.close());
-    notificationListRef.current = [];
+    void clearRoomNotifications(roomId);
     clearUnread();
-  }, [clearUnread]);
+  }, [roomId, clearUnread]);
 
-  return { notifyOnMessage, clearNotifications };
+  return { handleIncomingMessage, clearNotifications };
 }

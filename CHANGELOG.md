@@ -1,6 +1,28 @@
 # Changelog
 
-## [1.7.0] - 2026-08-20
+## [1.8.0] - 2026-09-03
+
+### Added
+
+- Added Web Push notifications for room messages (`Room Message Notification`). Users can subscribe to specific
+  rooms and receive browser system notifications for new user-authored messages. Self-authored messages, Room AI
+  responses, and system messages are excluded.
+- Added background notification fanout powered by Cloudflare Queues (ADR 0017). Accepted messages enqueue delivery
+  tasks asynchronously without blocking chat latency, using batching to stay within Workers subrequest limits, a 5-minute
+  message TTL, and automatic cleanup of stale push subscriptions (HTTP 404/410).
+- Added intelligent notification suppression based on internal Room Visibility (ADR 0016): notifications are suppressed
+  if the recipient has the room open and visible in any browser tab, without exposing or depending on public user status.
+- Added PWA capabilities including web app manifest (`manifest.webmanifest`), Apple touch icon, PWA icons, and service
+  worker registration (`sw.js`) for background push handling and notification click navigation.
+- Added notification settings and push device management in user settings, enabling users to manage registered browser
+  destinations, toggle notifications for the current device, and unbind inactive devices.
+- Added room notification subscription controls in room settings.
+
+### Upgrade notes
+
+- Deployments must apply the new D1 migrations (`0005_parallel_ares.sql`) with `cd server && bun run db:push:d1`.
+- Ensure Cloudflare Queues bindings (`ROOM_NOTIFICATIONS_QUEUE`) and VAPID keys (`VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`,
+  `VAPID_SUBJECT`) are configured in Wrangler environment settings.
 
 ### Added
 

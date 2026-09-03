@@ -458,6 +458,15 @@ const Room = ({
     return () => removeEventListener("room-settings:open", openSettings);
   }, [id]);
 
+  useEffect(() => {
+    const openLatest = (event: Event) => {
+      const detail = (event as CustomEvent<{ roomId: string }>).detail;
+      if (detail.roomId === id) backToLatest();
+    };
+    addEventListener("room-notification:open", openLatest);
+    return () => removeEventListener("room-notification:open", openLatest);
+  }, [id, backToLatest]);
+
   useBeforeUnload((e) => {
     if (realtimeWindowOpen) {
       e.preventDefault();
@@ -559,17 +568,15 @@ const Room = ({
                         <Search />
                         <span className="sr-only">Search room history</span>
                       </Button>
-                      {roomInfo?.userId === user.id && (
-                        <Button
-                          size="icon-sm"
-                          className="rounded-full"
-                          variant="ghost"
-                          onClick={() => setRoomSettingsDialogOpen(true)}
-                        >
-                          <Settings />
-                          <span className="sr-only">Room settings</span>
-                        </Button>
-                      )}
+                      <Button
+                        size="icon-sm"
+                        className="rounded-full"
+                        variant="ghost"
+                        onClick={() => setRoomSettingsDialogOpen(true)}
+                      >
+                        <Settings />
+                        <span className="sr-only">Room settings</span>
+                      </Button>
                       <AddFavoritesButton
                         id={id}
                         added={!!roomInfo?.isFavorite}
@@ -744,11 +751,12 @@ const Room = ({
           onSelectResult={handleSearchResult}
           onRoomNotFound={handleRoomNotFound}
         />
-        {roomInfo?.userId === user.id && (
+        {roomInfo && (
           <RoomSettingsDialog
             roomInfo={roomInfo}
             open={roomSettingsDialogOpen}
             onOpenChange={setRoomSettingsDialogOpen}
+            isOwner={roomInfo.userId === user.id}
           />
         )}
       </RoomContext>

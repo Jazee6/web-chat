@@ -33,6 +33,7 @@ export interface RoomInfo {
   type: "public" | "unlisted";
   createdAt: string;
   isFavorite: boolean;
+  isSubscribed: boolean;
   userId: string;
   aiEnabled: boolean;
 }

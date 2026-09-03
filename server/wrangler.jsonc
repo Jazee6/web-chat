@@ -16,6 +16,24 @@
     "EASY_AUTH_CLIENT_ID": "fvTSOvbniIAlmwBSLJIMZYxlOymzxcUw",
     "SITE_URL": "https://chat.jaze.top",
     "AI_GATEWAY_ID": "jaz",
+    "VAPID_PUBLIC_KEY": "BMqwA_M-5Fq5k4t0XbnkBF6__qYoMlFeHkwOjkA4XRk688YJJ3OrsNcnhiVguGixhbQAmwAKl7qaT30nvCVy5UE",
+    "VAPID_SUBJECT": "mailto:admin@chat.jaze.top",
+  },
+  "queues": {
+    "producers": [
+      {
+        "binding": "NOTIFICATION_QUEUE",
+        "queue": "room-notifications",
+      },
+    ],
+    "consumers": [
+      {
+        "queue": "room-notifications",
+        "max_batch_size": 1,
+        "max_batch_timeout": 5,
+        "max_retries": 0,
+      },
+    ],
   },
   "ai": {
     "binding": "AI",

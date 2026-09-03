@@ -10,17 +10,23 @@ import { HTTPException } from "hono/http-exception";
 import {
   basePaginationSchema,
   createRoomRequestSchema,
+  currentPushDestinationSchema,
   favoriteStickerSchema,
   getImageSchema,
   getPresignedUrlSchema,
   getRoomInfoSchema,
   getUserInfoSchema,
   linkPreviewQuerySchema,
+  parseDeviceLabel,
   publicRoomPaginationSchema,
+  pushDestinationIdSchema,
+  registerPushDestinationSchema,
   roomContextRequestSchema,
   roomIdSchema,
   roomSearchRequestSchema,
   stickerIdSchema,
+  unregisterPushDestinationSchema,
+  unsubscribeRoomSchema,
   updateRoomAiSchema,
   updateRoomVisibilitySchema,
 } from "web-chat-share";
@@ -33,11 +39,28 @@ import {
   runMaintenance,
 } from "./lib/image-lifecycle";
 import { fetchLinkPreview } from "./lib/preview";
+import {
+  findCurrentPushDestination,
+  listPushDestinations,
+  listSubscribedRooms,
+  processNotificationQueueBatch,
+  registerPushDestination,
+  revokePushDestinationById,
+  subscribeRoom,
+  unregisterPushDestinationByEndpoint,
+  unsubscribeRoom,
+  type NotificationQueuePayload,
+} from "./lib/room-notifications";
 import { createS3 } from "./lib/s3";
 import * as authSchema from "./lib/schema/auth";
 import { user } from "./lib/schema/auth";
 import * as d1Schema from "./lib/schema/d1";
-import { favoriteRoomTable, roomTable, stickerTable } from "./lib/schema/d1";
+import {
+  favoriteRoomTable,
+  roomNotificationSubscriptionTable,
+  roomTable,
+  stickerTable,
+} from "./lib/schema/d1";
 import { HONOInstance } from "./lib/types";
 export { Room } from "./do/room";
 
@@ -141,6 +164,17 @@ app.use("/room/*", async (c, next) => {
 // The Sticker Library is user-scoped, not room-scoped, but shares the same
 // auth gate. See CONTEXT.md "Stickers".
 app.use("/sticker/*", async (c, next) => {
+  const a = getAuth(c.env.web_chat);
+  const session = await a.api.getSession({ headers: c.req.raw.headers });
+  if (!session) {
+    throw new HTTPException(401, { message: "Unauthorized" });
+  }
+  c.set("user", session.user);
+  c.set("session", session.session);
+  await next();
+});
+
+app.use("/notification/*", async (c, next) => {
   const a = getAuth(c.env.web_chat);
   const session = await a.api.getSession({ headers: c.req.raw.headers });
   if (!session) {
@@ -542,6 +576,7 @@ app.get("/room/:id/info", zValidator("param", getRoomInfoSchema), async (c) => {
         createdAt: roomTable.createdAt,
       },
       favorite: favoriteRoomTable.id,
+      subscribed: roomNotificationSubscriptionTable.id,
     })
     .from(roomTable)
     .where(and(eq(roomTable.id, id), isNull(roomTable.deletionRequestedAt)))
@@ -550,6 +585,13 @@ app.get("/room/:id/info", zValidator("param", getRoomInfoSchema), async (c) => {
       and(
         eq(favoriteRoomTable.roomId, roomTable.id),
         eq(favoriteRoomTable.userId, c.get("user").id),
+      ),
+    )
+    .leftJoin(
+      roomNotificationSubscriptionTable,
+      and(
+        eq(roomNotificationSubscriptionTable.roomId, roomTable.id),
+        eq(roomNotificationSubscriptionTable.userId, c.get("user").id),
       ),
     )
     .limit(1)
@@ -562,9 +604,36 @@ app.get("/room/:id/info", zValidator("param", getRoomInfoSchema), async (c) => {
   return c.json({
     ...info.room,
     isFavorite: !!info.favorite,
+    isSubscribed: !!info.subscribed,
     aiEnabled,
   });
 });
+
+app.post(
+  "/room/:id/subscription",
+  zValidator("param", roomIdSchema),
+  async (c) => {
+    const { id } = c.req.valid("param");
+    const user = c.get("user");
+    try {
+      await subscribeRoom(c.env.web_chat, user.id, id);
+      return c.body(null, 201);
+    } catch {
+      throw new HTTPException(404, { message: "Room not found" });
+    }
+  },
+);
+
+app.delete(
+  "/room/:id/subscription",
+  zValidator("param", roomIdSchema),
+  async (c) => {
+    const { id } = c.req.valid("param");
+    const user = c.get("user");
+    await unsubscribeRoom(c.env.web_chat, user.id, id);
+    return c.body(null, 204);
+  },
+);
 
 app.post("/room/:id/favorite", zValidator("param", roomIdSchema), async (c) => {
   const { id } = c.req.valid("param");
@@ -722,6 +791,102 @@ app.delete("/sticker/:id", zValidator("param", stickerIdSchema), async (c) => {
   return c.body(null, 204);
 });
 
+app.get("/notification/config", async (c) => {
+  const vapidPublicKey =
+    c.env.VAPID_PUBLIC_KEY || process.env.VAPID_PUBLIC_KEY || null;
+  return c.json({ vapidPublicKey: vapidPublicKey || null });
+});
+
+app.get("/notification/destinations", async (c) => {
+  const user = c.get("user");
+  const destinations = await listPushDestinations(c.env.web_chat, user.id);
+  return c.json(destinations);
+});
+
+app.post(
+  "/notification/destinations",
+  zValidator("json", registerPushDestinationSchema),
+  async (c) => {
+    const user = c.get("user");
+    const body = c.req.valid("json");
+    const deviceLabel = parseDeviceLabel(c.req.header("user-agent"));
+
+    const id = await registerPushDestination(c.env.web_chat, {
+      userId: user.id,
+      endpoint: body.endpoint,
+      p256dh: body.p256dh,
+      auth: body.auth,
+      deviceLabel,
+    });
+    return c.json({ id }, 201);
+  },
+);
+
+app.post(
+  "/notification/destinations/current",
+  zValidator("json", currentPushDestinationSchema),
+  async (c) => {
+    const user = c.get("user");
+    const { endpoint } = c.req.valid("json");
+    const id = await findCurrentPushDestination(
+      c.env.web_chat,
+      user.id,
+      endpoint,
+    );
+    return c.json({ id });
+  },
+);
+
+app.delete(
+  "/notification/destinations/:id",
+  zValidator("param", pushDestinationIdSchema),
+  async (c) => {
+    const user = c.get("user");
+    const { id } = c.req.valid("param");
+    const deleted = await revokePushDestinationById(
+      c.env.web_chat,
+      user.id,
+      id,
+    );
+    if (!deleted) {
+      throw new HTTPException(404, { message: "Destination not found" });
+    }
+    return c.body(null, 204);
+  },
+);
+
+app.post(
+  "/notification/destinations/unregister",
+  zValidator("json", unregisterPushDestinationSchema),
+  async (c) => {
+    const user = c.get("user");
+    const { endpoint } = c.req.valid("json");
+    await unregisterPushDestinationByEndpoint(
+      c.env.web_chat,
+      user.id,
+      endpoint,
+    );
+    return c.body(null, 204);
+  },
+);
+
+app.get("/notification/subscriptions", async (c) => {
+  const user = c.get("user");
+  const subscriptions = await listSubscribedRooms(c.env.web_chat, user.id);
+  return c.json(subscriptions);
+});
+
+app.delete(
+  "/notification/subscriptions/:roomId",
+  zValidator("param", unsubscribeRoomSchema),
+  async (c) => {
+    const user = c.get("user");
+    const { roomId } = c.req.valid("param");
+    await unsubscribeRoom(c.env.web_chat, user.id, roomId);
+    return c.body(null, 204);
+  },
+);
+
 app.route("/room", realtime);
 
 showRoutes(app);
@@ -735,5 +900,11 @@ export default {
     ctx: ExecutionContext,
   ) {
     ctx.waitUntil(runMaintenance(env));
+  },
+  async queue(
+    batch: MessageBatch<NotificationQueuePayload>,
+    env: CloudflareBindings,
+  ) {
+    await processNotificationQueueBatch(batch, env);
   },
 };

@@ -8,6 +8,16 @@
     "SITE_URL": "https://chat.test",
     "BETTER_AUTH_URL": "https://server.test",
     "BETTER_AUTH_SECRET": "test-only-secret-with-at-least-32-characters",
+    "VAPID_PUBLIC_KEY": "",
+    "VAPID_SUBJECT": "mailto:admin@chat.test",
+  },
+  "queues": {
+    "producers": [
+      {
+        "binding": "NOTIFICATION_QUEUE",
+        "queue": "room-notifications-test",
+      },
+    ],
   },
   "d1_databases": [
     {

@@ -3,7 +3,6 @@ import { type ClassValue, clsx } from "clsx";
 import ky from "ky";
 import { toast } from "sonner";
 import { twMerge } from "tailwind-merge";
-import type { ChatMessage } from "web-chat-share";
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
@@ -39,27 +38,6 @@ export const api = ky.extend({
 
 export const showAlertDialog = (options: AlertDialogOptions) => {
   dispatchEvent(new CustomEvent("alert-dialog:open", { detail: options }));
-};
-
-export const pushNotification = (
-  title: string,
-  options?: NotificationOptions,
-) => {
-  if (!("Notification" in window)) {
-    return;
-  }
-
-  if (Notification.permission === "granted") {
-    const n = new Notification(title, {
-      icon: "/icon.svg",
-      ...options,
-    });
-    n.onclick = () => {
-      window.focus();
-      n.close();
-    };
-    return n;
-  }
 };
 
 export const formatChatListTime = (dateStr: string) => {
@@ -102,19 +80,6 @@ export const formatChatListTime = (dateStr: string) => {
   }
 
   return `${target.getFullYear()}-${pad(target.getMonth() + 1)}-${pad(target.getDate())} ${formatHHmm(target)}`;
-};
-
-export const getNotificationBody = (data: ChatMessage) => {
-  switch (data.type) {
-    case "text":
-      return data.content;
-    case "image": {
-      const length = (JSON.parse(data.content) as string[]).length;
-      return "🖼️(" + length + ")";
-    }
-    default:
-      return data.content;
-  }
 };
 
 export const convertImageToWebP = async (image: File): Promise<File> => {

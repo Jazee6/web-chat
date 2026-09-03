@@ -158,6 +158,24 @@ export interface RoomRealtime {
   userIds: string[];
 }
 
+export interface RoomSubscription {
+  id: string;
+  roomId: string;
+  roomName: string;
+  createdAt: string;
+}
+
+export interface PushDestinationInfo {
+  id: string;
+  deviceLabel: string;
+  createdAt: string;
+  lastUsedAt: string;
+}
+
+export interface NotificationConfig {
+  vapidPublicKey: string | null;
+}
+
 export type ServerMessage =
   | {
       type: "pong";
@@ -225,6 +243,12 @@ export type ClientMessage =
   | {
       type: "userStatus";
       data: UserStatus;
+    }
+  | {
+      type: "roomVisibility";
+      data: {
+        visible: boolean;
+      };
     }
   | {
       type: "realtimeJoin";
