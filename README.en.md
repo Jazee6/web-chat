@@ -24,6 +24,7 @@ Live Demo: https://chat.jaze.top
 - **Security & Authentication**: Integrated `better-auth` for authentication
 - **Object Storage**: Cloudflare R2 / S3-compatible storage for image and file uploads with preview support
 - **Reliable Message Lifecycle**: Idempotent acceptance, protected image references, and retry uploads prevent duplicates and accepted messages with missing images
+- **System Notifications & PWA**: Standard Web Push room notifications with Cloudflare Queues asynchronous fanout, intelligent suppression via multi-device room visibility, and PWA installation support
 - **Automatic Data Cleanup**: Rooms without a user message for 30 consecutive days are deleted; unreferenced images are reclaimed from source storage after a 24-hour safety delay
 
 ## Deployment
@@ -36,6 +37,7 @@ Create the following resources in the [Cloudflare Dashboard](https://dash.cloudf
 - **R2 Bucket**: R2 > Create bucket > Name it `web-chat`
 - **Durable Objects**: Automatically created by Wrangler during deployment
 - **RealtimeKit (SFU/TURN)**: Realtime > Create SFU App / Create TURN Key
+- **Cloudflare Queues**: Workers & Pages > Queues > Create queue > Name it `room-notifications` (for background notification fanout)
 
 ### Database Migrations
 
@@ -66,6 +68,9 @@ bun run db:push:d1
 | EASY_AUTH_CLIENT_SECRET         | [Easy Auth](https://github.com/Jazee6/easy-auth) Client Secret |
 | EXA_API_KEY                     | Exa API key (optional; enables Web Search for Room AI)         |
 | AI_GATEWAY_ID                   | Cloudflare AI Gateway ID (optional)                            |
+| VAPID_PUBLIC_KEY                | Web Push VAPID public key (optional; enables browser push)     |
+| VAPID_PRIVATE_KEY               | Web Push VAPID private key (optional; secret key for push)     |
+| VAPID_SUBJECT                   | Web Push VAPID subject (optional; e.g. `mailto:admin@domain`)  |
 | CLOUDFLARE_ACCOUNT_ID           | Cloudflare Account ID                                          |
 | CLOUDFLARE_DATABASE_ID          | D1 Database ID                                                 |
 | CLOUDFLARE_D1_TOKEN             | D1 HTTP API Token                                              |
@@ -76,11 +81,14 @@ bun run db:push:d1
 | CLOUDFLARE_R2_ACCESS_KEY_ID     | R2 Storage Access Key ID                                       |
 | CLOUDFLARE_R2_SECRET_ACCESS_KEY | R2 Storage Secret Access Key                                   |
 
+> **Tip**: Generate a VAPID key pair with `bunx web-push generate-vapid-keys`. In production, store the private key securely using `bunx wrangler secret put VAPID_PRIVATE_KEY`.
+
 ### Client (`client/.env`)
 
-| Name         | Description     |
-| ------------ | --------------- |
-| VITE_API_URL | Backend API URL |
+| Name         | Description                                                                                                   |
+| ------------ | ------------------------------------------------------------------------------------------------------------- |
+| VITE_API_URL | Backend API URL                                                                                               |
+| SITE_URL     | Public site URL (optional; used at build time for canonical/OG/sitemap SEO assets, defaults to official site) |
 
 ## Sponsor
 

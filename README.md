@@ -21,6 +21,7 @@ Live Demo: https://chat.jaze.top
 - **安全与认证**：集成 `better-auth` 提供身份验证
 - **对象存储**：支持 Cloudflare R2 / S3 兼容存储，实现图片与文件的上传与预览
 - **可靠消息生命周期**：幂等消息确认、图片引用保护与失败重传，避免重复消息和已接受消息缺图
+- **系统通知与 PWA**：支持基于 Web Push 标准的房间消息系统级通知与 PWA 安装，通过 Cloudflare Queues 异步队列扇出分发，并根据多端房间可见性智能免打扰
 - **自动数据清理**：连续 30 天没有用户消息的房间自动删除；无引用图片在 24 小时宽限期后回收源存储
 
 ## 部署
@@ -33,6 +34,7 @@ Live Demo: https://chat.jaze.top
 - **R2 存储桶**：R2 > Create bucket > 名称为 `web-chat`
 - **Durable Objects**：部署时由 Wrangler 自动创建
 - **RealtimeKit (SFU/TURN)**：Realtime > Create SFU App / Create TURN Key
+- **Cloudflare Queues**：Workers & Pages > Queues > Create queue > 名称为 `room-notifications`（用于房间消息通知异步扇出）
 
 ### 数据库迁移
 
@@ -53,31 +55,36 @@ bun run db:push:d1
 
 ### 服务端 (`server/.env`)
 
-| 名称                            | 描述                                                        |
-| ------------------------------- | ----------------------------------------------------------- |
-| SITE_URL                        | 前端站点地址                                                |
-| BETTER_AUTH_URL                 | 认证服务地址（后端地址）                                    |
-| BETTER_AUTH_SECRET              | better-auth 密钥（随机字符串）                              |
-| EASY_AUTH_URL                   | [Easy Auth](https://github.com/Jazee6/easy-auth) URL        |
-| EASY_AUTH_CLIENT_ID             | [Easy Auth](https://github.com/Jazee6/easy-auth) 客户端 ID  |
-| EASY_AUTH_CLIENT_SECRET         | [Easy Auth](https://github.com/Jazee6/easy-auth) 客户端密钥 |
-| EXA_API_KEY                     | Exa API 密钥（可选；配置后为 Room AI 启用 Web Search）      |
-| AI_GATEWAY_ID                   | Cloudflare AI Gateway ID（可选）                            |
-| CLOUDFLARE_ACCOUNT_ID           | Cloudflare 账户 ID                                          |
-| CLOUDFLARE_DATABASE_ID          | D1 数据库 ID                                                |
-| CLOUDFLARE_D1_TOKEN             | D1 HTTP API 令牌                                            |
-| CLOUDFLARE_SFU_ID               | Cloudflare RealtimeKit SFU ID                               |
-| CLOUDFLARE_SFU_SECRET           | Cloudflare RealtimeKit SFU Secret                           |
-| CLOUDFLARE_TURN_ID              | Cloudflare TURN Key ID                                      |
-| CLOUDFLARE_TURN_SECRET          | Cloudflare TURN Secret                                      |
-| CLOUDFLARE_R2_ACCESS_KEY_ID     | R2 存储 Access Key ID                                       |
-| CLOUDFLARE_R2_SECRET_ACCESS_KEY | R2 存储 Secret Access Key                                   |
+| 名称                            | 描述                                                           |
+| ------------------------------- | -------------------------------------------------------------- |
+| SITE_URL                        | 前端站点地址                                                   |
+| BETTER_AUTH_URL                 | 认证服务地址（后端地址）                                       |
+| BETTER_AUTH_SECRET              | better-auth 密钥（随机字符串）                                 |
+| EASY_AUTH_URL                   | [Easy Auth](https://github.com/Jazee6/easy-auth) URL           |
+| EASY_AUTH_CLIENT_ID             | [Easy Auth](https://github.com/Jazee6/easy-auth) 客户端 ID     |
+| EASY_AUTH_CLIENT_SECRET         | [Easy Auth](https://github.com/Jazee6/easy-auth) 客户端密钥    |
+| EXA_API_KEY                     | Exa API 密钥（可选；配置后为 Room AI 启用 Web Search）         |
+| AI_GATEWAY_ID                   | Cloudflare AI Gateway ID（可选）                               |
+| VAPID_PUBLIC_KEY                | Web Push VAPID 公钥（可选；启用浏览器推送通知）                |
+| VAPID_PRIVATE_KEY               | Web Push VAPID 私钥（可选；启用浏览器推送通知，敏感信息）      |
+| VAPID_SUBJECT                   | Web Push VAPID 联系方式（可选；如 `mailto:admin@example.com`） |
+| CLOUDFLARE_ACCOUNT_ID           | Cloudflare 账户 ID                                             |
+| CLOUDFLARE_DATABASE_ID          | D1 数据库 ID                                                   |
+| CLOUDFLARE_D1_TOKEN             | D1 HTTP API 令牌                                               |
+| CLOUDFLARE_SFU_ID               | Cloudflare RealtimeKit SFU ID                                  |
+| CLOUDFLARE_SFU_SECRET           | Cloudflare RealtimeKit SFU Secret                              |
+| CLOUDFLARE_TURN_ID              | Cloudflare TURN Key ID                                         |
+| CLOUDFLARE_TURN_SECRET          | Cloudflare TURN Secret                                         |
+| CLOUDFLARE_R2_ACCESS_KEY_ID     | R2 存储 Access Key ID                                          |
+| CLOUDFLARE_R2_SECRET_ACCESS_KEY | R2 存储 Secret Access Key                                      |
+
+> **提示**：可使用 `bunx web-push generate-vapid-keys` 生成 VAPID 公私钥对。生产环境部署时，建议通过 `bunx wrangler secret put VAPID_PRIVATE_KEY` 设置私钥。
 
 ### 客户端 (`client/.env`)
 
-| 名称         | 描述          |
-| ------------ | ------------- |
-| VITE_API_URL | 后端 API 地址 |
+| 名称         | 描述                                                                                    |
+| ------------ | --------------------------------------------------------------------------------------- |
+| VITE_API_URL | 后端 API 地址                                                                           |
 | SITE_URL     | 站点公开地址（可选；构建时用于生成 canonical/OG/sitemap 等 SEO 资产，默认为官方站地址） |
 
 ## 赞助
