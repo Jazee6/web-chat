@@ -1,5 +1,5 @@
 import { Suspense, lazy, useState } from 'react'
-import { ContactIcon, EllipsisIcon, LogOutIcon, PhoneIcon, SettingsIcon } from 'lucide-react'
+import { ContactIcon, EllipsisIcon, ExternalLinkIcon, LogOutIcon, PhoneIcon, SettingsIcon } from 'lucide-react'
 
 import {
   AlertDialog,
@@ -19,6 +19,7 @@ import {
   DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
+  DropdownMenuShortcut,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { SidebarHeader, SidebarTrigger, useSidebar } from '@/components/ui/sidebar'
@@ -112,6 +113,9 @@ function MoreMenu() {
           <DropdownMenuItem render={<a href="https://github.com/Jazee6/web-chat" target="_blank" rel="noreferrer" />}>
             <GithubIcon />
             GitHub
+            <DropdownMenuShortcut>
+              <ExternalLinkIcon />
+            </DropdownMenuShortcut>
           </DropdownMenuItem>
           <DropdownMenuItem
             variant="destructive"
