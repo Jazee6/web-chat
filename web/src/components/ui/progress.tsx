@@ -1,0 +1,105 @@
+import { Progress as ProgressPrimitive } from "@base-ui/react/progress"
+import { cva, type VariantProps } from "class-variance-authority"
+import { cn } from "cn"
+
+const progressTrackVariants = cva(
+  "relative flex w-full items-center overflow-x-hidden bg-muted",
+  {
+    variants: {
+      size: {
+        default: "h-3 rounded-4xl",
+        // 嵌在文字行里的细条（如文件卡片里替换大小的上传进度）
+        sm: "h-1.5 rounded-4xl",
+        // 贴边的细条（如页面顶部的连接指示）
+        xs: "h-1",
+      },
+    },
+    defaultVariants: {
+      size: "default",
+    },
+  }
+)
+
+function Progress({
+  className,
+  children,
+  value,
+  size,
+  ...props
+}: ProgressPrimitive.Root.Props &
+  VariantProps<typeof progressTrackVariants>) {
+  return (
+    <ProgressPrimitive.Root
+      value={value}
+      data-slot="progress"
+      className={cn("flex flex-wrap gap-3", className)}
+      {...props}
+    >
+      {children}
+      <ProgressTrack size={size}>
+        <ProgressIndicator />
+      </ProgressTrack>
+    </ProgressPrimitive.Root>
+  )
+}
+
+function ProgressTrack({
+  className,
+  size,
+  ...props
+}: ProgressPrimitive.Track.Props & VariantProps<typeof progressTrackVariants>) {
+  return (
+    <ProgressPrimitive.Track
+      className={cn(progressTrackVariants({ size, className }))}
+      data-slot="progress-track"
+      {...props}
+    />
+  )
+}
+
+function ProgressIndicator({
+  className,
+  ...props
+}: ProgressPrimitive.Indicator.Props) {
+  return (
+    <ProgressPrimitive.Indicator
+      data-slot="progress-indicator"
+      className={cn(
+        "h-full bg-primary transition-all data-indeterminate:w-1/3 data-indeterminate:animate-progress-indeterminate",
+        className
+      )}
+      {...props}
+    />
+  )
+}
+
+function ProgressLabel({ className, ...props }: ProgressPrimitive.Label.Props) {
+  return (
+    <ProgressPrimitive.Label
+      className={cn("text-sm font-medium", className)}
+      data-slot="progress-label"
+      {...props}
+    />
+  )
+}
+
+function ProgressValue({ className, ...props }: ProgressPrimitive.Value.Props) {
+  return (
+    <ProgressPrimitive.Value
+      className={cn(
+        "ml-auto text-sm text-muted-foreground tabular-nums",
+        className
+      )}
+      data-slot="progress-value"
+      {...props}
+    />
+  )
+}
+
+export {
+  Progress,
+  ProgressTrack,
+  ProgressIndicator,
+  ProgressLabel,
+  ProgressValue,
+}

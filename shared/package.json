@@ -1,0 +1,12 @@
+{
+  "name": "shared",
+  "type": "module",
+  "private": true,
+  "exports": {
+    "./protocol": "./src/protocol/index.ts",
+    "./text": "./src/text/index.ts"
+  },
+  "dependencies": {
+    "valibot": "^1.5.0"
+  }
+}

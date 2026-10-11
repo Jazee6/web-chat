@@ -1,0 +1,314 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+@import "@fontsource-variable/inter";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme {
+    --animate-progress-indeterminate: progress-indeterminate 1.4s ease-in-out infinite;
+
+    @keyframes progress-indeterminate {
+        from {
+            translate: -100%;
+        }
+        to {
+            translate: 300%;
+        }
+    }
+}
+
+/*
+ * 动效节奏：快（状态切换、小元素）/ 标准（进出场）/ 强调（空间上的移动：导航、重排、相册放大）；
+ * 进入与移动用 ease-enter，退出用 ease-exit 并且比进入短一档。生成 duration-fast、ease-enter 等工具类，
+ * tw-animate 的 animate-in / animate-out 也读这两个工具类。
+ * static：View Transition 的伪元素规则直接读这些变量。Web Animations API 读不到主题，同一组数值另见 lib/motion.ts
+ */
+@theme static {
+    --transition-duration-fast: 150ms;
+    --transition-duration-standard: 200ms;
+    --transition-duration-emphasized: 300ms;
+    --ease-enter: cubic-bezier(0.2, 0, 0, 1);
+    --ease-exit: cubic-bezier(0.4, 0, 1, 1);
+}
+
+@theme inline {
+    --font-heading: var(--font-sans);
+    --font-sans: 'Inter Variable', sans-serif;
+    --color-sidebar-ring: var(--sidebar-ring);
+    --color-sidebar-border: var(--sidebar-border);
+    --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+    --color-sidebar-accent: var(--sidebar-accent);
+    --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+    --color-sidebar-primary: var(--sidebar-primary);
+    --color-sidebar-foreground: var(--sidebar-foreground);
+    --color-sidebar: var(--sidebar);
+    --color-chart-5: var(--chart-5);
+    --color-chart-4: var(--chart-4);
+    --color-chart-3: var(--chart-3);
+    --color-chart-2: var(--chart-2);
+    --color-chart-1: var(--chart-1);
+    --color-ring: var(--ring);
+    --color-input: var(--input);
+    --color-border: var(--border);
+    --color-destructive: var(--destructive);
+    --color-success: var(--success);
+    --color-accent-foreground: var(--accent-foreground);
+    --color-accent: var(--accent);
+    --color-muted-foreground: var(--muted-foreground);
+    --color-muted: var(--muted);
+    --color-secondary-foreground: var(--secondary-foreground);
+    --color-secondary: var(--secondary);
+    --color-primary-foreground: var(--primary-foreground);
+    --color-primary: var(--primary);
+    --color-popover-foreground: var(--popover-foreground);
+    --color-popover: var(--popover);
+    --color-card-foreground: var(--card-foreground);
+    --color-card: var(--card);
+    --color-foreground: var(--foreground);
+    --color-background: var(--background);
+    --radius-sm: calc(var(--radius) * 0.6);
+    --radius-md: calc(var(--radius) * 0.8);
+    --radius-lg: var(--radius);
+    --radius-xl: calc(var(--radius) * 1.4);
+    --radius-2xl: calc(var(--radius) * 1.8);
+    --radius-3xl: calc(var(--radius) * 2.2);
+    --radius-4xl: calc(var(--radius) * 2.6);
+}
+
+:root {
+    --background: oklch(1 0 0);
+    --foreground: oklch(0.145 0 0);
+    --card: oklch(1 0 0);
+    --card-foreground: oklch(0.145 0 0);
+    --popover: oklch(1 0 0);
+    --popover-foreground: oklch(0.145 0 0);
+    --primary: oklch(0.205 0 0);
+    --primary-foreground: oklch(0.985 0 0);
+    --secondary: oklch(0.97 0 0);
+    --secondary-foreground: oklch(0.205 0 0);
+    --muted: oklch(0.97 0 0);
+    --muted-foreground: oklch(0.556 0 0);
+    --accent: oklch(0.97 0 0);
+    --accent-foreground: oklch(0.205 0 0);
+    --destructive: oklch(0.577 0.245 27.325);
+    --success: oklch(0.627 0.194 149.214);
+    --border: oklch(0.922 0 0);
+    --input: oklch(0.922 0 0);
+    --ring: oklch(0.708 0 0);
+    --chart-1: oklch(0.87 0 0);
+    --chart-2: oklch(0.556 0 0);
+    --chart-3: oklch(0.439 0 0);
+    --chart-4: oklch(0.371 0 0);
+    --chart-5: oklch(0.269 0 0);
+    --radius: 0.625rem;
+    --sidebar: oklch(0.985 0 0);
+    --sidebar-foreground: oklch(0.145 0 0);
+    --sidebar-primary: oklch(0.205 0 0);
+    --sidebar-primary-foreground: oklch(0.985 0 0);
+    --sidebar-accent: oklch(0.97 0 0);
+    --sidebar-accent-foreground: oklch(0.205 0 0);
+    --sidebar-border: oklch(0.922 0 0);
+    --sidebar-ring: oklch(0.708 0 0);
+}
+
+.dark {
+    --background: oklch(0.145 0 0);
+    --foreground: oklch(0.985 0 0);
+    --card: oklch(0.205 0 0);
+    --card-foreground: oklch(0.985 0 0);
+    --popover: oklch(0.205 0 0);
+    --popover-foreground: oklch(0.985 0 0);
+    --primary: oklch(0.922 0 0);
+    --primary-foreground: oklch(0.205 0 0);
+    --secondary: oklch(0.269 0 0);
+    --secondary-foreground: oklch(0.985 0 0);
+    --muted: oklch(0.269 0 0);
+    --muted-foreground: oklch(0.708 0 0);
+    --accent: oklch(0.269 0 0);
+    --accent-foreground: oklch(0.985 0 0);
+    --destructive: oklch(0.704 0.191 22.216);
+    --success: oklch(0.723 0.219 149.579);
+    --border: oklch(1 0 0 / 10%);
+    --input: oklch(1 0 0 / 15%);
+    --ring: oklch(0.556 0 0);
+    --chart-1: oklch(0.87 0 0);
+    --chart-2: oklch(0.556 0 0);
+    --chart-3: oklch(0.439 0 0);
+    --chart-4: oklch(0.371 0 0);
+    --chart-5: oklch(0.269 0 0);
+    --sidebar: oklch(0.205 0 0);
+    --sidebar-foreground: oklch(0.985 0 0);
+    --sidebar-primary: oklch(0.488 0.243 264.376);
+    --sidebar-primary-foreground: oklch(0.985 0 0);
+    --sidebar-accent: oklch(0.269 0 0);
+    --sidebar-accent-foreground: oklch(0.985 0 0);
+    --sidebar-border: oklch(1 0 0 / 10%);
+    --sidebar-ring: oklch(0.556 0 0);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50 scrollbar-thumb-border scrollbar-track-transparent;
+    }
+  body {
+    @apply bg-background text-foreground;
+    }
+  html {
+    @apply font-sans;
+    }
+}
+@layer utilities {
+  .app-blur {
+    @apply bg-background/80 backdrop-blur-[20px] backdrop-saturate-180;
+  }
+}
+
+/*
+ * 相册图片放大 / 收回（features/media/use-photo-viewer.tsx）：浏览器负责位置与尺寸的过渡（FLIP），
+ * 这里补上两件事：两端宽高比不同时按 cover 裁切，不拉伸；圆角在缩略图的圆角与全屏的直角之间过渡。
+ * --photo-radius 与 data-photo-transition 由 use-photo-viewer.tsx 在过渡期间写在根元素上
+ */
+::view-transition-group(photo),
+:root[data-photo-transition]::view-transition-group(root) {
+    animation-duration: var(--transition-duration-emphasized);
+    animation-timing-function: var(--ease-enter);
+}
+::view-transition-image-pair(photo) {
+    overflow: clip;
+}
+::view-transition-old(photo),
+::view-transition-new(photo) {
+    height: 100%;
+    object-fit: cover;
+}
+:root[data-photo-transition='open']::view-transition-image-pair(photo) {
+    animation: photo-radius-open var(--transition-duration-emphasized) var(--ease-enter) both;
+}
+:root[data-photo-transition='close']::view-transition-image-pair(photo) {
+    animation: photo-radius-close var(--transition-duration-emphasized) var(--ease-enter) both;
+}
+@keyframes photo-radius-open {
+    from {
+        border-radius: var(--photo-radius, 0);
+    }
+    to {
+        border-radius: 0;
+    }
+}
+@keyframes photo-radius-close {
+    from {
+        border-radius: 0;
+    }
+    to {
+        border-radius: var(--photo-radius, 0);
+    }
+}
+
+/*
+ * 换页（app/page-transition.ts 按路由层级标出 forward / back / same）：只有右侧的页面参与，侧栏不动。
+ * 更深一层从右侧推入，返回反向；同层（会话之间）快速淡入。手机上整页推入，宽屏上页面太宽，只平移一小段并淡入。
+ * 偏好减少动效时一律只淡入
+ */
+:root:active-view-transition-type(forward, back, same) {
+    &::view-transition-group(page) {
+        animation-duration: var(--transition-duration-emphasized);
+        animation-timing-function: var(--ease-enter);
+    }
+    &::view-transition-image-pair(page) {
+        overflow: clip;
+    }
+    &::view-transition-old(page),
+    &::view-transition-new(page) {
+        animation-duration: var(--transition-duration-emphasized);
+        animation-timing-function: var(--ease-enter);
+        animation-fill-mode: both;
+    }
+}
+:root:active-view-transition-type(same) {
+    &::view-transition-old(page),
+    &::view-transition-new(page) {
+        animation-duration: var(--transition-duration-fast);
+    }
+}
+@media (prefers-reduced-motion: no-preference) {
+    :root:active-view-transition-type(forward, back) {
+        &::view-transition-old(page),
+        &::view-transition-new(page) {
+            mix-blend-mode: normal;
+        }
+    }
+    :root:active-view-transition-type(forward) {
+        &::view-transition-old(page) {
+            animation-name: page-out-to-start;
+        }
+        &::view-transition-new(page) {
+            animation-name: page-in-from-end;
+        }
+    }
+    /* 返回时离开的页面盖在上面滑走 */
+    :root:active-view-transition-type(back) {
+        &::view-transition-old(page) {
+            z-index: 1;
+            animation-name: page-out-to-end;
+        }
+        &::view-transition-new(page) {
+            animation-name: page-in-from-start;
+        }
+    }
+}
+@keyframes page-in-from-end {
+    from {
+        translate: var(--page-shift-in) 0;
+        opacity: var(--page-fade);
+    }
+}
+@keyframes page-out-to-end {
+    to {
+        translate: var(--page-shift-in) 0;
+        opacity: var(--page-fade);
+    }
+}
+@keyframes page-out-to-start {
+    to {
+        translate: calc(var(--page-shift-out) * -1) 0;
+        opacity: var(--page-fade);
+    }
+}
+@keyframes page-in-from-start {
+    from {
+        translate: calc(var(--page-shift-out) * -1) 0;
+        opacity: var(--page-fade);
+    }
+}
+/* 推入的距离：进来的页面走完整宽度、下面的页面只让开一段；宽屏只平移一小段并配合淡入 */
+:root {
+    --page-shift-in: 100%;
+    --page-shift-out: 25%;
+    --page-fade: 1;
+}
+@media (min-width: 768px) {
+    :root {
+        --page-shift-in: 2rem;
+        --page-shift-out: 2rem;
+        --page-fade: 0;
+    }
+}
+
+/*
+ * 通话界面与头部的通话条互变（features/calls/morph.ts）：两端宽高比相差很大，按 cover 裁切，不拉伸
+ */
+::view-transition-group(call),
+:root[data-call-transition]::view-transition-group(root) {
+    animation-duration: var(--transition-duration-emphasized);
+    animation-timing-function: var(--ease-enter);
+}
+::view-transition-image-pair(call) {
+    overflow: clip;
+}
+::view-transition-old(call),
+::view-transition-new(call) {
+    height: 100%;
+    object-fit: cover;
+    animation-duration: var(--transition-duration-emphasized);
+}

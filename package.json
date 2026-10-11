@@ -1,0 +1,19 @@
+{
+  "name": "web-chat",
+  "version": "1.0.0",
+  "type": "module",
+  "private": true,
+  "workspaces": [
+    "web",
+    "server",
+    "shared"
+  ],
+  "devDependencies": {
+    "@types/bun": "latest"
+  },
+  "scripts": {
+    "dev": "bun run --cwd web dev",
+    "test": "bun run --cwd server test && bun run --cwd web test",
+    "deploy": "bun run --cwd web deploy"
+  }
+}
