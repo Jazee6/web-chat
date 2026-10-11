@@ -4,7 +4,7 @@ BETTER_AUTH_URL=http://localhost:5173
 BETTER_AUTH_SECRET=至少 32 字节的随机值，例如 `openssl rand -base64 32`
 # IdP 的 discovery 地址与 client_id 已在 wrangler.jsonc 中，这里只填密钥
 OAUTH_CLIENT_SECRET=
-# R2 → Manage API tokens 创建的 S3 令牌（Object Read & Write，限定桶 web-chat-media）
+# R2 → Manage API tokens 创建的 S3 令牌（Object Read & Write，限定桶 web-chat）
 R2_ACCESS_KEY_ID=
 R2_SECRET_ACCESS_KEY=
 # 开发环境上传的对象放在 dev/ 下，由桶的生命周期规则 30 天后删除

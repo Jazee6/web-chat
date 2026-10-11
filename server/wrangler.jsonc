@@ -26,13 +26,13 @@
       "binding": "DIRECTORY",
       "database_name": "web-chat-directory",
       // 部署前用 `wrangler d1 create web-chat-directory` 生成后替换
-      "database_id": "00000000-0000-0000-0000-000000000000",
+      "database_id": "d084a21d-efed-4784-b69f-cbecf8537ea9",
       "migrations_dir": "migrations"
     }
   ],
   // 媒体桶：Worker 用它删除对象；上传走 S3 API 的预签名 PUT，读取走自定义域名（见 docs/architecture/05-media.md）。
   // 本地开发时这个绑定是模拟的，删除只作用于本地；预签名上传则直达真实的桶
-  "r2_buckets": [{ "binding": "MEDIA", "bucket_name": "web-chat-media" }],
+  "r2_buckets": [{ "binding": "MEDIA", "bucket_name": "web-chat" }],
   "vars": {
     "BETTER_AUTH_URL": "https://chat.jaze.top",
     // 开发与生产共用同一个 IdP client，两个回调地址都要在 IdP 登记
@@ -40,7 +40,7 @@
     "OAUTH_CLIENT_ID": "sHQuhIyOrRjGkPAsRaKNPMKOcLxIxQzZ",
     // 预签名 PUT 的 S3 端点：https://{R2_ACCOUNT_ID}.r2.cloudflarestorage.com/{R2_BUCKET}
     "R2_ACCOUNT_ID": "02742d0dc0f623b24977b1e8d7333bea",
-    "R2_BUCKET": "web-chat-media",
+    "R2_BUCKET": "web-chat",
     // 对象键前缀：开发与生产共用一个桶，开发环境在 .dev.vars 中设为 dev/（30 天后自动删除）
     "MEDIA_KEY_PREFIX": ""
   },

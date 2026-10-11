@@ -70,7 +70,7 @@ bunx wrangler d1 migrations apply web-chat-directory --remote
 
 ### 4. R2
 
-创建一个桶（默认 `web-chat-media`，由 `wrangler.jsonc` 的 `R2_BUCKET` 与 `r2_buckets` 指定），然后在桶的设置里：
+创建一个桶（默认 `web-chat`，由 `wrangler.jsonc` 的 `R2_BUCKET` 与 `r2_buckets` 指定），然后在桶的设置里：
 
 - **自定义域名**：绑定一个（例如 `r2.<应用域名>`），并填进上面的 `MEDIA_ORIGIN`。媒体凭不可猜测的地址公开读取。
 - **CORS**：允许 `https://<应用域名>`（开发时再加 `http://localhost:5173`）的 `GET` 与 `PUT`，请求头 `content-type`、`content-disposition`、`cache-control`。

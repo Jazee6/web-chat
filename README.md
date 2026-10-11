@@ -70,7 +70,7 @@ Register a client with your provider:
 
 ### 4. R2
 
-Create a bucket (`web-chat-media` by default, set by `R2_BUCKET` and `r2_buckets` in `wrangler.jsonc`), then in its settings:
+Create a bucket (`web-chat` by default, set by `R2_BUCKET` and `r2_buckets` in `wrangler.jsonc`), then in its settings:
 
 - **Custom domain**: connect one (for example `r2.<app domain>`) and make it the `MEDIA_ORIGIN` above. Media is publicly readable by unguessable URLs.
 - **CORS**: allow `GET` and `PUT` from `https://<app domain>` (and `http://localhost:5173` for development), with the headers `content-type`, `content-disposition` and `cache-control`.

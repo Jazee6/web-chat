@@ -62,7 +62,7 @@
 | 3 | 私聊是否允许陌生人直接发起？ | **已定**（2026-10-01 修订）：服务端不限制，陌生人发来的私聊可以直接回复；但界面上新建私聊、拉人进群只能从联系人中选，按邮箱查找改为"添加联系人"。不想被打扰靠拉黑；"仅联系人"隐私选项以后再加 |
 | 4 | 是否需要消息编辑历史？ | 不需要，与 Telegram 一致 |
 | 5 | 帧编码是否换成二进制（CBOR / MessagePack）？ | 先用 JSON；如果 Workers 支持 permessage-deflate 就启用压缩（待验证） |
-| 6 | 媒体子域名需要一个托管在 Cloudflare 的域名 | **已定**（2026-09-29）：`r2.chat.jaze.top`，已绑定到桶 `web-chat-media`；应用域名为 `chat.jaze.top` |
+| 6 | 媒体子域名需要一个托管在 Cloudflare 的域名 | **已定**（2026-09-29）：`r2.chat.jaze.top`，已绑定到桶 `web-chat`；应用域名为 `chat.jaze.top` |
 | 7 | 离线时被移除的设备，超过 cookie 缓存时长后重连，是否也显示"本设备已被移除"？ | **已定**（2026-09-29）：接受现状，以 IdP 为准。本地数据照样清空，IdP 仍登录时作为新设备重新登录；止损靠 IdP。备选方案（D1 为被移除的 session 留墓碑，Worker 在 `getSession` 为空时查一次）暂不做 |
 | 8 | 链接预览的抓取（HTMLRewriter 解析最多 256 KB 的 `<head>`）在 Free 套餐 10ms CPU 下是否超限？本地抓不到 github.com 等网站是否只是本地网络的问题？ | **待实测**：部署后用控制台看 `/api/link-preview` 的 CPU 时间，并抓几个大站验证；超限时缩小读取上限 |
 | 9 | 语音消息在手机上的表现：切到后台、锁屏、来电时能否保留已录部分；Safari 能否播放 Chrome / Firefox 录的 WebM；iOS 连播是否被自动播放策略拦下 | **待真机实测**（iPhone Safari 与一台安卓手机）：录一段后切走再回来，看录音条是否停在"Recording stopped"并能发出；收到 WebM 语音时在 Safari 里播放并连播两条 |
