@@ -173,9 +173,10 @@ flowchart TB
 
 ## 开发与构建
 
-- `@cloudflare/vite-plugin` 以 `server/wrangler.jsonc` 为配置，在 workerd 中运行 server：`bun run dev` 一个进程同源提供前端与 API，端口固定为 5173（`BETTER_AUTH_URL`、`/ws` 的 Origin 校验与 IdP 登记的地址都依赖它）。
-- 本地 D1 状态在 `web/.wrangler/state`，首次运行前执行 `bun run --cwd web db:migrate`。
-- 部署：`bun run deploy`（web 构建产物包含静态资源与 Worker，再由 `wrangler deploy` 发布）。首次部署与之后的发布步骤见 [README](../../README.zh.md#部署)。
+- `@cloudflare/vite-plugin` 以根目录的 `wrangler.jsonc` 为配置，在 workerd 中运行 server：`bun run dev` 一个进程同源提供前端与 API，端口固定为 5173（`BETTER_AUTH_URL`、`/ws` 的 Origin 校验与 IdP 登记的地址都依赖它）。`CLOUDFLARE_ENV` 选择环境：`bun run dev:production` 用 chat.jaze.top 的配置，`bun run dev` 用顶层模板。
+- 前端也要用的部署配置（`MEDIA_ORIGIN`、`VAPID_PUBLIC_KEY`）由 vite.config.ts 从选中环境的 vars 读出，以虚拟模块 `virtual:deploy` 提供给页面、Web Worker 与 Service Worker，经 `@/lib/deploy` 引用。改了要重新构建。
+- 本地 D1 状态在 `web/.wrangler/state`，首次运行前执行 `bun run --cwd web db:migrate`（用 `env.production` 时前面加 `CLOUDFLARE_ENV=production`）。
+- 部署：先执行 D1 迁移，再构建（产物包含静态资源与 Worker，在 `web/dist`），最后由 `wrangler deploy -c dist/server/wrangler.json` 发布。chat.jaze.top 用 `bun run deploy:production`，`bun run deploy` 发布的是顶层模板。首次部署与之后的发布步骤见 [README](../../README.zh.md#部署)。
 - 测试：同步状态机中与 I/O 无关的判定（缺口检测、发件箱重发计划、重连退避）是纯函数，用 vitest 单测；其余靠浏览器冒烟。
 
 ## 代码组织

@@ -1,0 +1,19 @@
+# 机密清单。Deploy to Cloudflare 按钮按这里未注释的条目要求填写；本地开发复制为 .dev.vars 并填写（不提交）
+# 按钮部署时还没登记 IdP 客户端、没建 R2 令牌的话先填占位，之后用 `wrangler secret put` 替换
+BETTER_AUTH_SECRET=至少 32 字节的随机值，例如 `openssl rand -base64 32`
+OAUTH_CLIENT_SECRET=
+# R2 → Manage API tokens 创建的 S3 令牌（Object Read & Write，限定媒体桶）
+R2_ACCESS_KEY_ID=
+R2_SECRET_ACCESS_KEY=
+
+# 可选：Web Push 的 VAPID 私钥（base64url，32 字节），与 wrangler.jsonc 的 VAPID_PUBLIC_KEY 成对
+# VAPID_PRIVATE_KEY=
+# 可选：通话的 Realtime TURN key 与群组通话的 Realtime SFU App
+# TURN_KEY_ID=
+# TURN_KEY_API_TOKEN=
+# SFU_KEY_ID=
+# SFU_KEY_API_TOKEN=
+
+# 本地开发（bun run dev 或 dev:production）再加上：覆盖为 vite 的地址；上传的对象放在 dev/ 下，由桶的生命周期规则 30 天后删除
+# BETTER_AUTH_URL=http://localhost:5173
+# MEDIA_KEY_PREFIX=dev/

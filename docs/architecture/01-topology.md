@@ -22,11 +22,11 @@
 
 ## 单 Worker 部署
 
-整个后端就是一个 Worker（`server/`），配置在 `server/wrangler.jsonc`：
+整个后端就是一个 Worker（`server/`），配置在仓库根目录的 `wrangler.jsonc`（Deploy to Cloudflare 按钮只认根目录）：
 
 - 绑定：`USER` / `CHAT` 两个 SQLite 后端的 Durable Object、D1 `DIRECTORY`（better-auth）、R2 `MEDIA`（媒体桶）。静态资源由 `web` 的 vite 构建产出，`/api/*` 与 `/ws` 先进 Worker，其余路径走 SPA。
-- 顶层就是生产配置：自定义域名 `chat.jaze.top`，关闭 `*.workers.dev` 与预览地址（其他 Origin 过不了 Origin 校验）。本地开发由 `server/.dev.vars` 覆盖 `vars`。
-- 机密通过 `wrangler secret` 注入：`BETTER_AUTH_SECRET`、`OAUTH_CLIENT_SECRET`、`VAPID_PRIVATE_KEY`、`R2_ACCESS_KEY_ID` / `R2_SECRET_ACCESS_KEY`（用于预签名），以及通话用的 `TURN_KEY_*` / `SFU_KEY_*`。本地开发时这些值都写在 `.dev.vars` 中（不提交）。环境变量的完整说明见 [06 § 环境变量](./06-auth-and-security.md#环境变量)，部署步骤见 [README](../../README.zh.md#部署)。
+- 顶层是给别人部署用的模板：Worker 名 `web-chat-app`，用 `*.workers.dev`，vars 留空，部署后再填。chat.jaze.top 的配置在 `env.production`：Worker 名 `web-chat`，自定义域名 `chat.jaze.top`，关闭 `*.workers.dev` 与预览地址（其他 Origin 过不了 Origin 校验）。见 [ADR-0014](../adr/0014-template-config-at-top-level.md)。本地开发由根目录的 `.dev.vars` 覆盖 `vars`。
+- 机密通过 `wrangler secret` 注入：`BETTER_AUTH_SECRET`、`OAUTH_CLIENT_SECRET`、`R2_ACCESS_KEY_ID` / `R2_SECRET_ACCESS_KEY`（用于预签名），以及可选的 `VAPID_PRIVATE_KEY`（推送）与 `TURN_KEY_*` / `SFU_KEY_*`（通话）。清单在 `.dev.vars.example`。必填的 vars 与机密缺了任何一项时，`/api/*` 与 `/ws` 都返回 500 并列出缺了哪些。本地开发时这些值都写在 `.dev.vars` 中（不提交）。环境变量的完整说明见 [06 § 环境变量](./06-auth-and-security.md#环境变量)，部署步骤见 [README](../../README.zh.md#部署)。
 
 ## 请求路由
 

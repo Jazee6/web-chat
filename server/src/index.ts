@@ -10,6 +10,27 @@ export { UserDO } from './user-do'
 
 const app = new Hono<{ Bindings: Env }>()
 
+/** 必填的 vars 与机密（README § 环境变量）；VAPID、TURN、SFU 可选 */
+const REQUIRED = [
+  'BETTER_AUTH_URL',
+  'OAUTH_DISCOVERY_URL',
+  'OAUTH_CLIENT_ID',
+  'R2_ACCOUNT_ID',
+  'R2_BUCKET',
+  'MEDIA_ORIGIN',
+  'BETTER_AUTH_SECRET',
+  'OAUTH_CLIENT_SECRET',
+  'R2_ACCESS_KEY_ID',
+  'R2_SECRET_ACCESS_KEY',
+] as const
+
+// 按钮部署之后、补完配置之前：直接说明缺了哪些，而不是在用到它们的地方各自出错
+app.use(async (c, next) => {
+  const missing = REQUIRED.filter((name) => !c.env[name])
+  if (missing.length > 0) return c.text(`Missing configuration: ${missing.join(', ')}`, 500)
+  await next()
+})
+
 app.on(['GET', 'POST'], '/api/auth/*', (c) => getAuth().handler(c.req.raw))
 
 app.route('/api/media', media)

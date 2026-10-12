@@ -13,7 +13,9 @@
   },
   "scripts": {
     "dev": "bun run --cwd web dev",
+    "dev:production": "CLOUDFLARE_ENV=production bun run --cwd web dev",
     "test": "bun run --cwd server test && bun run --cwd web test",
-    "deploy": "bun run --cwd web deploy"
+    "deploy": "bun run --cwd web deploy",
+    "deploy:production": "CLOUDFLARE_ENV=production bun run --cwd web deploy"
   }
 }

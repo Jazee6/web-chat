@@ -10,11 +10,11 @@
 
 ### 环境变量
 
-只保留因部署环境而不同、且代码无法推导的 5 个变量。非机密的值放在 `wrangler.jsonc` 的 `vars` 中（生产值），机密值用 `wrangler secret put` 注入；本地开发时机密与要覆盖的值写在 `.dev.vars` 里（不提交）。开发与生产共用同一个 IdP 客户端。
+身份相关的是下面 5 个变量（R2 与推送的变量见 [README § 环境变量](../../README.zh.md#环境变量列表)）。非机密的值放在 `wrangler.jsonc` 的 `vars` 中（顶层是模板，chat.jaze.top 的值在 `env.production`），机密值用 `wrangler secret put` 注入；本地开发时机密与要覆盖的值写在 `.dev.vars` 里（不提交）。开发与生产共用同一个 IdP 客户端。
 
 | 变量 | 类型 | 说明 |
 | --- | --- | --- |
-| `BETTER_AUTH_URL` | var | 本应用对外的基础 URL，用于生成回调地址和 IdP 登出后的跳回地址。`wrangler.jsonc` 中是生产地址 `https://chat.jaze.top`，`.dev.vars` 覆盖为本地开发地址 `http://localhost:5173`（vite dev 的固定端口） |
+| `BETTER_AUTH_URL` | var | 本应用对外的基础 URL，用于生成回调地址和 IdP 登出后的跳回地址。`env.production` 中是生产地址 `https://chat.jaze.top`，`.dev.vars` 覆盖为本地开发地址 `http://localhost:5173`（vite dev 的固定端口） |
 | `BETTER_AUTH_SECRET` | **secret** | better-auth 签名 / 加密 cookie 的密钥（32 字节以上随机值） |
 | `OAUTH_DISCOVERY_URL` | var | IdP 的 OIDC 发现文档地址（`/.well-known/openid-configuration`） |
 | `OAUTH_CLIENT_ID` | var | 在 IdP 注册的客户端 ID |

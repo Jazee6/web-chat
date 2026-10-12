@@ -4,7 +4,7 @@ import { defineConfig } from 'vitest/config'
 export default defineConfig({
   plugins: [
     cloudflareTest(async () => ({
-      wrangler: { configPath: './wrangler.jsonc' },
+      wrangler: { configPath: '../wrangler.jsonc' },
       miniflare: {
         // vitest-pool-workers 自带的 workerd 最高只支持到这个日期
         compatibilityDate: '2026-08-22',
@@ -18,6 +18,8 @@ export default defineConfig({
           BETTER_AUTH_SECRET: 'test-secret-test-secret-test-secret',
           OAUTH_CLIENT_SECRET: 'test',
           // 测试不连真实的 R2：只校验签发的地址，删除作用于本地模拟的桶
+          R2_ACCOUNT_ID: 'test-account',
+          MEDIA_ORIGIN: 'https://media.invalid',
           R2_ACCESS_KEY_ID: 'test-access-key',
           R2_SECRET_ACCESS_KEY: 'test-secret-key',
           MEDIA_KEY_PREFIX: 'test/',

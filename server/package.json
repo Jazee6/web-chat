@@ -2,9 +2,7 @@
   "name": "server",
   "type": "module",
   "scripts": {
-    "dev": "wrangler dev",
-    "deploy": "bun run --cwd ../web deploy",
-    "cf-typegen": "wrangler types --strict-vars=false",
+    "cf-typegen": "cd .. && wrangler types --env-file .dev.vars.example --strict-vars=false server/worker-configuration.d.ts",
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
     "gen-auth-schema": "bun scripts/gen-auth-schema.ts"

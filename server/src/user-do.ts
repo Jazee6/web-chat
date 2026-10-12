@@ -17,7 +17,6 @@ import {
   RING_TIMEOUT_MS,
   KEY_PACKAGES_PER_DEVICE,
   ReqFrame,
-  VAPID_PUBLIC_KEY,
   chatPair,
   inviteCode,
   isGroupChatId,
@@ -69,7 +68,7 @@ import { STUN_ONLY, TURN_TTL_S, fetchIceServers } from './calls'
 import type { ChatSnapshot, Content, FanoutEvent, Wrote } from './chat-do'
 import { STICKER_NAMES, copyMedia, copyObject, copyPreview, mediaKeys, objectExists, ownsKey, previewKeys } from './media'
 import { displayNames, pushDevices, pushTo, ringRecord, unreadTotal, type SendPush } from './push/deliver'
-import { PUSH_SUBJECT, isPushService, mentionedUsers, pickPush, renderNotification } from './push/notify'
+import { isPushService, mentionedUsers, pickPush, renderNotification } from './push/notify'
 import { Vapid, pushTopic, sendWebPush } from './push/webpush'
 import { err, ok, pool, type Result } from './result'
 import { Sql, migrate } from './sql'
@@ -267,7 +266,11 @@ export class UserDO extends DurableObject<Env> {
   private ice: { servers: IceServer[]; expires: number } | null = null
   /** 发一条推送，返回推送服务的 HTTP 状态；测试替换为假的实现 */
   sendPush: SendPush = async (subscription, payload, options) => {
-    this.vapid ??= new Vapid(this.env.VAPID_PRIVATE_KEY, VAPID_PUBLIC_KEY, PUSH_SUBJECT)
+    const { VAPID_PRIVATE_KEY, VAPID_PUBLIC_KEY, BETTER_AUTH_URL } = this.env
+    // 没有配置推送时浏览器不会订阅；撤掉配置之前留下的订阅当作失效清除
+    if (!VAPID_PRIVATE_KEY || !VAPID_PUBLIC_KEY) return 410
+    // VAPID 的 sub 用应用地址：推送服务出问题时据此联系应用方
+    this.vapid ??= new Vapid(VAPID_PRIVATE_KEY, VAPID_PUBLIC_KEY, BETTER_AUTH_URL)
     return (await sendWebPush(subscription, JSON.stringify(payload), options, this.vapid)).status
   }
   /** 服务端复制一个媒体对象（发送与转发时），源对象不存在时返回 false；测试替换为本地 R2 上的复制 */

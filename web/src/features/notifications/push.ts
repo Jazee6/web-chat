@@ -1,7 +1,8 @@
 // 推送订阅：属于设备，由用户在本机开启或关闭。标签页取得订阅后交给同步 Worker，由它在每次连接后上报。
 // 见 docs/architecture/04-realtime-and-fanout.md § Web Push
 import { useSyncExternalStore } from 'react'
-import { VAPID_PUBLIC_KEY, type PushSubscriptionKeys } from 'shared/protocol'
+import type { PushSubscriptionKeys } from 'shared/protocol'
+import { VAPID_PUBLIC_KEY } from '@/lib/deploy'
 import { setPushSubscription } from '@/sync/client'
 
 /** 用户在本机关闭了推送；权限仍是 granted，但不订阅 */
@@ -10,10 +11,10 @@ const OFF_KEY = 'web-chat:push-off'
 const PROMPTED_KEY = 'web-chat:push-prompted'
 
 /**
- * 本机的推送状态。unsupported：浏览器不支持；install：iOS 需要先添加到主屏幕；
- * denied：权限被拒绝，只能在浏览器设置里恢复；off / on：本机关闭 / 开启
+ * 本机的推送状态。unavailable：这次部署没有配置推送（没有 VAPID 公钥）；unsupported：浏览器不支持；
+ * install：iOS 需要先添加到主屏幕；denied：权限被拒绝，只能在浏览器设置里恢复；off / on：本机关闭 / 开启
  */
-export type PushState = 'unsupported' | 'install' | 'denied' | 'off' | 'on'
+export type PushState = 'unavailable' | 'unsupported' | 'install' | 'denied' | 'off' | 'on'
 
 const listeners = new Set<() => void>()
 
@@ -46,6 +47,7 @@ function needsInstall() {
 }
 
 function pushState(): PushState {
+  if (!VAPID_PUBLIC_KEY) return 'unavailable'
   if (!('PushManager' in window) || !('Notification' in window)) return needsInstall() ? 'install' : 'unsupported'
   if (Notification.permission === 'denied') return 'denied'
   return Notification.permission === 'granted' && !readFlag(OFF_KEY) ? 'on' : 'off'
@@ -85,7 +87,7 @@ async function newSubscription(registration: ServiceWorkerRegistration) {
 
 /** 登录后启动时调用一次：同步本机订阅；用户在浏览器设置里改了通知权限时再同步一次 */
 export function startPush() {
-  if (!('PushManager' in window)) return
+  if (!VAPID_PUBLIC_KEY || !('PushManager' in window)) return
   void syncPushInBackground()
   navigator.permissions
     .query({ name: 'notifications' })

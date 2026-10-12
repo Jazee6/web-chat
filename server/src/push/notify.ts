@@ -4,9 +4,6 @@ import { isMissedCall, summarizeMedia, type ChatKind, type Message } from 'share
 import { describeAction, describeMedia, describeRecall } from 'shared/text'
 import type { FanoutEvent } from '../chat-do'
 
-/** VAPID 的 sub：推送服务出问题时据此联系应用方 */
-export const PUSH_SUBJECT = 'https://chat.jaze.top'
-
 /** 推送服务的域名（含子域名）。订阅的 endpoint 只能指向这些，免得被拿来让 UserDO 向任意地址发请求 */
 const PUSH_HOSTS = ['fcm.googleapis.com', 'updates.push.services.mozilla.com', 'push.apple.com', 'notify.windows.com']
 

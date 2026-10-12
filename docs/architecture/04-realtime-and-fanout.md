@@ -86,7 +86,7 @@ type WsAttachment = {
 术语见 CONTEXT.md 的「推送通知」「推送订阅」「通知预览」「角标」。
 
 - **自己实现，不引第三方库**（`server/src/push/webpush.ts`）：VAPID JWT（ES256）与 RFC 8291 `aes128gcm` 载荷加密都用 WebCrypto 完成，加密结果用 RFC 8291 § 5 的示例逐字节校验。每个推送服务（按 origin）的 JWT 缓存在 `UserDO` 内存里，12 小时有效。DO 每次请求有 30 秒 CPU，加密与签名的开销可以忽略。
-- **密钥**：公钥是 `shared/protocol` 的常量 `VAPID_PUBLIC_KEY`，浏览器订阅时直接使用；私钥是机密 `VAPID_PRIVATE_KEY`（base64url 的 32 字节 d），开发与生产共用一对。`sub` 固定为 `https://chat.jaze.top`，不暴露个人邮箱。
+- **密钥**：公钥是 var `VAPID_PUBLIC_KEY`，构建时注入前端（`@/lib/deploy`），浏览器订阅时直接使用；私钥是机密 `VAPID_PRIVATE_KEY`（base64url 的 32 字节 d），开发与生产共用一对。`sub` 用 `BETTER_AUTH_URL`，不暴露个人邮箱。推送是可选的：没有公钥时前端不订阅、不提示开启通知（设置里显示服务器没有配置推送），服务端把残留的订阅当作失效清除。
 - **订阅**：属于设备，存在 `UserDO.devices.push`。客户端每次连接都用 `push.set` 上报（`null` 表示不接收），订阅没变时不写库。endpoint 只接受已知推送服务的域名（FCM、Mozilla、Apple、WNS），免得被拿来让 `UserDO` 向任意地址发请求。设备被移除时一并清除。
 - **何时推送**：扇出落到 `UserDO` 后，只要有一台设备在前台（沿用在线判定，心跳过期的不算）就不推，否则推给所有订阅了的设备。推送不拖慢扇出：`onChatEvents` 先返回，推送放在 `waitUntil` 里。静音的对话只推提及我（或回复我）的新消息，撤回、编辑的静默替换也不推。
   - 推送的新消息：普通消息、媒体消息，以及把自己拉进群（`chat_create`、`members_add`）、移出群（`member_remove`）的服务消息。

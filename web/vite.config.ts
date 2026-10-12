@@ -4,8 +4,28 @@ import { cloudflare } from '@cloudflare/vite-plugin'
 import { createHash } from 'node:crypto'
 import { defineConfig, type Plugin } from 'vite'
 import tailwindcss from '@tailwindcss/vite'
+import { unstable_readConfig } from 'wrangler'
 
 const SW_ENTRY = 'src/sw/index.ts'
+const WRANGLER_CONFIG = '../wrangler.jsonc'
+
+/**
+ * 前端也要用的部署配置：虚拟模块 virtual:deploy，取 wrangler.jsonc 中选中环境（CLOUDFLARE_ENV，与 vite 插件一致）的 vars。
+ * 只认 wrangler.jsonc，不读 .dev.vars 与控制台里的 vars。不用 define：开发时 define 只注入页面，Service Worker 拿不到
+ */
+function deployConfig(): Plugin {
+  const id = 'virtual:deploy'
+  return {
+    name: 'deploy-config',
+    resolveId: (source) => (source === id ? `\0${id}` : undefined),
+    load(resolved) {
+      if (resolved !== `\0${id}`) return
+      const { vars } = unstable_readConfig({ config: WRANGLER_CONFIG, env: process.env.CLOUDFLARE_ENV }, { hideWarnings: true })
+      const read = (name: string) => JSON.stringify(typeof vars[name] === 'string' ? vars[name] : '')
+      return `export const MEDIA_ORIGIN = ${read('MEDIA_ORIGIN')}\nexport const VAPID_PUBLIC_KEY = ${read('VAPID_PUBLIC_KEY')}\n`
+    },
+  }
+}
 
 /**
  * Service Worker 固定发布为 /sw.js（地址不能带哈希），构建时在开头定义 __SW_BUILD__：外壳文件清单与版本号。
@@ -44,11 +64,12 @@ function swBuild(): Plugin {
 export default defineConfig({
   plugins: [
     swBuild(),
+    deployConfig(),
     react(),
     babel({ presets: [reactCompilerPreset()] }),
     tailwindcss(),
     // 在 workerd 中运行 server，前后端同源
-    cloudflare({ configPath: '../server/wrangler.jsonc' }),
+    cloudflare({ configPath: WRANGLER_CONFIG, viteEnvironment: { name: 'server' } }),
   ],
   resolve: { tsconfigPaths: true },
   // 构建版本（src/lib/build.ts）：开发时每次启动开发服务器都算一次新的构建
@@ -57,7 +78,8 @@ export default defineConfig({
   server: { port: 5173, strictPort: true },
   // SQLite WASM 自带 wasm 与 worker 资源，不能被预打包
   optimizeDeps: { exclude: ['@sqlite.org/sqlite-wasm'] },
-  worker: { format: 'es' },
+  // Web Worker 单独打包，不经过上面的插件
+  worker: { format: 'es', plugins: () => [deployConfig()] },
   environments: {
     client: {
       build: {

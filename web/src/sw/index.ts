@@ -2,7 +2,7 @@
 // 构建产物固定为 /sw.js；开发时由 vite.config.ts 把 /sw.js 映射到本文件
 import type { PushPayload } from 'shared/protocol'
 import { matchMedia, putMedia } from '@/features/media/cache'
-import { MEDIA_ORIGIN } from '@/features/media/origin'
+import { MEDIA_ORIGIN } from '@/lib/deploy'
 import { isVideoUrl } from '@/features/media/video-url'
 import { isVoiceUrl } from '@/features/voice/voice-url'
 import { stashShare } from '@/features/share/stash'

@@ -86,6 +86,7 @@ flowchart LR
 | [0011](../adr/0011-bots-telegram-compatible-api.md) | （暂缓）Bot 是特殊的 UserDO，API 兼容 Telegram Bot API 的子集 |
 | [0012](../adr/0012-shared-sticker-objects.md) | 贴纸对象被所有消息共用，永不删除 |
 | [0013](../adr/0013-forward-only-migrations-after-1-0.md) | 1.0 起数据只做前向迁移，协议不兼容旧客户端，旧客户端强制重载 |
+| [0014](../adr/0014-template-config-at-top-level.md) | wrangler.jsonc 顶层是给别人部署的模板，chat.jaze.top 的配置在 `env.production`，前端的部署常量构建时从 vars 注入 |
 
 ## 现有技术栈（沿用）
 

@@ -17,6 +17,7 @@ const DEVICE_DESCRIPTIONS: Record<PushState, string> = {
   off: 'Show a notification for new messages when Chat isn’t open.',
   denied: 'Notifications are blocked. Allow them in your browser’s site settings.',
   install: 'Add Chat to your Home Screen to get notifications.',
+  unavailable: 'Notifications aren’t set up on this server.',
   unsupported: 'This browser doesn’t support notifications.',
 }
 

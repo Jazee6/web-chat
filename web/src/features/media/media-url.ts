@@ -1,5 +1,5 @@
 import { thumbHashToDataURL } from 'thumbhash'
-import { MEDIA_ORIGIN } from './origin'
+import { MEDIA_ORIGIN } from '@/lib/deploy'
 
 /** 对象键 → 公开地址（直接命中 CDN，不经过 Worker） */
 export function mediaUrl(key: string) {

@@ -8,8 +8,8 @@
     "test": "vitest run",
     "lint": "oxlint",
     "preview": "vite preview",
-    "db:migrate": "wrangler d1 migrations apply web-chat-directory --local -c ../server/wrangler.jsonc --persist-to .wrangler/state",
-    "deploy": "bun run build && wrangler deploy"
+    "db:migrate": "wrangler d1 migrations apply DIRECTORY --local -c ../wrangler.jsonc --persist-to .wrangler/state",
+    "deploy": "wrangler d1 migrations apply DIRECTORY --remote -c ../wrangler.jsonc && bun run build && wrangler deploy -c dist/server/wrangler.json"
   },
   "dependencies": {
     "@base-ui/react": "^1.8.0",

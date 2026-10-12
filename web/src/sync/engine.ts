@@ -32,7 +32,7 @@ import {
 } from 'shared/protocol'
 import { inviteCodeOf, linkOnly } from 'shared/text'
 import { LINK_WAIT_MS, resolveWebLink } from '@/features/link/resolve'
-import { MEDIA_ORIGIN } from '@/features/media/origin'
+import { MEDIA_ORIGIN } from '@/lib/deploy'
 import { deleteBlobs, saveBlobs } from './blobs'
 import type { OpError, Ops, OutgoingMessage, WorkerMessage } from './bridge'
 import { OfflineError, type Connection, type RpcResult } from './connection'

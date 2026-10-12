@@ -76,7 +76,7 @@
 
 | 事项 | 做法 | 作用 |
 | --- | --- | --- |
-| 首次部署 | 按 [README](../../README.zh.md#部署)：建 D1 并填 `database_id`、在 IdP 登记生产回调地址、发布、注入机密（含 `VAPID_PRIVATE_KEY`、`TURN_KEY_*`、`SFU_KEY_*`，值取本地 `server/.dev.vars`） | 缺 VAPID 私钥时推送全部失败；缺 TURN key 时只有 STUN，非联系人之间的通话失败；缺 SFU App 时群组通话不可用 |
+| 首次部署 | 按 [README](../../README.zh.md#部署)：建 D1 并填 `database_id`、在 IdP 登记生产回调地址、发布、注入机密（含 `VAPID_PRIVATE_KEY`、`TURN_KEY_*`、`SFU_KEY_*`，值取本地 `.dev.vars`） | 缺 VAPID 私钥时推送全部失败；缺 TURN key 时只有 STUN，非联系人之间的通话失败；缺 SFU App 时群组通话不可用 |
 | 媒体域名加 `X-Content-Type-Options: nosniff` | jaze.top → Rules → Response Header Transform Rule：条件 `(http.host eq "r2.chat.jaze.top")`，Set static `X-Content-Type-Options: nosniff`；加好后 `curl -sI` 任一对象确认 | 纵深防御：内容与声明类型不符的对象不会被浏览器当成别的类型执行。已有域名隔离与文件强制下载，不紧急。见 [05 § 分发](./05-media.md#分发) |
 
 ## 新依赖

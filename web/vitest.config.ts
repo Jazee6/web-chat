@@ -2,6 +2,14 @@
 import { defineConfig } from 'vitest/config'
 
 export default defineConfig({
+  // vite.config.ts 的 deployConfig 插件的替身：测试不依赖部署配置
+  plugins: [
+    {
+      name: 'deploy-config',
+      resolveId: (source) => (source === 'virtual:deploy' ? '\0virtual:deploy' : undefined),
+      load: (id) => (id === '\0virtual:deploy' ? "export const MEDIA_ORIGIN = 'https://media.invalid'\nexport const VAPID_PUBLIC_KEY = ''" : undefined),
+    },
+  ],
   resolve: { tsconfigPaths: true },
   define: { __BUILD__: '0' },
   test: { include: ['src/**/*.test.ts'] },

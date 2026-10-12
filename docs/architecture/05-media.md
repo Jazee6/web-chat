@@ -212,7 +212,7 @@ R2 里只有密文，见 [06 § 端到端加密](./06-auth-and-security.md#端�
 
 ## 分发
 
-- 桶 `web-chat` 绑定自定义域名 `r2.chat.jaze.top`，公开读取。请求直接命中 Cloudflare CDN，**不调用 Worker，不消耗 Worker 请求额度**，出站流量也免费。
+- 桶 `web-chat` 绑定自定义域名 `r2.chat.jaze.top`（var `MEDIA_ORIGIN`，构建时注入前端），公开读取。请求直接命中 Cloudflare CDN，**不调用 Worker，不消耗 Worker 请求额度**，出站流量也免费。
 - 对象上传时就带着 `Cache-Control: public, max-age=31536000, immutable`，因为对象写入后永不修改（改动即新键）。不需要额外的 Cache Rules。
 - **删除会让 CDN 缓存失效**（2026-09-29 从单个节点实测）：图片先被缓存（`cf-cache-status: HIT`），删除对象后同一节点立即返回 404（MISS）。其他节点未验证。撤回"让已泄露的地址失效"依赖这一点。
 - **CORS 与缓存**：CDN 把带 `Origin` 的请求与不带的分开缓存，但不带 `Origin` 的响应里没有 `Vary: Origin`。浏览器缓存因此会把 `<img>` 以 no-cors 方式取回的图（没有 `Access-Control-Allow-Origin`）交给之后的 `fetch`，查看器的下载就会失败（已实测）。所以媒体图片一律以 CORS 方式加载（`<img crossOrigin="anonymous">`），这也让以后 Service Worker 缓存的是普通响应而不是不透明响应（Chrome 把每条不透明响应按约 7MB 计入配额）。

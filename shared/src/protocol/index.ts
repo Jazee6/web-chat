@@ -132,9 +132,6 @@ export const MAX_SECRET_DEVICES = 40
 // ---------- 推送 ----------
 // 见 docs/architecture/04-realtime-and-fanout.md § Web Push
 
-/** VAPID 公钥（base64url 编码的未压缩 P-256 点），浏览器订阅时使用；私钥是服务端的机密 VAPID_PRIVATE_KEY */
-export const VAPID_PUBLIC_KEY = 'BKQwcINEBruDbVIkGrLbLhfvB50UJB5B4TIZAhYpirVUUOIhclD5KhcsXlXKIFchgn1wS1R5flE1k18t1lVxcJY'
-
 /**
  * 推送载荷：文案由 UserDO 渲染好，Service Worker 只负责显示。
  * 每个会话一条通知（tag 为 chat_id）；silent 表示撤回或编辑后静默替换，不再提醒。badge 为角标的未读总数
