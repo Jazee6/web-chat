@@ -74,6 +74,7 @@ import { mediaImgProps, mediaUrl, thumbhashUrl } from '@/features/media/media-ur
 import { useSealedUrls } from '@/features/secret/sealed-media'
 import { PendingMedia, SentMedia } from '@/features/media/message-media'
 import { addStickerFromImage, addStickerFromMessage } from '@/features/stickers/add'
+import { isJumboEmoji } from '@/lib/emoji'
 import { PendingVoice, VoiceMessage } from '@/features/voice/voice-message'
 import type { OutboxMedia, OutboxVoice } from '@/sync/store'
 import { inPip } from '@/features/pip/pip'
@@ -803,6 +804,9 @@ function ChatMessage({
   const isText = row.kind === 'text'
   // 纯链接消息带卡片时显示卡片而不是正文；卡片自己有底色，不再套气泡
   const card = isText && row.preview !== null && linkOnly(row.text ?? '') !== null
+  const entities = row.entities ? (JSON.parse(row.entities) as MessageEntity[]) : null
+  // 只有 1–3 个连续 emoji 的文本消息放大显示，不套气泡
+  const jumbo = isText && !card && !entities?.length && isJumboEmoji(row.text ?? '')
   // 相册与文件消息不套气泡；语音消息像文本一样套气泡
   const media = row.media ? (JSON.parse(row.media) as (Media | OutboxMedia)[]) : null
   const album = media?.[0]?.type === 'photo' || media?.[0]?.type === 'video'
@@ -818,7 +822,6 @@ function ChatMessage({
   // 只读对话里读得到的消息也可以转发出去；秘密聊天的不能（转发要让服务端读到内容）
   const canForward = seq !== null && (row.kind === 'text' || row.kind === 'media') && !secret
   const canRecall = mine && onCompose !== undefined && seq !== null && openedAt - row.date < RECALL_WINDOW_MS
-  const entities = row.entities ? (JSON.parse(row.entities) as MessageEntity[]) : null
   // 只读对话不能回应
   const canReact = onCompose !== undefined && seq !== null && (row.kind === 'text' || row.kind === 'media')
   const reactions = row.reactions ? (JSON.parse(row.reactions) as Reactions) : null
@@ -889,7 +892,7 @@ function ChatMessage({
             aria-keyshortcuts="Enter Shift+F10"
             render={
               <Bubble
-                variant={(row.kind === 'media' && !voice) || card ? 'ghost' : mine ? 'default' : 'muted'}
+                variant={(row.kind === 'media' && !voice) || card || jumbo ? 'ghost' : mine ? 'default' : 'muted'}
                 focusable
                 reactions={reactions !== null}
               />
@@ -925,7 +928,13 @@ function ChatMessage({
                 )
               ) : (
                 // 编辑后新旧正文交叉淡入淡出
-                <MessageText key={row.edit_date} ref={fadeMotion} text={row.text ?? ''} entities={entities} />
+                <MessageText
+                  key={row.edit_date}
+                  ref={fadeMotion}
+                  text={row.text ?? ''}
+                  entities={entities}
+                  jumbo={jumbo}
+                />
               )}
             </BubbleContent>
             {reactions && (

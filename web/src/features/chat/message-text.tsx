@@ -5,18 +5,22 @@ import { findLinks } from 'shared/text'
 
 import { useOpenLink } from '@/features/link/open-link'
 import { inPip } from '@/features/pip/pip'
+import { cn } from '@/lib/utils'
 
 /**
  * 消息正文：提及显示为指向对方资料页的链接（画中画里不跳转），文字是发送时的名字；
- * 夹在文字里的 http(s) 链接可以点击，提及覆盖的部分不再识别链接
+ * 夹在文字里的 http(s) 链接可以点击，提及覆盖的部分不再识别链接。
+ * jumbo：只有几个 emoji 时放大显示（行高留出余量，气泡内容 overflow-hidden 会裁掉 emoji 的上下沿）
  */
 export function MessageText({
   text,
   entities,
+  jumbo = false,
   ref,
 }: {
   text: string
   entities: MessageEntity[] | null
+  jumbo?: boolean
   ref?: Ref<HTMLParagraphElement>
 }) {
   const parts: ReactNode[] = []
@@ -52,7 +56,7 @@ export function MessageText({
   }
   plain(text.length)
   return (
-    <p ref={ref} className="whitespace-pre-wrap">
+    <p ref={ref} className={cn('whitespace-pre-wrap', jumbo && 'text-5xl/tight')}>
       {parts}
     </p>
   )
