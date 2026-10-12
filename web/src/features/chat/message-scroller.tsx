@@ -111,11 +111,11 @@ function MessageScrollerContent({ className, ref, ...props }: ComponentProps<'di
 }
 
 const messageScrollerItemVariants = cva(
-  // content-visibility 带 paint 裁切，项本身不能有圆角，否则贴边的内容（右下角的 MessageFooter）会被圆角裁掉：
+  // 不用 content-visibility：屏幕外的项按估算尺寸占位，滚进来换成实际尺寸时 iOS Safari 的视口会跳，补偿也盖不住。
   // 高亮的圆角底色画在垫在内容下面的伪元素上。
   // 项内（日期、未读等提示与消息）与项间同样用 flex 间距排开：块布局里项内的外边距会折叠、项间不会，间距就对不齐。
   // 高亮的淡出比动效节奏里最长的一档还长：它是停留后慢慢褪去，太快就成了一闪
-  'relative flex min-w-0 shrink-0 flex-col gap-1 [contain-intrinsic-size:auto_10rem] [content-visibility:auto] before:pointer-events-none before:absolute before:inset-0 before:-z-10 before:rounded-3xl before:bg-primary/15 before:opacity-0 before:transition-opacity before:duration-700 data-entering:animate-in data-entering:fade-in data-entering:duration-standard data-entering:ease-enter motion-safe:data-entering:slide-in-from-bottom-4',
+  'relative flex min-w-0 shrink-0 flex-col gap-1 before:pointer-events-none before:absolute before:inset-0 before:-z-10 before:rounded-3xl before:bg-primary/15 before:opacity-0 before:transition-opacity before:duration-700 data-entering:animate-in data-entering:fade-in data-entering:duration-standard data-entering:ease-enter motion-safe:data-entering:slide-in-from-bottom-4',
   {
     variants: {
       variant: {
@@ -154,7 +154,7 @@ function MessageScrollerItem({
       data-slot="message-scroller-item"
       data-message-id={messageId}
       data-variant={variant}
-      // 入场动画只播一次：内容可见性切换时不再重播
+      // 入场动画只播一次
       onAnimationEnd={(e) => e.target === e.currentTarget && e.currentTarget.removeAttribute('data-entering')}
       className={cn(messageScrollerItemVariants({ variant }), className)}
       {...props}

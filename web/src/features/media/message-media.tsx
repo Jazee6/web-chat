@@ -182,7 +182,7 @@ function FileAttachment({
   /** 发送中的上传进度（0–100，null 为不定进度）；undefined 表示不在发送 */
   progress?: number | null
 }) {
-  // 外面留 1px：消息项开了 content-visibility（含 paint 裁切），卡片贴边的描边与聚焦环会被裁掉
+  // 外面留 1px：卡片贴边的描边与聚焦环不贴着消息项的边
   return (
     <div className="p-px">
       <Attachment state={progress !== undefined ? 'uploading' : 'done'} className="max-w-72">
