@@ -1,5 +1,6 @@
 // 消息区滚动容器的状态与控制（组件见 message-scroller.tsx）
 import { createContext, use, useSyncExternalStore } from 'react'
+import type { Range, Virtualizer } from '@tanstack/react-virtual'
 
 /** 离底部不超过这个距离就算贴底 */
 const EDGE = 8
@@ -9,6 +10,10 @@ const SPRING = 18
 const MAX_DT = 1 / 30
 /** 手指离开后这么久（ms）没有滚动事件就算惯性滚动停了 */
 const TOUCH_QUIET = 150
+/** 首条 / 末条离视口不超过这个距离（px）就算滚到了窗口的边界，见 startKey */
+const EDGE_REACH = 200
+
+const ITEM = '[data-slot="message-scroller-item"]'
 
 type Store<T> = { get: () => T; set: (value: T) => void; subscribe: (listener: () => void) => () => void }
 
@@ -33,16 +38,18 @@ const reducedMotion = () => window.matchMedia('(prefers-reduced-motion: reduce)'
 
 /**
  * 滚动状态放在 React 之外：滚动、尺寸变化都直接读写 DOM，只把按钮状态和可见消息通过 store 交给组件。
- * 内容的直接子元素只能是消息项：保持视口、判断追加都按子元素算
+ * 内容的直接子元素只能是消息项：保持视口按子元素算。
+ * 虚拟列表只决定渲染哪些项（见 MessageScrollerContent），视口的保持、贴底都在这里：它自己的滚动补偿在 iOS 上盖不住位移
  */
 export class ScrollController {
   private follow: boolean
   /** 挂载时定位到的消息；之后不再使用，重新定位靠重建滚动容器 */
-  private readonly anchor: string | null
+  readonly anchor: string | null
   /** 顶部被浮层遮住的高度，见 PEEK */
   private readonly peek: number
   private viewport: HTMLElement | null = null
   private content: HTMLElement | null = null
+  private list: Virtualizer<HTMLElement, HTMLElement> | null = null
   private positioned = false
   /** 停在底部：内容变化时跟到底 */
   private stick = false
@@ -58,11 +65,11 @@ export class ScrollController {
   private glideVel = 0
   private glideTime = 0
   /**
-   * 视口里的第一条及其在内容里的位置：内容变化后按它挪动的距离调整视口。
+   * 视口里的第一条及其在内容里的位置：内容变化后按它挪动的距离调整视口；last 是视口里的最后一条。
    * 不记相对视口的位置：iOS Safari 的滚动是异步的，上次滚动事件之后视口可能又滚了一段，
    * 按相对视口的位置补偿会把这段滚动也退回去，向上滚时一顿一顿地往回跳
    */
-  private snapshot: { el: Element; offset: number } | null = null
+  private snapshot: { el: Element; offset: number; last: Element } | null = null
   /** 触摸滚动中：从按下手指到抬起后惯性停下 */
   private touchScroll = false
   private touching = false
@@ -72,14 +79,16 @@ export class ScrollController {
    * iOS Safari 在手指按着或惯性滚动时写 scrollTop，随后又从自己原来的位置接着滚，视口往回跳；等停下再写
    */
   private shift = 0
-  /** 上次处理时的最后一条：之后的都是追加的 */
-  private tail: Element | null = null
   private resize: ResizeObserver | null = null
   private intersect: IntersectionObserver | null = null
   private readonly visible = new Set<string>()
   /** 不在底部：显示回到底部的按钮 */
   readonly away = createStore(false)
   readonly visibleIds = createStore<string[]>([])
+  /** 窗口的首条渲染出来、离视口不远时为它的 key：该加载更早的消息了。带上 key，窗口扩展后旧的报告自然作废 */
+  readonly startKey = createStore<string | null>(null)
+  /** 同上，末条 */
+  readonly endKey = createStore<string | null>(null)
 
   constructor(follow: boolean, anchor: string | null, peek: number) {
     this.follow = follow
@@ -133,25 +142,99 @@ export class ScrollController {
     }
   }
 
-  /** 每次渲染提交后：第一次定位，之后处理追加的消息 */
-  commit(follow: boolean) {
+  attachList(list: Virtualizer<HTMLElement, HTMLElement>) {
+    this.list = list
+  }
+
+  /** 视口挂上之后（列表的提交在它之前）才能第一次定位 */
+  setFollow(follow: boolean) {
+    const changed = follow !== this.follow
     this.follow = follow
+    if (!this.positioned) this.commit(null)
+    else if (changed) this.settle()
+  }
+
+  /**
+   * 列表每次渲染提交后：第一次定位，之后处理追加的消息。
+   * appendedFrom：从这个下标起是追加在原来末条之后的；发件箱换成已发送的消息时末条的 key 变了、找不到原来的末条，不算追加
+   */
+  commit(appendedFrom: number | null) {
     const content = this.content
     if (!this.viewport || !content?.firstElementChild) return
     if (!this.positioned) {
       this.position()
+      this.updateEdges()
       return
     }
-    const tail = this.tail
-    const appended: Element[] = []
-    if (tail?.parentElement === content) {
-      for (let el = tail.nextElementSibling; el; el = el.nextElementSibling) appended.push(el)
-    }
-    this.tail = content.lastElementChild
-    // 只有停在底部时看得到新消息；发件箱换成已发送的消息时旧的末条已经移除，不算追加
+    const appended =
+      appendedFrom === null
+        ? []
+        : [...content.children].filter((el) => Number((el as HTMLElement).dataset.index) >= appendedFrom)
+    // 只有停在底部时看得到新消息
     const animate = this.follow && this.stick && appended.length > 0
     if (animate) for (const el of appended) el.setAttribute('data-entering', '')
     this.settle(animate ? 'smooth' : undefined)
+    this.updateEdges()
+  }
+
+  /** 触摸滚动中暂存的补偿：内容被 translate 挪开了这么多，虚拟列表要按视口实际看到的位置取渲染范围 */
+  get pendingShift() {
+    return this.shift
+  }
+
+  /**
+   * 虚拟列表的渲染范围：在默认范围上并入视口里可见的首末两条与有焦点的一条，保持连续。
+   * 向上插入历史后下标整体后移，虚拟列表在视口补偿之前仍按旧的滚动位置取范围，取到的是新插入的那些；
+   * 并入之后原来看得到的几条留在页面上，补偿才找得到它们
+   */
+  extendRange(range: Range) {
+    let start = Math.max(range.startIndex - range.overscan, 0)
+    let end = Math.min(range.endIndex + range.overscan, range.count - 1)
+    const kept = [this.snapshot?.el, this.snapshot?.last, document.activeElement?.closest(ITEM)]
+    for (const el of kept) {
+      if (!el || el.parentElement !== this.content) continue
+      const index = this.indexOf(el)
+      if (index === -1) continue
+      start = Math.min(start, index)
+      end = Math.max(end, index)
+    }
+    const indexes: number[] = []
+    for (let i = start; i <= end; i++) indexes.push(i)
+    return indexes
+  }
+
+  /** 按 key 找当前的下标：元素上的 data-index 还是上次渲染的 */
+  private indexOf(el: Element) {
+    const list = this.list
+    if (!list) return -1
+    let key: unknown
+    for (const [k, cached] of list.elementsCache) {
+      if (cached === el) {
+        key = k
+        break
+      }
+    }
+    if (key === undefined) return -1
+    const { count, getItemKey } = list.options
+    for (let i = count - 1; i >= 0; i--) if (getItemKey(i) === key) return i
+    return -1
+  }
+
+  /** 首条 / 末条渲染出来并且离视口不远时，报告它的 key */
+  private updateEdges() {
+    const list = this.list
+    const vp = this.viewport
+    const content = this.content
+    if (!list || !vp || !content) return
+    const rect = vp.getBoundingClientRect()
+    const near = (el: Element | null, index: number) => {
+      if (!(el instanceof HTMLElement) || Number(el.dataset.index) !== index) return false
+      const r = el.getBoundingClientRect()
+      return r.bottom >= rect.top - EDGE_REACH && r.top <= rect.bottom + EDGE_REACH
+    }
+    const { count, getItemKey } = list.options
+    this.startKey.set(count > 0 && near(content.firstElementChild, 0) ? String(getItemKey(0)) : null)
+    this.endKey.set(count > 0 && near(content.lastElementChild, count - 1) ? String(getItemKey(count - 1)) : null)
   }
 
   scrollToEnd(behavior: 'smooth' | 'instant' = 'smooth') {
@@ -178,6 +261,7 @@ export class ScrollController {
     this.lastTop = top
     if (!this.glide) this.stick = this.distance() <= EDGE || (this.stick && !up)
     this.takeSnapshot()
+    this.updateEdges()
     this.away.set(!this.stick)
   }
 
@@ -261,8 +345,7 @@ export class ScrollController {
     this.positioned = true
     this.lastTop = vp.scrollTop
     this.stick = this.distance() <= EDGE
-    this.tail = content.lastElementChild
-    if (el) this.snapshot = { el, offset: this.offsetOf(el) }
+    if (el) this.snapshot = { el, offset: this.offsetOf(el), last: this.lastVisible(el) }
     else this.takeSnapshot()
     this.away.set(!this.stick)
   }
@@ -315,7 +398,17 @@ export class ScrollController {
     }
     const below = lo < items.length && items[lo]!.getBoundingClientRect().top < rect.bottom
     const found = items[below ? lo : Math.max(0, lo - 1)]!
-    this.snapshot = { el: found, offset: this.offsetOf(found) }
+    this.snapshot = { el: found, offset: this.offsetOf(found), last: this.lastVisible(found) }
+  }
+
+  /** 从 el 往下，顶边还在视口里的最后一条 */
+  private lastVisible(el: Element) {
+    const bottom = this.viewport!.getBoundingClientRect().bottom
+    let last = el
+    for (let next = el.nextElementSibling; next && next.getBoundingClientRect().top < bottom; next = next.nextElementSibling) {
+      last = next
+    }
+    return last
   }
 
   /** 相对内容顶边的位置：只随布局变化，不随滚动变化 */
@@ -351,6 +444,13 @@ export function useController() {
 export function useMessageScroller() {
   const controller = useController()
   return { scrollToEnd: (behavior?: 'smooth' | 'instant') => controller.scrollToEnd(behavior) }
+}
+
+export function useMessageScrollerEdges() {
+  const controller = useController()
+  const startKey = useSyncExternalStore(controller.startKey.subscribe, controller.startKey.get)
+  const endKey = useSyncExternalStore(controller.endKey.subscribe, controller.endKey.get)
+  return { startKey, endKey }
 }
 
 export function useMessageScrollerVisibility() {

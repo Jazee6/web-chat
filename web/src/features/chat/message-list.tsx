@@ -92,7 +92,12 @@ import {
   MessageScrollerItem,
   MessageScrollerViewport,
 } from './message-scroller'
-import { useController, useMessageScroller, useMessageScrollerVisibility } from './message-scroller-controller'
+import {
+  useController,
+  useMessageScroller,
+  useMessageScrollerEdges,
+  useMessageScrollerVisibility,
+} from './message-scroller-controller'
 import { WINDOW_STEP, latestWindow, reachesLatest, windowAround } from './message-window'
 import { fadeMotion, popMotion } from './item-motion'
 import { setFollowing, stopFollowing, useFollowingChat } from './following'
@@ -326,9 +331,7 @@ export function MessageList({
     if (queued && win.anchor !== null) goLatest()
   }
 
-  const viewportRef = useRef<HTMLDivElement>(null)
-  const contentRef = useRef<HTMLDivElement>(null)
-  // 进入视口的首条 / 末条：只有仍是当前的首条 / 末条才算数，窗口扩展后旧的报告自然作废
+  // 滚到视口附近的首条 / 末条：只有仍是当前的首条 / 末条才算数，窗口扩展后旧的报告自然作废
   const [firstSeen, setFirstSeen] = useState<string | null>(null)
   const [lastSeen, setLastSeen] = useState<string | null>(null)
   const [loadingOlder, setLoadingOlder] = useState(false)
@@ -418,23 +421,7 @@ export function MessageList({
   const lastOwn = shown?.findLast((r) => (r.sender_id === null || r.sender_id === me.id) && !isNotice(r))
   const lastOwnKey = lastOwn ? rowKey(lastOwn) : null
 
-  // 最早一条进入视口上方 200px 内就加载更早的消息；向上插入时由 MessageScroller 保持视口里的第一条不动
-  useEffect(() => {
-    const root = viewportRef.current
-    const target = contentRef.current?.firstElementChild
-    if (!root || !target) return
-    const observer = new IntersectionObserver(
-      ([entry]) => setFirstSeen(entry?.isIntersecting ? target.getAttribute('data-message-id') : null),
-      { root, rootMargin: '200px 0px 0px 0px' },
-    )
-    observer.observe(target)
-    return () => {
-      observer.disconnect()
-      setFirstSeen(null)
-    }
-    // epoch：滚动容器重建后，首条即使没变也是新的节点
-  }, [firstKey, listShown, epoch])
-
+  // 最早一条滚到视口附近（见 ReportEdges）就加载更早的消息；向上插入时由 MessageScroller 保持视口里的第一条不动
   useEffect(() => {
     if (!firstVisible || loadingOlder || !rows || pending !== null) return
     const grow = () => setWin((w) => ({ ...w, before: w.before + WINDOW_STEP }))
@@ -453,25 +440,9 @@ export function MessageList({
       .finally(() => setLoadingOlder(false))
   }, [firstVisible, loadingOlder, rows, pending, hasMoreLocal, hasMoreRemote, chatId])
 
-  // 锚定窗口：最后一条进入视口下方 200px 内就向下扩展（向下追加不影响视口）。
+  // 锚定窗口：最后一条滚到视口附近就向下扩展（向下追加不影响视口）。
   // 定位完成前两个方向都不扩展：那时显示的还是旧窗口，首末两条是否可见已经不作数
   const anchored = win.anchor !== null
-  useEffect(() => {
-    const root = viewportRef.current
-    const items = contentRef.current?.querySelectorAll(':scope > [data-message-id]')
-    const target = items?.[items.length - 1]
-    if (!anchored || pending !== null || !root || !target) return
-    const observer = new IntersectionObserver(
-      ([entry]) => setLastSeen(entry?.isIntersecting ? target.getAttribute('data-message-id') : null),
-      { root, rootMargin: '0px 0px 200px 0px' },
-    )
-    observer.observe(target)
-    return () => {
-      observer.disconnect()
-      setLastSeen(null)
-    }
-  }, [lastKey, listShown, anchored, pending, epoch])
-
   const hasMoreNewer = anchored && newer >= win.after
   useEffect(() => {
     // 与向上扩展相同：只在条件变化时扩展一次
@@ -512,23 +483,25 @@ export function MessageList({
         {!anchored && <FollowOwnMessages lastKey={lastKey} lastMine={lastMine} />}
         <ReportRead chatId={chatId} lastRead={read?.last_read_seq ?? 0} topSeq={read?.top_seq ?? 0} />
         <ReportFollowing chatId={chatId} active={!anchored} />
+        <ReportEdges onStart={setFirstSeen} onEnd={setLastSeen} />
         {/* 键盘停在下面的消息列表上（见 navigateMessages），视口本身不再单独占一个 Tab 停留点；
             方向键移到的消息要露在浮着的标题栏与置顶条下面 */}
         <MessageScrollerViewport
-          ref={viewportRef}
           tabIndex={-1}
           className="scroll-pt-[calc(var(--top)+0.5rem)]"
           style={{ '--top': `${top}px` } as CSSProperties}
         >
-          {/* 子元素只能是消息项：保持视口、判断追加都按子元素算。mt-14 让出浮在上方的标题栏，有置顶条时再让出它 */}
+          {/* 虚拟列表，只渲染视口附近的消息。mt-(--top) 让出浮在上方的标题栏，有置顶条时再让出它 */}
           <MessageScrollerContent
-            ref={contentRef}
+            count={shown.length}
+            getItemKey={(i) => rowKey(shown[i]!)}
             className="mx-auto mt-(--top) w-full max-w-3xl"
             style={{ '--top': `${top}px` } as CSSProperties}
             tabIndex={0}
             onKeyDown={navigateMessages}
           >
-            {shown.map((row, i) => {
+            {(i) => {
+              const row = shown[i]!
               const prev = shown[i - 1]
               const key = rowKey(row)
               // 不在每条消息上显示时间：按时间分组，组首显示日期与时刻
@@ -540,6 +513,7 @@ export function MessageList({
               return (
                 <MessageScrollerItem
                   key={elementKey(row)}
+                  index={i}
                   messageId={key}
                   variant={key === highlightKey ? 'highlighted' : 'default'}
                 >
@@ -589,7 +563,7 @@ export function MessageList({
                   )}
                 </MessageScrollerItem>
               )
-            })}
+            }}
           </MessageScrollerContent>
         </MessageScrollerViewport>
         {back.length > 0 && !anchored && read && (
@@ -655,10 +629,12 @@ export function MessageList({
 /**
  * 消息列表的键盘操作：列表本身是唯一的 Tab 停留点，方向键在消息之间移动（从列表本身进入时先到最新一条），
  * Home / End 到第一条与最后一条；Enter 或 Shift+F10 在气泡旁打开右键菜单。
- * 只处理列表与气泡本身上的按键：气泡里的链接、语音进度条等控件照常使用自己的按键
+ * 只处理列表与气泡本身上的按键：气泡里的链接、语音进度条等控件照常使用自己的按键。
+ * 列表是虚拟的：方向键的下一条在多渲染的范围里，Home / End 先滚到头再聚焦
  */
 function navigateMessages(e: React.KeyboardEvent<HTMLDivElement>) {
-  const bubbles = [...e.currentTarget.querySelectorAll<HTMLElement>('[data-message-bubble]')]
+  const list = e.currentTarget
+  const bubbles = [...list.querySelectorAll<HTMLElement>('[data-message-bubble]')]
   const target = e.target as HTMLElement
   const i = bubbles.indexOf(target)
   if (target !== e.currentTarget && i === -1) return
@@ -670,24 +646,46 @@ function navigateMessages(e: React.KeyboardEvent<HTMLDivElement>) {
     )
     return
   }
+  if (e.key === 'Home' || e.key === 'End') {
+    e.preventDefault()
+    const home = e.key === 'Home'
+    const vp = list.parentElement!
+    vp.scrollTop = home ? 0 : vp.scrollHeight
+    // 滚动后下一帧才换上首末几条，等它们渲染出来
+    let frames = 30
+    const tick = () => {
+      const edge = home ? list.firstElementChild : list.lastElementChild
+      const index = home ? 0 : Number(list.dataset.count) - 1
+      if (edge instanceof HTMLElement && Number(edge.dataset.index) === index) {
+        const all = list.querySelectorAll<HTMLElement>('[data-message-bubble]')
+        const bubble = home ? all[0] : all[all.length - 1]
+        if (bubble) revealBubble(bubble)
+      } else if (--frames > 0) requestAnimationFrame(tick)
+    }
+    requestAnimationFrame(tick)
+    return
+  }
   const last = bubbles.length - 1
   const next =
-    e.key === 'ArrowUp'
-      ? i === -1 ? last : i - 1
-      : e.key === 'ArrowDown'
-        ? i === -1 ? last : i + 1
-        : e.key === 'Home'
-          ? 0
-          : e.key === 'End'
-            ? last
-            : null
+    e.key === 'ArrowUp' ? (i === -1 ? last : i - 1) : e.key === 'ArrowDown' ? (i === -1 ? last : i + 1) : null
   if (next === null) return
   e.preventDefault()
   const bubble = bubbles[next]
-  if (!bubble) return
-  // 不让浏览器为聚焦而滚动：只滚到刚好露出，不打乱滚动区的跟随与锚定
+  if (bubble) revealBubble(bubble)
+}
+
+/** 不让浏览器为聚焦而滚动：只滚到刚好露出，不打乱滚动区的跟随与锚定 */
+function revealBubble(bubble: HTMLElement) {
   bubble.focus({ preventScroll: true })
   bubble.scrollIntoView({ block: 'nearest' })
+}
+
+/** 窗口的首条 / 末条滚到视口附近时报告它的 key，离开时报告 null */
+function ReportEdges({ onStart, onEnd }: { onStart: (key: string | null) => void; onEnd: (key: string | null) => void }) {
+  const { startKey, endKey } = useMessageScrollerEdges()
+  useEffect(() => onStart(startKey), [startKey, onStart])
+  useEffect(() => onEnd(endKey), [endKey, onEnd])
+  return null
 }
 
 /**
