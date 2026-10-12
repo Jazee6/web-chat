@@ -55,8 +55,12 @@ export class ScrollController {
   private glidePos = 0
   private glideVel = 0
   private glideTime = 0
-  /** 视口里的第一条及其相对视口的位置：内容变化后把它放回原处 */
-  private snapshot: { el: Element; top: number } | null = null
+  /**
+   * 视口里的第一条及其在内容里的位置：内容变化后按它挪动的距离调整视口。
+   * 不记相对视口的位置：iOS Safari 的滚动是异步的，上次滚动事件之后视口可能又滚了一段，
+   * 按相对视口的位置补偿会把这段滚动也退回去，向上滚时一顿一顿地往回跳
+   */
+  private snapshot: { el: Element; offset: number } | null = null
   /** 上次处理时的最后一条：之后的都是追加的 */
   private tail: Element | null = null
   private resize: ResizeObserver | null = null
@@ -210,7 +214,7 @@ export class ScrollController {
     this.lastTop = vp.scrollTop
     this.stick = this.distance() <= EDGE
     this.tail = content.lastElementChild
-    if (el) this.snapshot = { el, top: el.getBoundingClientRect().top - vp.getBoundingClientRect().top }
+    if (el) this.snapshot = { el, offset: this.offsetOf(el) }
     else this.takeSnapshot()
     this.away.set(!this.stick)
   }
@@ -229,14 +233,16 @@ export class ScrollController {
   }
 
   private restoreSnapshot() {
-    const vp = this.viewport!
     const snapshot = this.snapshot
+    if (!this.content) return
     if (!snapshot?.el.isConnected) {
       this.takeSnapshot()
       return
     }
-    const delta = snapshot.el.getBoundingClientRect().top - vp.getBoundingClientRect().top - snapshot.top
-    if (Math.abs(delta) > 0.5) vp.scrollTop += delta
+    const offset = this.offsetOf(snapshot.el)
+    const delta = offset - snapshot.offset
+    snapshot.offset = offset
+    if (Math.abs(delta) > 0.5) this.viewport!.scrollTop += delta
   }
 
   /**
@@ -257,7 +263,12 @@ export class ScrollController {
     }
     const below = lo < items.length && items[lo]!.getBoundingClientRect().top < rect.bottom
     const found = items[below ? lo : Math.max(0, lo - 1)]!
-    this.snapshot = { el: found, top: found.getBoundingClientRect().top - rect.top }
+    this.snapshot = { el: found, offset: this.offsetOf(found) }
+  }
+
+  /** 相对内容顶边的位置：只随布局变化，不随滚动变化 */
+  private offsetOf(el: Element) {
+    return el.getBoundingClientRect().top - this.content!.getBoundingClientRect().top
   }
 
   private distance() {
