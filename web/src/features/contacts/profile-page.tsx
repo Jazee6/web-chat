@@ -32,6 +32,7 @@ import { UserAvatar } from '@/components/user-avatar'
 import { useMe } from '@/features/auth/me'
 import { useViewChat } from '@/features/chat/hooks'
 import { opErrorMessage } from '@/features/groups/errors'
+import { useDocumentTitle } from '@/hooks/use-document-title'
 import { formatPresence } from '@/lib/format'
 import { call } from '@/sync/client'
 import { usePresence } from '@/sync/transient'
@@ -49,6 +50,7 @@ export function ProfilePage({ userId }: { userId: string }) {
   const { isMobile } = useSidebar()
   const person = usePerson(userId)
   const lookup = useUserLookup(userId, valid && person !== undefined && person.name === null)
+  useDocumentTitle(valid ? person?.name : null)
 
   return (
     <div className="flex h-svh flex-col">

@@ -24,6 +24,7 @@ import { OtherUnread } from '@/features/pip/other-unread'
 import { inPip, openPip, pipSupported } from '@/features/pip/pip'
 import { useSecretDialog, useSecretEpoch } from '@/features/secret/queries'
 import { PlayerSlot } from '@/features/voice/player-bar'
+import { useDocumentTitle } from '@/hooks/use-document-title'
 import { useUsers } from '@/hooks/use-users'
 import { formatPresence } from '@/lib/format'
 import { fadeInOutMotion } from '@/lib/presence'
@@ -77,6 +78,7 @@ function PrivateChat({ chatId, peerId, secret = false, ...jump }: { chatId: stri
   const restoreReply = (t: ComposeTarget) => setTarget((cur) => cur ?? t)
   const presence = usePresence(peerId)
   const typing = useTyping(chatId)
+  useDocumentTitle(peer?.name)
 
   if (missing) return <ChatNotFound />
 
@@ -151,6 +153,7 @@ function GroupChat({ chatId, ...jump }: { chatId: string } & Jump) {
   // 群组通话只在顶层窗口里进行；画中画里不显示横条与通话按钮
   const groupCall = useGroupCallOf(chatId)
   const banner = member && !inPip && groupCall !== null
+  useDocumentTitle(dialog?.title)
 
   if (dialog === null) return <ChatNotFound />
 

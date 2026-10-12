@@ -40,6 +40,7 @@ import { UserAvatar } from '@/components/user-avatar'
 import { useMe } from '@/features/auth/me'
 import { ChatNotFound } from '@/features/chat/chat-page'
 import { useGroupDialog, useViewChat } from '@/features/chat/hooks'
+import { useDocumentTitle } from '@/hooks/use-document-title'
 import { topics } from '@/sync/bridge'
 import { call } from '@/sync/client'
 import { useLiveQuery } from '@/sync/live-query'
@@ -64,6 +65,7 @@ export function GroupInfoPage({ chatId }: { chatId: string }) {
   useViewChat(chatId, valid)
   const { isMobile } = useSidebar()
   const dialog = useGroupDialog(chatId)
+  useDocumentTitle(dialog?.title)
 
   if (!valid || dialog === null) return <ChatNotFound />
 
