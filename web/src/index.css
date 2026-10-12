@@ -169,6 +169,10 @@
  * 这里补上两件事：两端宽高比不同时按 cover 裁切，不拉伸；圆角在缩略图的圆角与全屏的直角之间过渡。
  * --photo-radius 与 data-photo-transition 由 use-photo-viewer.tsx 在过渡期间写在根元素上
  */
+/* 换页用的 page 组这时不参与：否则右侧页面单独成组盖在根上，查看器的黑底只在侧栏处淡入 */
+:root[data-photo-transition] [data-slot='sidebar-inset'] {
+    view-transition-name: none;
+}
 ::view-transition-group(photo),
 :root[data-photo-transition]::view-transition-group(root) {
     animation-duration: var(--transition-duration-emphasized);
