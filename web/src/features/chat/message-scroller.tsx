@@ -77,13 +77,13 @@ function MessageScrollerViewport({ className, ref, ...props }: ComponentProps<'d
       tabIndex={0}
       onScroll={() => controller.onScroll()}
       onWheel={() => controller.onUserScroll()}
-      onTouchMove={() => controller.onUserScroll()}
+      onTouchMove={() => controller.onUserScroll(true)}
       onTouchStart={() => controller.onTouchStart()}
       onTouchEnd={() => controller.onTouchEnd()}
       onTouchCancel={() => controller.onTouchEnd()}
       onKeyDown={(e) => SCROLL_KEYS.has(e.key) && controller.onUserScroll()}
       // 按在视口自身上的只可能是滚动条：拖动滚动条也是用户接管
-      onPointerDown={(e) => e.target === e.currentTarget && controller.onUserScroll()}
+      onPointerDown={(e) => e.target === e.currentTarget && controller.onUserScroll(e.pointerType === 'touch')}
       // 视口由自己保持，关掉浏览器的滚动锚定，免得两套机制叠加
       className={cn(
         'size-full min-h-0 min-w-0 scroll-fade-b scrollbar-thin scrollbar-gutter-both overflow-y-auto overscroll-contain contain-content [overflow-anchor:none]',

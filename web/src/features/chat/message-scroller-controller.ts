@@ -9,6 +9,8 @@ const SPRING = 18
 const MAX_DT = 1 / 30
 /** 手指离开后这么久（ms）没有滚动事件就算惯性滚动停了 */
 const TOUCH_QUIET = 150
+/** 补偿写进 scrollTop 后这么久（ms）内被顶回去就重写，见 pin */
+const PIN = 500
 
 type Store<T> = { get: () => T; set: (value: T) => void; subscribe: (listener: () => void) => () => void }
 
@@ -72,6 +74,14 @@ export class ScrollController {
    * iOS Safari 在手指按着或惯性滚动时写 scrollTop，随后又从自己原来的位置接着滚，视口往回跳；等停下再写
    */
   private shift = 0
+  /**
+   * 刚写进 scrollTop 的补偿：iOS Safari 在顶部回弹等自己的滚动动画结束前会把它顶回去，视口回到顶部，
+   * 新插入的历史露出来又触发加载，一路加载到头。此后一段时间里被顶回去就重写；用户接管时放弃
+   */
+  private pinTop = 0
+  private pinTimer = 0
+  /** 最近一次用户输入是触摸：只有这时补偿会被顶回去；拖动滚动条时不能把位置拉回来 */
+  private touchInput = false
   /** 上次处理时的最后一条：之后的都是追加的 */
   private tail: Element | null = null
   private resize: ResizeObserver | null = null
@@ -80,6 +90,8 @@ export class ScrollController {
   /** 不在底部：显示回到底部的按钮 */
   readonly away = createStore(false)
   readonly visibleIds = createStore<string[]>([])
+  /** 补偿已经落地，视口位置可信：没落地时首条看起来进入视口不作数，不能据此加载更早的消息 */
+  readonly settled = createStore(true)
 
   constructor(follow: boolean, anchor: string | null, peek: number) {
     this.follow = follow
@@ -115,8 +127,10 @@ export class ScrollController {
       intersect.disconnect()
       this.stopGlide()
       clearTimeout(this.quiet)
+      this.unpin()
       this.touching = this.touchScroll = false
       this.shift = 0
+      this.settled.set(true)
       if (this.content) this.content.style.translate = ''
       this.resize = this.intersect = this.viewport = null
       this.visible.clear()
@@ -158,6 +172,7 @@ export class ScrollController {
     const vp = this.viewport
     if (!vp) return
     this.flushShift()
+    this.unpin()
     this.stick = true
     this.away.set(false)
     if (behavior === 'smooth' && !reducedMotion()) {
@@ -170,10 +185,16 @@ export class ScrollController {
 
   onScroll() {
     if (!this.positioned) return
+    const vp = this.viewport!
+    if (this.pinTimer && !this.touchScroll && Math.abs(vp.scrollTop - this.pinTop) > 1) {
+      vp.scrollTop = this.pinTop
+      this.pin()
+      return
+    }
     // 离开底部只能是往上滚了。视口在逐帧变矮（输入框上方的横栏展开）时，自己滚到底的滚动事件晚一帧才到，
     // 那时离底部又远了几像素，不能当成用户离开
     if (this.touchScroll) this.waitQuiet()
-    const top = this.viewport!.scrollTop
+    const top = vp.scrollTop
     const up = top < this.lastTop - 0.5
     this.lastTop = top
     if (!this.glide) this.stick = this.distance() <= EDGE || (this.stick && !up)
@@ -182,13 +203,16 @@ export class ScrollController {
   }
 
   /** 滚轮、触摸、按键：用户接管滚动，打断自己发起的滑动 */
-  onUserScroll() {
+  onUserScroll(touch = false) {
+    this.touchInput = touch
     this.stopGlide()
+    this.unpin()
   }
 
   onTouchStart() {
     clearTimeout(this.quiet)
-    this.touching = this.touchScroll = true
+    this.touchInput = this.touching = this.touchScroll = true
+    this.unpin()
   }
 
   onTouchEnd() {
@@ -214,6 +238,28 @@ export class ScrollController {
     vp.scrollTop += this.shift
     this.shift = 0
     this.lastTop = vp.scrollTop
+    this.pin()
+  }
+
+  /** 记下刚写进的位置，见 pinTop；不是触摸时只更新是否落地 */
+  private pin() {
+    clearTimeout(this.pinTimer)
+    this.pinTimer = 0
+    if (this.touchInput && this.viewport) {
+      this.pinTop = this.viewport.scrollTop
+      this.pinTimer = window.setTimeout(() => this.unpin(), PIN)
+    }
+    this.updateSettled()
+  }
+
+  private unpin() {
+    clearTimeout(this.pinTimer)
+    this.pinTimer = 0
+    this.updateSettled()
+  }
+
+  private updateSettled() {
+    this.settled.set(!this.shift && !this.pinTimer)
   }
 
   /** 已经在滑时什么都不做：目标每帧重新读取，重置速度反而会顿一下 */
@@ -294,7 +340,11 @@ export class ScrollController {
     if (this.touchScroll) {
       this.shift += delta
       this.content.style.translate = `0 ${-this.shift}px`
-    } else this.viewport!.scrollTop += delta
+      this.updateSettled()
+    } else {
+      this.viewport!.scrollTop += delta
+      this.pin()
+    }
   }
 
   /**

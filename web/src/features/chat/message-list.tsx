@@ -1,4 +1,4 @@
-import { Suspense, cloneElement, lazy, useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from 'react'
+import { Suspense, cloneElement, lazy, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type CSSProperties } from 'react'
 import { Link } from '@tanstack/react-router'
 import {
   ArrowDownIcon,
@@ -332,6 +332,8 @@ export function MessageList({
   const [firstSeen, setFirstSeen] = useState<string | null>(null)
   const [lastSeen, setLastSeen] = useState<string | null>(null)
   const [loadingOlder, setLoadingOlder] = useState(false)
+  // 向上插入后的补偿是否已经落地（见 ScrollController.settled）：没落地时不再加载，免得一路加载到头
+  const [settled, setSettled] = useState(true)
   // 扩大窗口会换一个查询，新结果到达前继续显示旧窗口，否则列表会被卸载、滚动位置丢失
   const [shown, setShown] = useState(rows)
   if (rows !== undefined && rows !== shown) setShown(rows)
@@ -436,7 +438,7 @@ export function MessageList({
   }, [firstKey, listShown, epoch])
 
   useEffect(() => {
-    if (!firstVisible || loadingOlder || !rows || pending !== null) return
+    if (!firstVisible || !settled || loadingOlder || !rows || pending !== null) return
     const grow = () => setWin((w) => ({ ...w, before: w.before + WINDOW_STEP }))
     if (hasMoreLocal) {
       // 首条进入视口（观察器报告）之后才扩展；只在条件变化时扩展一次，放进渲染会连续扩展
@@ -451,7 +453,7 @@ export function MessageList({
       .then(grow)
       .catch(() => toast.add({ type: 'error', title: "Couldn't load earlier messages" }))
       .finally(() => setLoadingOlder(false))
-  }, [firstVisible, loadingOlder, rows, pending, hasMoreLocal, hasMoreRemote, chatId])
+  }, [firstVisible, settled, loadingOlder, rows, pending, hasMoreLocal, hasMoreRemote, chatId])
 
   // 锚定窗口：最后一条进入视口下方 200px 内就向下扩展（向下追加不影响视口）。
   // 定位完成前两个方向都不扩展：那时显示的还是旧窗口，首末两条是否可见已经不作数
@@ -512,6 +514,7 @@ export function MessageList({
         {!anchored && <FollowOwnMessages lastKey={lastKey} lastMine={lastMine} />}
         <ReportRead chatId={chatId} lastRead={read?.last_read_seq ?? 0} topSeq={read?.top_seq ?? 0} />
         <ReportFollowing chatId={chatId} active={!anchored} />
+        <ReportSettled onChange={setSettled} />
         {/* 键盘停在下面的消息列表上（见 navigateMessages），视口本身不再单独占一个 Tab 停留点；
             方向键移到的消息要露在浮着的标题栏与置顶条下面 */}
         <MessageScrollerViewport
@@ -750,6 +753,14 @@ function ReportFollowing({ chatId, active }: { chatId: string; active: boolean }
       stopFollowing(chatId)
     }
   }, [chatId, active, visible, controller])
+  return null
+}
+
+/** 把滚动容器里补偿是否落地交给外面：MessageList 在滚动容器之外，拿不到它的状态 */
+function ReportSettled({ onChange }: { onChange: (settled: boolean) => void }) {
+  const controller = useController()
+  const settled = useSyncExternalStore(controller.settled.subscribe, controller.settled.get)
+  useEffect(() => onChange(settled), [settled, onChange])
   return null
 }
 
