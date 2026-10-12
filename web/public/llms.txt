@@ -1,0 +1,34 @@
+# Web Chat
+
+> Web Chat is an open-source, Telegram-style chat app that runs entirely on the Cloudflare developer platform (Workers, Durable Objects, D1 and R2) and is designed to fit the Workers Free plan. Anyone can deploy their own instance with the Deploy to Cloudflare button and sign in with their own OpenID Connect provider.
+
+This site is one deployment of Web Chat. Signing in is required; there is no public content beyond this page. The source code, documentation and deployment guide are on GitHub.
+
+## Features
+
+- Private chats and groups of up to 20 members: replies, edits, recall, reactions, pins, forwarding, mentions, read receipts, typing and online status
+- Secret chats with end-to-end encryption (MLS) across multiple devices, including encrypted media
+- Photos, videos (transcoded in the browser), files, voice messages, stickers and link previews
+- One-to-one voice and video calls with screen sharing (P2P + TURN), and group calls (Cloudflare Realtime SFU)
+- Local-first: messages live in SQLite (WASM, OPFS) in the browser, work offline and sync across devices and tabs; full-text search runs on the device
+- Installable PWA with Web Push notifications, share target and picture-in-picture chat
+- Contacts, blocking, invite links and device management
+
+## Architecture
+
+- One Worker serves the static web app, the API (Hono + better-auth) and the WebSocket
+- One SQLite-backed Durable Object per user (`UserDO`) and per chat (`ChatDO`); writes fan out to members' `UserDO`s
+- D1 stores better-auth users, sessions and accounts; R2 stores media, uploaded with presigned URLs and read straight from the bucket's custom domain
+- Web client: React 19, TanStack Router, shadcn/ui and Vite, with a sync worker that owns the local database and the connection
+
+## Docs
+
+- [README](https://github.com/Jazee6/web-chat/blob/main/README.md): features, deployment (one-click and manual), configuration and development
+- [Architecture](https://github.com/Jazee6/web-chat/blob/main/docs/architecture/README.md): topology, data model, sync protocol, realtime and fan-out, media, auth and security, client, free-tier budget (in Chinese)
+- [Architecture decision records](https://github.com/Jazee6/web-chat/tree/main/docs/adr) (in Chinese)
+- [Glossary](https://github.com/Jazee6/web-chat/blob/main/CONTEXT.md) (in Chinese)
+
+## Optional
+
+- [Source code](https://github.com/Jazee6/web-chat)
+- [Example instance](https://chat.jaze.top)

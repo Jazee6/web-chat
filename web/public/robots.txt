@@ -1,0 +1,11 @@
+# Only the home page and llms.txt are worth indexing: every other path needs signing in (served without a charset, keep this file ASCII)
+User-agent: *
+Allow: /
+Disallow: /c/
+Disallow: /u/
+Disallow: /join/
+Disallow: /share
+Disallow: /pip/
+Disallow: /login
+Disallow: /api/
+Disallow: /ws

@@ -2,6 +2,7 @@
   "id": "/",
   "name": "Web Chat",
   "short_name": "Web Chat",
+  "description": "Open-source, Telegram-style chat on Cloudflare Workers.",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
