@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type Ref } from 'react'
+import { flushSync } from 'react-dom'
 import { CheckIcon, ChevronLeftIcon, ChevronRightIcon, CopyIcon, DownloadIcon, StickerIcon, XIcon } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
@@ -65,6 +66,11 @@ export function PhotoViewer({
     reset()
     onIndexChange(next)
   }
+  // 收回的过渡要给大图拍快照：放大着时快照按放大后的尺寸栅格化，卡住好几帧，先复位
+  const close = () => {
+    if (zoomed) flushSync(reset)
+    onClose()
+  }
 
   const download = async () => {
     if (!photo || !full) return
@@ -98,7 +104,7 @@ export function PhotoViewer({
   }
 
   return (
-    <Dialog open onOpenChange={(open) => !open && onClose()}>
+    <Dialog open onOpenChange={(open) => !open && close()}>
       <DialogContent
         ref={wheelRef}
         variant="viewer"
@@ -113,7 +119,7 @@ export function PhotoViewer({
         // 轻点图片、视频与按钮以外的地方关闭；滑动切换松手后也会触发 click，不算
         onClick={(e) => {
           const tap = downX.current !== null && Math.abs(e.clientX - downX.current) <= SWIPE_PX
-          if (tap && !consumed() && !(e.target as Element).closest('img, video, button')) onClose()
+          if (tap && !consumed() && !(e.target as Element).closest('img, video, button')) close()
         }}
       >
         <DialogTitle className="sr-only">
