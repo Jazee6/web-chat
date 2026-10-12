@@ -26,6 +26,7 @@ import {
 } from '@/components/ui/sidebar'
 import { UserAvatar } from '@/components/user-avatar'
 import { useMe } from '@/features/auth/me'
+import { useFollowingChat } from '@/features/chat/following'
 import { DeleteDialogAlert } from '@/features/groups/delete-dialog-button'
 import { useListMotion } from '@/hooks/use-list-motion'
 import { useUsers } from '@/hooks/use-users'
@@ -122,6 +123,8 @@ export function DialogItem({ row }: { row: DialogRow }) {
   const { chatId } = useParams({ strict: false })
   const { isMobile, setOpenMobile } = useSidebar()
   const [confirmDelete, setConfirmDelete] = useState(false)
+  // 正在贴底阅读的会话来消息时马上就读到，不显示未读数，免得闪一下
+  const unread = useFollowingChat() === row.chat_id ? 0 : row.unread
   const deletable = row.status === 'left' || row.kind === 'secret'
 
   const preview = () => {
@@ -189,7 +192,7 @@ export function DialogItem({ row }: { row: DialogRow }) {
               ) : (
                 <span className="truncate text-xs text-muted-foreground">{preview()}</span>
               )}
-              {row.unread > 0 ? (
+              {unread > 0 ? (
                 <span className="flex shrink-0 items-center gap-1">
                   {/* 提及即使在静音的对话里也醒目 */}
                   {row.mentioned === 1 && (
@@ -199,7 +202,7 @@ export function DialogItem({ row }: { row: DialogRow }) {
                     </Badge>
                   )}
                   <Badge variant={row.muted === 1 ? 'secondary' : 'default'}>
-                    {row.unread}
+                    {unread}
                     <span className="sr-only"> unread</span>
                   </Badge>
                 </span>

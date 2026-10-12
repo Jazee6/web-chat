@@ -92,9 +92,10 @@ import {
   MessageScrollerItem,
   MessageScrollerViewport,
 } from './message-scroller'
-import { useMessageScroller, useMessageScrollerVisibility } from './message-scroller-controller'
+import { useController, useMessageScroller, useMessageScrollerVisibility } from './message-scroller-controller'
 import { WINDOW_STEP, latestWindow, reachesLatest, windowAround } from './message-window'
 import { fadeMotion, popMotion } from './item-motion'
+import { setFollowing, stopFollowing, useFollowingChat } from './following'
 import { MessageText } from './message-text'
 import { PendingLinkCard, SentLinkCard } from '@/features/link/link-card'
 import { PINNED_SQL, PinnedBar, type PinnedRow } from './pinned-bar'
@@ -297,8 +298,11 @@ export function MessageList({
     goTo(to)
   }
 
-  // 打开时的已读位置：「未读消息」分隔线在本次打开期间固定在这里；未读太多时以首条未读为锚点打开
+  // 「未读消息」分隔线：标在 readMark 之后别人发的第一条上方，标出来之后本次打开期间固定不动。
+  // 初值为打开时的已读位置，未读太多时以首条未读为锚点打开。贴底阅读时新来的消息一到就读到，不标；
+  // 离开底部、切到后台时从当时的已读位置起标，回来时看得到之后来的从哪条开始
   const [readMark, setReadMark] = useState<number | null | undefined>(undefined)
+  const following = useFollowingChat() === chatId
   if (readRows !== undefined && readMark === undefined) {
     setReadMark(read?.last_read_seq ?? null)
     if (read && unread + 10 > WINDOW_STEP && pending === null) {
@@ -357,6 +361,12 @@ export function MessageList({
       ? undefined
       : shown?.find((r) => r.seq !== null && r.seq > readMark && r.sender_id !== me.id)
   const firstUnreadKey = firstUnread ? rowKey(firstUnread) : null
+  if (readMark !== undefined && read) {
+    // 本地消息还没追上最新一条（刚打开、正在同步）时不撤：打开前的未读还没到
+    const caughtUp = (stored.at(-1)?.seq ?? 0) >= read.top_seq
+    if (following && readMark !== null && !firstUnread && caughtUp) setReadMark(null)
+    else if (!following && readMark === null) setReadMark(read.last_read_seq)
+  }
 
   useEffect(() => {
     if (firstUnreadKey && !anchorUsed && listShown && pending === null) setAnchorUsed(true)
@@ -500,7 +510,8 @@ export function MessageList({
         className="flex-1"
       >
         {!anchored && <FollowOwnMessages lastKey={lastKey} lastMine={lastMine} />}
-        <ReportRead chatId={chatId} lastRead={read?.last_read_seq ?? 0} />
+        <ReportRead chatId={chatId} lastRead={read?.last_read_seq ?? 0} topSeq={read?.top_seq ?? 0} />
+        <ReportFollowing chatId={chatId} active={!anchored} />
         {/* 键盘停在下面的消息列表上（见 navigateMessages），视口本身不再单独占一个 Tab 停留点；
             方向键移到的消息要露在浮着的标题栏与置顶条下面 */}
         <MessageScrollerViewport
@@ -704,8 +715,11 @@ function OnLatestVisible({ latestKey, onVisible }: { latestKey: string; onVisibl
   return null
 }
 
-/** 页面在前台时，把视口里最新的一条消息上报为已读 */
-function ReportRead({ chatId, lastRead }: { chatId: string; lastRead: number }) {
+/**
+ * 页面在前台时，把视口里最新的一条消息上报为已读。
+ * 依赖 topSeq：消息可能先于对话行的更新到达，那时上报会被最新一条的位置截住，对话行更新后要再报一次
+ */
+function ReportRead({ chatId, lastRead, topSeq }: { chatId: string; lastRead: number; topSeq: number }) {
   const { visibleMessageIds } = useMessageScrollerVisibility()
   const visible = usePageVisible()
 
@@ -714,7 +728,28 @@ function ReportRead({ chatId, lastRead }: { chatId: string; lastRead: number }) 
     let max = 0
     for (const id of visibleMessageIds) if (id.startsWith('m')) max = Math.max(max, Number(id.slice(1)))
     if (max > lastRead) void call('read', { chatId, maxSeq: max })
-  }, [chatId, lastRead, visible, visibleMessageIds])
+  }, [chatId, lastRead, topSeq, visible, visibleMessageIds])
+  return null
+}
+
+/**
+ * 页面在前台、跟随最新窗口且停在底部时，登记为正在贴底阅读的会话（见 following.ts）。
+ * 在副作用里直接读滚动状态：挂载时定位在布局副作用里进行，渲染时读到的还是定位前的值
+ */
+function ReportFollowing({ chatId, active }: { chatId: string; active: boolean }) {
+  const controller = useController()
+  const visible = usePageVisible()
+
+  useEffect(() => {
+    if (!active || !visible) return
+    const update = () => (controller.away.get() ? stopFollowing(chatId) : setFollowing(chatId))
+    update()
+    const unsubscribe = controller.away.subscribe(update)
+    return () => {
+      unsubscribe()
+      stopFollowing(chatId)
+    }
+  }, [chatId, active, visible, controller])
   return null
 }
 
