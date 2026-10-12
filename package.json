@@ -17,5 +17,51 @@
     "test": "bun run --cwd server test && bun run --cwd web test",
     "deploy": "bun run --cwd web deploy",
     "deploy:production": "CLOUDFLARE_ENV=production bun run --cwd web deploy"
+  },
+  "cloudflare": {
+    "bindings": {
+      "DIRECTORY": {
+        "description": "D1 database for accounts and sessions. Migrations run on every deploy."
+      },
+      "MEDIA": {
+        "description": "R2 bucket for photos, videos, files and stickers. Keep `R2_BUCKET` the same as its name. After deploying, connect a custom domain, set CORS and create an API token (see the README)."
+      },
+      "BETTER_AUTH_URL": {
+        "description": "The app's public URL, for example `https://web-chat-app.<subdomain>.workers.dev`. Fill in after deploying, in `wrangler.jsonc` of your new repository (see the README)."
+      },
+      "OAUTH_DISCOVERY_URL": {
+        "description": "Your OpenID Connect provider's `/.well-known/openid-configuration` URL. Fill in after deploying, in `wrangler.jsonc` of your new repository (see the README)."
+      },
+      "OAUTH_CLIENT_ID": {
+        "description": "Client ID registered with your OpenID Connect provider. Fill in after deploying, in `wrangler.jsonc` of your new repository (see the README)."
+      },
+      "R2_ACCOUNT_ID": {
+        "description": "Your Cloudflare account ID, used for the R2 S3 endpoint. Fill in after deploying, in `wrangler.jsonc` of your new repository (see the README)."
+      },
+      "R2_BUCKET": {
+        "description": "Name of the media bucket. Must match the R2 bucket above."
+      },
+      "MEDIA_ORIGIN": {
+        "description": "The media bucket's custom domain, for example `https://r2.example.com`. Read at build time: edit it in `wrangler.jsonc`, not in the dashboard."
+      },
+      "MEDIA_KEY_PREFIX": {
+        "description": "Object key prefix. Leave empty."
+      },
+      "VAPID_PUBLIC_KEY": {
+        "description": "Optional. Web Push public key, paired with the `VAPID_PRIVATE_KEY` secret. Generate a pair with `bunx web-push generate-vapid-keys`. Read at build time: edit it in `wrangler.jsonc`. Without it, notifications are off."
+      },
+      "BETTER_AUTH_SECRET": {
+        "description": "Cookie signing key, at least 32 random bytes. Generate one with `openssl rand -base64 32`."
+      },
+      "OAUTH_CLIENT_SECRET": {
+        "description": "Client secret from your OpenID Connect provider. If you haven't registered the client yet, enter a placeholder and replace it later with `wrangler secret put`."
+      },
+      "R2_ACCESS_KEY_ID": {
+        "description": "Access key ID of an R2 API token with Object Read & Write on the media bucket. Enter a placeholder if you don't have one yet."
+      },
+      "R2_SECRET_ACCESS_KEY": {
+        "description": "Secret access key of the same R2 API token. Enter a placeholder if you don't have one yet."
+      }
+    }
   }
 }
