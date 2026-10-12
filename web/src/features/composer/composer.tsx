@@ -452,7 +452,9 @@ export function Composer({
             placeholder="Message"
             rows={1}
             maxLength={MAX_TEXT_LENGTH}
-            className="max-h-40 min-h-0"
+            // 至少一行高：删光文字时浏览器在显示占位文字之前会按空内容排一次版，输入框塌掉，
+            // 输入框单独成行（有附件、目标条）时消息列表跟着变高，滚动位置被夹住、离开底部
+            className="max-h-40 min-h-[calc(1lh+--spacing(4))]"
             value={text}
             aria-controls={candidates.length > 0 ? 'mention-picker' : undefined}
             aria-activedescendant={candidates.length > 0 ? `mention-${candidates[activeIndex]!.id}` : undefined}
