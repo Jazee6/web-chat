@@ -85,7 +85,7 @@ flowchart TB
 
 ## 消息列表
 
-- **不引入虚拟列表库**。消息区使用自行实现的滚动容器（`features/chat/message-scroller.tsx`，视口是原生 overflow 元素：shadcn ScrollArea 不暴露视口的 ref 与滚动事件），每条消息一个 `MessageScrollerItem`，带 `content-visibility: auto`，由浏览器跳过屏幕外元素的渲染；内存里只保留一个消息窗口，滚动到边界时从本地库每次多取 50 条（不裁剪另一端）。
+- **不引入虚拟列表库**。消息区使用自行实现的滚动容器（`features/chat/message-scroller.tsx`，视口是原生 overflow 元素：shadcn ScrollArea 不暴露视口的 ref 与滚动事件），每条消息一个 `MessageScrollerItem`，带 `content-visibility: auto`，由浏览器跳过屏幕外元素的渲染。Safari 不用（`@supports not (font: -apple-system-body)`，只有 WebKit 支持这个字体关键字）：屏幕外的项按估算尺寸占位，向上滚时逐条换成实际尺寸，iOS Safari 里补偿盖不住，视口随之跳动；内存里只保留一个消息窗口，滚动到边界时从本地库每次多取 50 条（不裁剪另一端）。
 - **消息窗口**有两种：**最新窗口**是最新的 N 条，后面接着发件箱；**锚定窗口**是某条消息之前 N 条加上从它起的 M 条，向上、向下滚动时分别扩大，扩大到包含最新一条后转回最新窗口。
 - **定位消息**：地址带 `?m={seq}` 时（搜索结果、会话内搜索），窗口换成以它为锚点、前后各 50 条；查询结果里出现目标、列表能显示出来后重建滚动容器（`key` 变化），目标作为滚动锚点（滚动容器只在挂载时使用锚点），定位完成前两个方向都不扩展窗口（那时显示的还是旧窗口），短暂高亮（`MessageScrollerItem` 的 `highlighted` variant）。目标本地已经没有时回到底部并提示。收到后从地址中去掉 `m`（`replace`，不做 View Transition），同一条可以再次定位。
 - **锚定窗口不跟随底部**（关闭 `follow`），否则滚到窗口底部会一路向下扩展到最新；右下角按钮换成最新窗口并滚到底。锚定时自己发了消息（发件箱接在最新一条之后）也回到最新窗口。「自己发的消息平滑滚到底」只在最新窗口里、最后一条变化时生效，挂载时的位置交给滚动锚点。
