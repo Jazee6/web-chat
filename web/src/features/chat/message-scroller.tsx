@@ -78,6 +78,9 @@ function MessageScrollerViewport({ className, ref, ...props }: ComponentProps<'d
       onScroll={() => controller.onScroll()}
       onWheel={() => controller.onUserScroll()}
       onTouchMove={() => controller.onUserScroll()}
+      onTouchStart={() => controller.onTouchStart()}
+      onTouchEnd={() => controller.onTouchEnd()}
+      onTouchCancel={() => controller.onTouchEnd()}
       onKeyDown={(e) => SCROLL_KEYS.has(e.key) && controller.onUserScroll()}
       // 按在视口自身上的只可能是滚动条：拖动滚动条也是用户接管
       onPointerDown={(e) => e.target === e.currentTarget && controller.onUserScroll()}

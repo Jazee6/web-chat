@@ -7,6 +7,8 @@ const EDGE = 8
 const SPRING = 18
 /** 单帧时间步长上限（s）：后台标签页、画中画里帧会被节流，步长过大弹簧会发散 */
 const MAX_DT = 1 / 30
+/** 手指离开后这么久（ms）没有滚动事件就算惯性滚动停了 */
+const TOUCH_QUIET = 150
 
 type Store<T> = { get: () => T; set: (value: T) => void; subscribe: (listener: () => void) => () => void }
 
@@ -61,6 +63,15 @@ export class ScrollController {
    * 按相对视口的位置补偿会把这段滚动也退回去，向上滚时一顿一顿地往回跳
    */
   private snapshot: { el: Element; offset: number } | null = null
+  /** 触摸滚动中：从按下手指到抬起后惯性停下 */
+  private touchScroll = false
+  private touching = false
+  private quiet = 0
+  /**
+   * 触摸滚动中攒下、还没写进 scrollTop 的补偿，暂时用内容的 translate 抵消。
+   * iOS Safari 在手指按着或惯性滚动时写 scrollTop，随后又从自己原来的位置接着滚，视口往回跳；等停下再写
+   */
+  private shift = 0
   /** 上次处理时的最后一条：之后的都是追加的 */
   private tail: Element | null = null
   private resize: ResizeObserver | null = null
@@ -103,6 +114,10 @@ export class ScrollController {
       resize.disconnect()
       intersect.disconnect()
       this.stopGlide()
+      clearTimeout(this.quiet)
+      this.touching = this.touchScroll = false
+      this.shift = 0
+      if (this.content) this.content.style.translate = ''
       this.resize = this.intersect = this.viewport = null
       this.visible.clear()
       this.visibleIds.set([])
@@ -142,6 +157,7 @@ export class ScrollController {
   scrollToEnd(behavior: 'smooth' | 'instant' = 'smooth') {
     const vp = this.viewport
     if (!vp) return
+    this.flushShift()
     this.stick = true
     this.away.set(false)
     if (behavior === 'smooth' && !reducedMotion()) {
@@ -156,6 +172,7 @@ export class ScrollController {
     if (!this.positioned) return
     // 离开底部只能是往上滚了。视口在逐帧变矮（输入框上方的横栏展开）时，自己滚到底的滚动事件晚一帧才到，
     // 那时离底部又远了几像素，不能当成用户离开
+    if (this.touchScroll) this.waitQuiet()
     const top = this.viewport!.scrollTop
     const up = top < this.lastTop - 0.5
     this.lastTop = top
@@ -169,8 +186,39 @@ export class ScrollController {
     this.stopGlide()
   }
 
+  onTouchStart() {
+    clearTimeout(this.quiet)
+    this.touching = this.touchScroll = true
+  }
+
+  onTouchEnd() {
+    this.touching = false
+    this.waitQuiet()
+  }
+
+  /** 手指已经抬起时，滚动事件停下一段时间后结束触摸滚动 */
+  private waitQuiet() {
+    clearTimeout(this.quiet)
+    if (this.touching) return
+    this.quiet = window.setTimeout(() => {
+      this.touchScroll = false
+      this.flushShift()
+    }, TOUCH_QUIET)
+  }
+
+  /** 把暂存的补偿写进 scrollTop，同时去掉 translate：两步在同一帧里，看起来不动 */
+  private flushShift() {
+    const vp = this.viewport
+    if (!this.shift || !vp) return
+    if (this.content) this.content.style.translate = ''
+    vp.scrollTop += this.shift
+    this.shift = 0
+    this.lastTop = vp.scrollTop
+  }
+
   /** 已经在滑时什么都不做：目标每帧重新读取，重置速度反而会顿一下 */
   private startGlide() {
+    this.flushShift()
     if (this.glide || this.distance() <= 0.5) return
     this.glidePos = this.viewport!.scrollTop
     this.glideVel = 0
@@ -242,7 +290,11 @@ export class ScrollController {
     const offset = this.offsetOf(snapshot.el)
     const delta = offset - snapshot.offset
     snapshot.offset = offset
-    if (Math.abs(delta) > 0.5) this.viewport!.scrollTop += delta
+    if (Math.abs(delta) <= 0.5) return
+    if (this.touchScroll) {
+      this.shift += delta
+      this.content.style.translate = `0 ${-this.shift}px`
+    } else this.viewport!.scrollTop += delta
   }
 
   /**
@@ -271,9 +323,10 @@ export class ScrollController {
     return el.getBoundingClientRect().top - this.content!.getBoundingClientRect().top
   }
 
+  /** 暂存的补偿也算上：内容往下 translate 时 scrollHeight 跟着变大 */
   private distance() {
     const vp = this.viewport!
-    return vp.scrollHeight - vp.scrollTop - vp.clientHeight
+    return vp.scrollHeight - vp.scrollTop - vp.clientHeight - Math.max(-this.shift, 0)
   }
 
   private onIntersect(entries: IntersectionObserverEntry[]) {
