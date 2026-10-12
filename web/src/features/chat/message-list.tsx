@@ -75,6 +75,7 @@ import { useSealedUrls } from '@/features/secret/sealed-media'
 import { PendingMedia, SentMedia } from '@/features/media/message-media'
 import { addStickerFromImage, addStickerFromMessage } from '@/features/stickers/add'
 import { isJumboEmoji } from '@/lib/emoji'
+import { cn } from '@/lib/utils'
 import { PendingVoice, VoiceMessage } from '@/features/voice/voice-message'
 import type { OutboxMedia, OutboxVoice } from '@/sync/store'
 import { inPip } from '@/features/pip/pip'
@@ -900,7 +901,8 @@ function ChatMessage({
             className="select-text"
             onPointerDown={(e) => setPhoto((e.target as Element).closest<HTMLElement>('[data-photo]')?.dataset.photo ?? null)}
           >
-            <BubbleContent>
+            {/* 自己发的贴纸与大号 emoji 没有气泡，贴在右边（上面的回复引用照旧撑满） */}
+            <BubbleContent className={cn(mine && (sticker || jumbo) && 'flex flex-col *:last:self-end')}>
               <span className="sr-only">{mine ? 'You' : (users.get(row.sender_id!)?.name ?? 'Someone')}: </span>
               {fwdFrom && <ForwardedFrom from={fwdFrom} meId={me.id} users={users} />}
               {row.reply_to !== null && <ReplyQuote row={row} meId={me.id} users={users} onClick={onJumpToReply} />}
