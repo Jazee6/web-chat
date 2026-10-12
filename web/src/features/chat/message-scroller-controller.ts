@@ -183,14 +183,16 @@ export class ScrollController {
   }
 
   /**
-   * 虚拟列表的渲染范围：在默认范围上并入视口里可见的首末两条与有焦点的一条，保持连续。
+   * 虚拟列表的渲染范围：在默认范围上并入视口里可见的首末两条与有键盘焦点的一条，保持连续。
    * 向上插入历史后下标整体后移，虚拟列表在视口补偿之前仍按旧的滚动位置取范围，取到的是新插入的那些；
    * 并入之后原来看得到的几条留在页面上，补偿才找得到它们
    */
   extendRange(range: Range) {
     let start = Math.max(range.startIndex - range.overscan, 0)
     let end = Math.min(range.endIndex + range.overscan, range.count - 1)
-    const kept = [this.snapshot?.el, this.snapshot?.last, document.activeElement?.closest(ITEM)]
+    // 只留键盘焦点：点击、长按菜单关闭后焦点也会停在气泡上，留着它会让它与视口之间的项全都渲染
+    const focused = document.activeElement?.matches(':focus-visible') ? document.activeElement.closest(ITEM) : null
+    const kept = [this.snapshot?.el, this.snapshot?.last, focused]
     for (const el of kept) {
       if (!el || el.parentElement !== this.content) continue
       const index = this.indexOf(el)
