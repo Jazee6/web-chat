@@ -153,6 +153,9 @@ type StickerRow = Omit<SavedSticker, 'type'> & { removed: number; pts: number }
  */
 type CallMeta = { chat_id: string; call_id: string; device_id: string | null }
 
+/** 运行时拒绝过深的调用链时的错误信息（D1 的前面还有 D1_ERROR:） */
+const DEPTH_LIMIT = 'Subrequest depth limit exceeded'
+
 type Handlers = {
   [M in Method]: (me: Attachment, p: MethodParams<M>, ws: WebSocket) => Promise<Result<MethodResults[M]>>
 }
@@ -348,9 +351,21 @@ export class UserDO extends DurableObject<Env> {
       reply(await handler(me, params.output, ws))
     } catch (e) {
       console.error('method failed', { method: m, error: String(e) })
+      if (String(e).includes(DEPTH_LIMIT)) await this.resetDepth()
       reply(err('internal'))
     }
   }
+
+  /**
+   * 运行时拒绝了过深的调用链：WebSocket 消息沿用最近一次入站请求的调用深度，与对方的 UserDO 经 ChatDO 来回之后会越积越深，
+   * 之后本对象发出的每个调用（连同 D1）都被拒绝，直到有一个全新的入站请求。立即触发一次 Alarm 当作这样的请求（1 行写入，只在出错时）
+   */
+  private async resetDepth() {
+    if ((await this.ctx.storage.getAlarm()) === null) await this.ctx.storage.setAlarm(Date.now())
+  }
+
+  /** 只用来重置调用深度，见 resetDepth */
+  override async alarm() {}
 
   override async webSocketClose(ws: WebSocket, code: number, reason: string) {
     try {
