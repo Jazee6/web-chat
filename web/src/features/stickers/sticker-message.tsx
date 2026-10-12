@@ -93,7 +93,8 @@ function StickerPreview({
     >
       {(Footer) => (
         <>
-          <div className="flex justify-center px-4 md:px-0">
+          {/* 没有底部时自己留出 Drawer 的下边距 */}
+          <div className={save ? 'flex justify-center px-4 md:px-0' : 'flex justify-center px-4 pb-4 md:p-0'}>
             <StickerImage src={src} w={sticker.w} h={sticker.h} size={Math.min(STICKER_SIZE, Math.max(sticker.w, sticker.h))} />
           </div>
           {save && (

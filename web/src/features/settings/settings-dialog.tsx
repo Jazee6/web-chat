@@ -93,45 +93,48 @@ export function SettingsDialog({ open, onOpenChange }: { open: boolean; onOpenCh
         }}
       >
         <DrawerContent>
-          <DrawerHeader>
-            {/* 标题与其他 Drawer 一样居中，两侧各留一个图标按钮的宽度 */}
-            <div className="grid grid-cols-[2rem_1fr_2rem] items-center">
-              <span>
-                {shown && (
-                  <Button variant="ghost" size="icon-sm" aria-label="Back to settings" onClick={() => setMobileSection(null)}>
-                    <ArrowLeftIcon />
-                  </Button>
-                )}
-              </span>
-              <DrawerTitle>{shown?.name ?? 'Settings'}</DrawerTitle>
-            </div>
-            <DrawerDescription className="sr-only">Manage your account settings.</DrawerDescription>
-          </DrawerHeader>
-          {shown ? (
-            <SectionContent section={shown.id} Footer={DrawerFooter} />
-          ) : (
-            <div className="px-4 pb-4">
-              <ItemGroup>
-                {SECTIONS.map((item) => (
-                  <Item
-                    key={item.id}
-                    variant="outline"
-                    size="sm"
-                    render={<button type="button" />}
-                    onClick={() => setMobileSection(item.id)}
-                  >
-                    <ItemMedia variant="icon">{item.icon}</ItemMedia>
-                    <ItemContent>
-                      <ItemTitle>{item.name}</ItemTitle>
-                    </ItemContent>
-                    <ItemActions>
-                      <ChevronRightIcon />
-                    </ItemActions>
-                  </Item>
-                ))}
-              </ItemGroup>
-            </div>
-          )}
+          {/* Drawer 的头部与内容之间没有间距：与其他 Drawer 一样隔开 */}
+          <div className="flex min-h-0 flex-1 flex-col gap-6">
+            <DrawerHeader>
+              {/* 标题与其他 Drawer 一样居中，两侧各留一个图标按钮的宽度 */}
+              <div className="grid grid-cols-[2rem_1fr_2rem] items-center">
+                <span>
+                  {shown && (
+                    <Button variant="ghost" size="icon-sm" aria-label="Back to settings" onClick={() => setMobileSection(null)}>
+                      <ArrowLeftIcon />
+                    </Button>
+                  )}
+                </span>
+                <DrawerTitle>{shown?.name ?? 'Settings'}</DrawerTitle>
+              </div>
+              <DrawerDescription className="sr-only">Manage your account settings.</DrawerDescription>
+            </DrawerHeader>
+            {shown ? (
+              <SectionContent section={shown.id} Footer={DrawerFooter} />
+            ) : (
+              <div className="px-4 pb-4">
+                <ItemGroup>
+                  {SECTIONS.map((item) => (
+                    <Item
+                      key={item.id}
+                      variant="outline"
+                      size="sm"
+                      render={<button type="button" />}
+                      onClick={() => setMobileSection(item.id)}
+                    >
+                      <ItemMedia variant="icon">{item.icon}</ItemMedia>
+                      <ItemContent>
+                        <ItemTitle>{item.name}</ItemTitle>
+                      </ItemContent>
+                      <ItemActions>
+                        <ChevronRightIcon />
+                      </ItemActions>
+                    </Item>
+                  ))}
+                </ItemGroup>
+              </div>
+            )}
+          </div>
         </DrawerContent>
       </Drawer>
     )

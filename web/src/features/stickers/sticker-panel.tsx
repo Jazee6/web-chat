@@ -132,15 +132,18 @@ export function StickerPanel({
       <Drawer open={open} onOpenChange={(next, details) => (next || !inContextMenu(details.event)) && onOpenChange(next)}>
         <DrawerContent aria-label="Stickers">
           {fileInput}
-          {/* 标题与其他 Drawer 一样居中，两侧各留一个图标按钮的宽度 */}
-          <DrawerHeader>
-            <div className="grid grid-cols-[2rem_1fr_2rem] items-center">
-              <span />
-              <DrawerTitle>Stickers</DrawerTitle>
-              {addAction}
-            </div>
-          </DrawerHeader>
-          <div className="flex flex-col px-4 pb-4">{content}</div>
+          {/* Drawer 的头部与内容之间没有间距：与其他 Drawer 一样隔开 */}
+          <div className="flex min-h-0 flex-1 flex-col gap-6">
+            {/* 标题与其他 Drawer 一样居中，两侧各留一个图标按钮的宽度 */}
+            <DrawerHeader>
+              <div className="grid grid-cols-[2rem_1fr_2rem] items-center">
+                <span />
+                <DrawerTitle>Stickers</DrawerTitle>
+                {addAction}
+              </div>
+            </DrawerHeader>
+            <div className="flex flex-col px-4 pb-4">{content}</div>
+          </div>
         </DrawerContent>
       </Drawer>
     )

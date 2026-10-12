@@ -26,11 +26,14 @@ export function ResponsiveDialog({
     return (
       <Drawer open={open} onOpenChange={onOpenChange}>
         <DrawerContent>
-          <DrawerHeader>
-            <DrawerTitle>{title}</DrawerTitle>
-            <DrawerDescription>{description}</DrawerDescription>
-          </DrawerHeader>
-          {children(DrawerFooter)}
+          {/* Drawer 的头部、内容与底部之间没有间距：与 Dialog 一样隔开 */}
+          <div className="flex min-h-0 flex-1 flex-col gap-6">
+            <DrawerHeader>
+              <DrawerTitle>{title}</DrawerTitle>
+              <DrawerDescription>{description}</DrawerDescription>
+            </DrawerHeader>
+            {children(DrawerFooter)}
+          </div>
         </DrawerContent>
       </Drawer>
     )
