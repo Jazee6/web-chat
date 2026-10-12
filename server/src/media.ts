@@ -78,7 +78,8 @@ const objectUrl = (env: Env, key: string) => `https://${env.R2_ACCOUNT_ID}.r2.cl
 export async function copyObject(env: Env, src: string, dst: string): Promise<boolean> {
   const res = await s3(env).fetch(objectUrl(env, dst), { method: 'PUT', headers: { 'x-amz-copy-source': `/${env.R2_BUCKET}/${src}` } })
   if (res.status === 404) return false
-  if (!res.ok) throw new Error(`copy failed: ${res.status}`)
+  // 带上响应正文：调用深度超限时 R2 也可能以 4xx 拒绝，正文里有原因
+  if (!res.ok) throw new Error(`copy failed: ${res.status} ${(await res.text()).slice(0, 500)}`)
   return true
 }
 

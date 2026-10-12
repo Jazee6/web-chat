@@ -156,6 +156,9 @@ type CallMeta = { chat_id: string; call_id: string; device_id: string | null }
 /** 运行时拒绝过深的调用链时的错误信息（D1 的前面还有 D1_ERROR:） */
 const DEPTH_LIMIT = 'Subrequest depth limit exceeded'
 
+/** 留到 Alarm 里重做的请求：回复到原来的连接 */
+type Deferred = { ws: WebSocket; id: number; m: Method; p: unknown }
+
 type Handlers = {
   [M in Method]: (me: Attachment, p: MethodParams<M>, ws: WebSocket) => Promise<Result<MethodResults[M]>>
 }
@@ -258,6 +261,8 @@ export class UserDO extends DurableObject<Env> {
   /** 已处理过断开的连接：webSocketError 之后可能还会触发 webSocketClose */
   private gone = new WeakSet<WebSocket>()
   private vapid: Vapid | null = null
+  /** 因调用深度超限失败、等 Alarm 重做的请求（只在内存里） */
+  private deferred: Deferred[] = []
   /** 签发过的 ICE 服务器，在凭据有效期过半之前复用 */
   private ice: { servers: IceServer[]; expires: number } | null = null
   /** 发一条推送，返回推送服务的 HTTP 状态；测试替换为假的实现 */
@@ -338,34 +343,53 @@ export class UserDO extends DurableObject<Env> {
     if (!frame.success) return ws.close(1008, 'invalid frame')
 
     const { id, m, p } = frame.output
-    const reply = (res: Result<unknown>) =>
-      send(ws, res.ok ? { t: 'res', id, ok: true, r: res.r } : { t: 'res', id, ok: false, e: res.e, user_ids: res.user_ids })
-
-    if (!isMethod(m)) return reply(err('unknown_method'))
+    if (!isMethod(m)) return reply(ws, id, err('unknown_method'))
     const params = v.safeParse(methodParams[m], p)
-    if (!params.success) return reply(err('bad_request'))
+    if (!params.success) return reply(ws, id, err('bad_request'))
 
-    const me = ws.deserializeAttachment() as Attachment
-    const handler = this.handlers[m] as (me: Attachment, p: unknown, ws: WebSocket) => Promise<Result<unknown>>
     try {
-      reply(await handler(me, params.output, ws))
+      reply(ws, id, await this.handle(ws, m, params.output))
     } catch (e) {
       console.error('method failed', { method: m, error: String(e) })
-      if (String(e).includes(DEPTH_LIMIT)) await this.resetDepth()
-      reply(err('internal'))
+      if (String(e).includes(DEPTH_LIMIT) && (await this.defer({ ws, id, m, p: params.output }))) return
+      reply(ws, id, err('internal'))
     }
   }
 
-  /**
-   * 运行时拒绝了过深的调用链：WebSocket 消息沿用最近一次入站请求的调用深度，与对方的 UserDO 经 ChatDO 来回之后会越积越深，
-   * 之后本对象发出的每个调用（连同 D1）都被拒绝，直到有一个全新的入站请求。立即触发一次 Alarm 当作这样的请求（1 行写入，只在出错时）
-   */
-  private async resetDepth() {
-    if ((await this.ctx.storage.getAlarm()) === null) await this.ctx.storage.setAlarm(Date.now())
+  private handle(ws: WebSocket, m: Method, p: unknown): Promise<Result<unknown>> {
+    const handler = this.handlers[m] as (me: Attachment, p: unknown, ws: WebSocket) => Promise<Result<unknown>>
+    return handler(ws.deserializeAttachment() as Attachment, p, ws)
   }
 
-  /** 只用来重置调用深度，见 resetDepth */
-  override async alarm() {}
+  /**
+   * 运行时拒绝了过深的调用链（见 04-realtime-and-fanout.md § 调用深度）：WebSocket 消息里发出的调用会这样失败一段时间，
+   * Alarm 里发出的则不会。请求留到立即触发的 Alarm 里重做（只在出错时写 1 行）；Alarm 已经排上时不再写
+   */
+  private async defer(d: Deferred): Promise<boolean> {
+    try {
+      if ((await this.ctx.storage.getAlarm()) === null) await this.ctx.storage.setAlarm(Date.now())
+    } catch {
+      return false
+    }
+    this.deferred.push(d)
+    return true
+  }
+
+  /** 按到达顺序重做留下的请求，每个只回复一次；连接已经断开的不再重做，客户端重连后自己重发 */
+  override async alarm() {
+    const batch = this.deferred
+    this.deferred = []
+    for (const d of batch) {
+      if (d.ws.readyState !== WebSocket.OPEN) continue
+      try {
+        reply(d.ws, d.id, await this.handle(d.ws, d.m, d.p))
+        console.log('method retried', { method: d.m })
+      } catch (e) {
+        console.error('method retry failed', { method: d.m, error: String(e) })
+        reply(d.ws, d.id, err('internal'))
+      }
+    }
+  }
 
   override async webSocketClose(ws: WebSocket, code: number, reason: string) {
     try {
@@ -688,17 +712,18 @@ export class UserDO extends DurableObject<Env> {
       const seq = Math.min(max_seq, cur.top_seq)
       if (seq <= cur.last_read_seq) return ok(null)
 
+      // 先发回执再写对话行：发不出去（调用深度超限）时请求在 Alarm 里重做，回执不会因为对话行已经前移而被跳过
+      if (cur.kind !== 'group') {
+        const res = await this.chat(chat_id).read(chat_id, me.user_id, seq)
+        // 回执丢失只影响对方的双勾，下一次已读会带上更大的位置
+        if (!res.ok) console.error('read receipt failed', { chat_id, error: res.e })
+      }
       const row: DialogRow = { ...cur, last_read_seq: seq, mentions: unreadMentions(cur.mentions, seq), pts: ++this.userPts }
       this.sql.run(
         'UPDATE dialogs SET last_read_seq = ?, mentions = ?, pts = ? WHERE chat_id = ?',
         row.last_read_seq, row.mentions, row.pts, chat_id,
       )
       this.broadcast([{ k: 'user', pts: row.pts, ev: { type: 'dialog', dialog: toDialog(row) } }])
-      if (cur.kind !== 'group') {
-        const res = await this.chat(chat_id).read(chat_id, me.user_id, seq)
-        // 回执丢失只影响对方的双勾，下一次已读会带上更大的位置
-        if (!res.ok) console.error('read receipt failed', { chat_id, error: res.e })
-      }
       return ok(null)
     },
 
@@ -1946,6 +1971,10 @@ function toDialog(row: DialogRow): Dialog {
 function unreadMentions(json: string | null, lastRead: number): string | null {
   const seqs = json ? (JSON.parse(json) as number[]).filter((seq) => seq > lastRead).sort((a, b) => a - b) : []
   return seqs.length > 0 ? JSON.stringify(seqs) : null
+}
+
+function reply(ws: WebSocket, id: number, res: Result<unknown>) {
+  send(ws, res.ok ? { t: 'res', id, ok: true, r: res.r } : { t: 'res', id, ok: false, e: res.e, user_ids: res.user_ids })
 }
 
 function send(ws: WebSocket, frame: ServerFrame) {

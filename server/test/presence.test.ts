@@ -159,26 +159,36 @@ describe('输入中', () => {
 })
 
 describe('调用深度超限', () => {
-  it('排一次立即触发的 Alarm 重置调用深度，已有 Alarm 时不再写', async () => {
-    const { a, chatId } = await pair()
-    const ca = await connect(a.id)
-    const alarms: number[] = []
-    await inUser(a.id, (o, state) => {
-      const depth = new Error('Subrequest depth limit exceeded. This request looped back into the Workers runtime too many times.')
-      Object.assign(o, { chat: () => ({ typing: () => Promise.reject(depth) }) })
-      let pending: number | null = null
-      state.storage.getAlarm = async () => pending
-      state.storage.setAlarm = async (at) => {
-        pending = Number(at)
-        alarms.push(pending)
+  const depth = () => new Error('Subrequest depth limit exceeded. This request looped back into the Workers runtime too many times.')
+
+  /** 让 UserDO 接下来 n 次发往 ChatDO 的调用因深度超限失败 */
+  const failChatCalls = (userId: string, n: number) =>
+    inUser(userId, (o) => {
+      const target = o as unknown as { chat: (chatId: string) => unknown }
+      const chat = target.chat.bind(o)
+      target.chat = (chatId) => {
+        if (n-- > 0) throw depth()
+        return chat(chatId)
       }
     })
 
-    const before = Date.now()
+  it('请求留到 Alarm 里重做，成功后照常回复', async () => {
+    const { a, b, chatId } = await pair()
+    const ca = await connect(a.id)
+    const cb = await connect(b.id)
+    await cb.call('presence.update', { visible: true, viewing: [chatId] })
+    await failChatCalls(a.id, 1)
+
+    expect(await ca.call('presence.typing', { chat_id: chatId, action: 'typing' })).toEqual({ ok: true, r: null })
+    await eventually(() => expect(typings(cb.events)).toEqual([{ type: 'typing', chat_id: chatId, user_id: a.id, action: 'typing' }]))
+  })
+
+  it('重做仍然失败时回复 internal，不再重做', async () => {
+    const { a, chatId } = await pair()
+    const ca = await connect(a.id)
+    await failChatCalls(a.id, 2)
+
     expect(await ca.call('presence.typing', { chat_id: chatId, action: 'typing' })).toEqual({ ok: false, e: 'internal' })
-    expect(alarms).toHaveLength(1)
-    expect(alarms[0]).toBeGreaterThanOrEqual(before)
-    expect(await ca.call('presence.typing', { chat_id: chatId, action: 'typing' })).toEqual({ ok: false, e: 'internal' })
-    expect(alarms).toHaveLength(1)
+    expect(await ca.call('presence.typing', { chat_id: chatId, action: 'typing' })).toEqual({ ok: true, r: null })
   })
 })

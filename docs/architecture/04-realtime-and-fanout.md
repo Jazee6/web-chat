@@ -15,7 +15,7 @@
 - `ChatDO` 发送完成后，**不 await** 扇出，先把结果返回给发送者，然后对每个成员（发送者除外）的 `UserDO` 调用 `onChatEvents(events[])`。
 - **批量合并**：扇出期间新到达的事件，按目标用户合并进同一次 RPC。每次 RPC 调用计 1 个请求，合并可以显著降低突发流量下的成本。
 - **失败重试**：RPC 失败（对象过载、部署重启等）时，把该用户的事件写入 `fanout_outbox`，由 Alarm 指数退避重试。正常路径不产生这张表的写入。
-- **调用深度**：运行时限制调用链的嵌套深度（`Subrequest depth limit exceeded`），而 DO 发出的调用沿用它最近一次入站请求的深度。两个 `UserDO` 经 `ChatDO` 来回投递时深度越积越深，超限后这个对象发出的每个调用都被拒绝，直到收到一个全新的入站请求。`ChatDO` 的扇出失败本来就走 Alarm 重试；`UserDO` 处理客户端请求遇到这个错误时，也立即排一次 Alarm 来重置（只在出错时写 1 行）。这一机制 Cloudflare 没有文档，是根据线上日志与第三方报告推断的。
+- **调用深度**：运行时限制调用链的嵌套深度（`Subrequest depth limit exceeded`）。线上日志显示，两个 `UserDO` 经 `ChatDO` 来回投递一段时间后，某个 `UserDO` 处理 WebSocket 消息时发出的调用（连同 D1、R2）会接连被拒绝，自己排的 Alarm 也不能让它恢复；但 Alarm 里发出的调用不受影响。所以 `ChatDO` 的扇出失败走 Alarm 重试，`UserDO` 处理客户端请求遇到这个错误时，把请求留在内存里，排一次立即触发的 Alarm 重做后再回复（只在出错时写 1 行）。实例在 Alarm 触发前被逐出时，这个请求要等客户端重连才会失败。Cloudflare 没有说明深度如何继承，以上是根据日志推断的。
 - 成员 `UserDO` 收到后：upsert dialog（1 行）→ 用 `ctx.getWebSockets()` 推给所有在线设备 → 如果没有**可见**的设备且未静音，发送 Web Push。
 
 ## 调用限额
