@@ -98,7 +98,6 @@
 | `@cloudflare/vite-plugin` | Vite 开发时在 workerd 里运行 Worker，实现前后端一体开发 | web | 替代方案是分别运行 `vite` 与 `wrangler dev` 并配置代理 |
 | `@cloudflare/vitest-pool-workers` + `vitest` | 在真实 workerd 环境中测试 DO | server | 无法替代 |
 | `ts-mls` | MLS 端到端加密（秘密聊天，套件 1，只依赖 `@hpke/core`；未经正式审计） | web | **已确认**（2026-10-09）。自实现 X3DH + Double Ratchet 只能一对一，且是几千行安全敏感代码，见 [ADR-0010](../adr/0010-secret-chats-multi-device-mls.md) |
-| `@tanstack/react-virtual` | 消息列表的虚拟列表：只用它决定渲染哪些项，滚动位置与补偿仍由自己的滚动容器负责 | web | **已确认**（2026-10-12）。见 [07 § 消息列表](./07-client.md#消息列表) |
 | `cmdk` | shadcn Command 的底层（会话内搜索）；连带引入它依赖的若干 `@radix-ui/*` | web | **已确认**（2026-09-30）。可以用 InputGroup + Item 自己拼键盘选择，但 UI 规则要求组合 shadcn 组件 |
 
 **不安装**：`sonner`。Toast 使用 shadcn 自带的 `toast` 组件（基于 Base UI Toast）。

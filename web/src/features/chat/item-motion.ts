@@ -1,6 +1,6 @@
 // 消息里的元素出现与消失（回应、状态、撤回占位、编辑后的正文、上传进度）：在已经显示的消息里出现时淡入，
 // 消失时在原位淡出；随消息一起挂载或卸载的不播（消息自己有入场动画，加载历史、换会话时也不该闪）。
-// 用 Web Animations API 而不是 CSS 动画：元素出现时才决定播不播
+// 用 Web Animations API 而不是 CSS 动画：消息项带 content-visibility，CSS 动画在它显隐切换时会重播
 import { fade, pop, presence } from '@/lib/presence'
 
 const ITEM = '[data-slot="message-scroller-item"]'

@@ -58,7 +58,7 @@ function Bubble({
   VariantProps<typeof bubbleVariants> & {
     align?: "start" | "end"
     // 带 BubbleReactions：让出回应探到气泡下沿外的部分（高度的 3/4 加上 ring，约 21px）。
-    // 否则会压到下一条消息上
+    // 消息项有 content-visibility，超出项的部分会被裁掉
     reactions?: boolean
   }) {
   return (
