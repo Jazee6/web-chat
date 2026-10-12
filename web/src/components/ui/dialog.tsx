@@ -52,9 +52,9 @@ const dialogContentVariants = cva(
         // 搜索类对话框（与 CommandDialog 相同）：内容是一整块 Command，靠上摆放
         command: "top-1/3 translate-y-0 overflow-hidden p-0 sm:max-w-md",
         // 全屏图片查看器：铺满视口、黑底，关闭按钮等控件由内容自己摆放；
-        // 进出场由调用方用 View Transition 播放，不用自带的淡入缩放
+        // 进出场由调用方用 View Transition 播放，不用自带的淡入缩放；手势（滑动、捏合）都由内容自己处理
         viewer:
-          "inset-0 top-0 left-0 flex h-svh w-screen max-w-none translate-x-0 translate-y-0 flex-col rounded-none bg-black p-0 text-white ring-0 data-open:animate-none data-closed:animate-none",
+          "inset-0 top-0 left-0 flex h-svh w-screen max-w-none translate-x-0 translate-y-0 flex-col rounded-none bg-black p-0 text-white ring-0 touch-none data-open:animate-none data-closed:animate-none",
       },
     },
     defaultVariants: {

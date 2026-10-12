@@ -8,9 +8,11 @@ import { toast } from '@/components/ui/toast'
 import { useSealedUrls } from '@/features/secret/sealed-media'
 import { addStickerFromImage } from '@/features/stickers/add'
 import { pause as pauseVoice } from '@/features/voice/player'
+import { cn } from '@/lib/utils'
 import { mediaImgProps } from './media-url'
 import type { AlbumPhoto } from './album'
 import { copyImage } from './copy-image'
+import { useZoom, ZOOM_CLASS } from './use-zoom'
 
 /** 左右滑动超过这个距离才切换 */
 const SWIPE_PX = 50
@@ -55,9 +57,13 @@ export function PhotoViewer({
   // 秘密聊天的大图（视频）解开之前为 null：只显示预览图，不能复制与下载
   const [sealed] = useSealedUrls([photo && typeof photo.full !== 'string' ? photo.full : null])
   const full = photo && typeof photo.full === 'string' ? photo.full : sealed!
+  // 只有图片能缩放；放大或捏合过的这次手势不再当作滑动切换或轻点关闭
+  const { view, zoomed, areaRef, wheelRef, pointer, consumed, reset } = useZoom(photo ? photo.w / photo.h : 1, kind === 'photo')
   const go = (delta: number) => {
     const next = index + delta
-    if (next >= 0 && next < photos.length) onIndexChange(next)
+    if (next < 0 || next >= photos.length) return
+    reset()
+    onIndexChange(next)
   }
 
   const download = async () => {
@@ -94,6 +100,7 @@ export function PhotoViewer({
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
       <DialogContent
+        ref={wheelRef}
         variant="viewer"
         showCloseButton={false}
         onKeyDown={(e) => {
@@ -106,7 +113,7 @@ export function PhotoViewer({
         // 轻点图片、视频与按钮以外的地方关闭；滑动切换松手后也会触发 click，不算
         onClick={(e) => {
           const tap = downX.current !== null && Math.abs(e.clientX - downX.current) <= SWIPE_PX
-          if (tap && !(e.target as Element).closest('img, video, button')) onClose()
+          if (tap && !consumed() && !(e.target as Element).closest('img, video, button')) onClose()
         }}
       >
         <DialogTitle className="sr-only">
@@ -143,9 +150,15 @@ export function PhotoViewer({
           </DialogClose>
         </div>
         <div
-          className="relative flex min-h-0 flex-1 touch-pan-y items-center justify-center @container-size"
+          ref={areaRef}
+          className={cn(
+            'relative flex min-h-0 flex-1 items-center justify-center overflow-hidden @container-size',
+            zoomed && 'cursor-grab active:cursor-grabbing',
+          )}
+          {...pointer}
           onPointerUp={(e) => {
-            if (downX.current === null) return
+            pointer.onPointerUp(e)
+            if (downX.current === null || consumed()) return
             const dx = e.clientX - downX.current
             if (Math.abs(dx) > SWIPE_PX) go(dx > 0 ? -1 : 1)
           }}
@@ -157,8 +170,11 @@ export function PhotoViewer({
             <div
               key={index}
               ref={photoRef}
-              className="relative aspect-(--ratio) w-[min(100cqw,100cqh*var(--ratio))] [view-transition-name:photo] *:absolute *:inset-0 *:size-full *:object-contain"
-              style={{ '--ratio': photo.w / photo.h } as React.CSSProperties}
+              className={cn(
+                'relative aspect-(--ratio) w-[min(100cqw,100cqh*var(--ratio))] [view-transition-name:photo] *:absolute *:inset-0 *:size-full *:object-contain',
+                zoomed && ZOOM_CLASS,
+              )}
+              style={{ '--ratio': photo.w / photo.h, '--zoom': view.scale, '--zoom-x': `${view.x}px`, '--zoom-y': `${view.y}px` } as React.CSSProperties}
             >
               {(!photo.animated || !full) && <img src={photo.preview} alt="" {...mediaImgProps} draggable={false} />}
               {!full ? (
