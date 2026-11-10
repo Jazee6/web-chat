@@ -818,6 +818,8 @@ function ChatMessage({
   const media = row.media ? (JSON.parse(row.media) as (Media | OutboxMedia)[]) : null
   const album = media?.[0]?.type === 'photo' || media?.[0]?.type === 'video'
   const voice = media?.[0]?.type === 'voice' ? media[0] : null
+  // 相册、文件、贴纸、链接卡片与大号 emoji 不套气泡
+  const ghost = (row.kind === 'media' && !voice) || card || jumbo
   const secret = parseSecretChatId(chatId) !== null
   // 加入我的贴纸：已发送的、不在秘密聊天里的图片（按下的那张）与贴纸消息
   const canSave = seq !== null && !secret
@@ -899,7 +901,7 @@ function ChatMessage({
             aria-keyshortcuts="Enter Shift+F10"
             render={
               <Bubble
-                variant={(row.kind === 'media' && !voice) || card || jumbo ? 'ghost' : mine ? 'default' : 'muted'}
+                variant={ghost ? 'ghost' : mine ? 'default' : 'muted'}
                 focusable
                 reactions={reactions !== null}
               />
@@ -907,11 +909,11 @@ function ChatMessage({
             className="select-text"
             onPointerDown={(e) => setPhoto((e.target as Element).closest<HTMLElement>('[data-photo]')?.dataset.photo ?? null)}
           >
-            {/* 自己发的贴纸与大号 emoji 没有气泡，贴在右边（上面的回复引用照旧撑满） */}
-            <BubbleContent className={cn(mine && (sticker || jumbo) && 'flex flex-col *:last:self-end')}>
+            {/* 自己发的没有气泡的消息（连同回复引用）贴在右边，宽度不同时右边对齐 */}
+            <BubbleContent className={cn(mine && ghost && 'flex flex-col items-end')}>
               <span className="sr-only">{mine ? 'You' : (users.get(row.sender_id!)?.name ?? 'Someone')}: </span>
               {fwdFrom && <ForwardedFrom from={fwdFrom} meId={me.id} users={users} />}
-              {row.reply_to !== null && <ReplyQuote row={row} meId={me.id} users={users} onClick={onJumpToReply} />}
+              {row.reply_to !== null && <ReplyQuote row={row} meId={me.id} users={users} ghost={ghost} onClick={onJumpToReply} />}
               {voice ? (
                 seq === null ? (
                   <PendingVoice
@@ -1153,21 +1155,27 @@ function ReactionChips({
   )
 }
 
-/** 气泡里的回复引用：点击定位到被回复的消息；本地还没有时显示占位（不能点），由同步 Worker 拉取 */
+/**
+ * 气泡里的回复引用：点击定位到被回复的消息；本地还没有时显示占位（不能点），由同步 Worker 拉取。
+ * 没有气泡的消息（ghost）里最宽与相册一样，长引用截断，不把消息撑满一行
+ */
 function ReplyQuote({
   row,
   meId,
   users,
+  ghost,
   onClick,
 }: {
   row: MessageRow
   meId: string
   users: Map<string, UserInfo>
+  ghost: boolean
   onClick: (seq: number) => void
 }) {
+  const width = ghost && 'max-w-72 sm:max-w-80'
   if (row.reply_seq === null) {
     return (
-      <Item variant="quote" size="xs">
+      <Item variant="quote" size="xs" className={cn(width)}>
         <ItemContent>
           {/* 与 ItemTitle、ItemDescription 同样的行高 */}
           <SkeletonText className="w-24 text-sm/snug" />
@@ -1196,7 +1204,7 @@ function ReplyQuote({
       variant="quote"
       size="xs"
       render={<button type="button" />}
-      className="cursor-pointer text-left hover:bg-current/15"
+      className={cn('cursor-pointer text-left hover:bg-current/15', width)}
       onClick={() => onClick(row.reply_seq!)}
     >
       {(first?.type === 'photo' || first?.type === 'video' || first?.type === 'sticker') && (

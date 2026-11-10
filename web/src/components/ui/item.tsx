@@ -42,12 +42,13 @@ const itemVariants = cva(
         default: "border-transparent",
         outline: "border-border",
         muted: "border-transparent bg-muted/50",
-        // 回复引用：跟随所在容器的文字颜色，气泡内外都能用
+        // 回复引用：跟随所在容器的文字颜色，气泡内外都能用。左侧竖条是内缩的圆角胶囊（左内边距见 compoundVariants）。
+        // 在气泡里更紧凑，与下面的正文、图片隔开一点
         quote:
-          "rounded-lg border-transparent border-l-3 border-l-current bg-current/10 **:data-[slot=item-description]:line-clamp-1 **:data-[slot=item-description]:text-current/75",
-        // 链接预览卡片：大图贴边（放在 ItemHeader 里），下面一行是标题与域名；没有大图时左边是 ItemMedia
+          "relative rounded-lg border-0 bg-current/10 before:absolute before:inset-y-1.5 before:start-1.5 before:w-1 before:rounded-full before:bg-current **:data-[slot=item-description]:line-clamp-1 **:data-[slot=item-description]:text-current/75 in-data-[slot=bubble-content]:mb-1.5 in-data-[slot=bubble-content]:gap-2 in-data-[slot=bubble-content]:py-1.5 in-data-[slot=bubble-content]:ps-4 in-data-[slot=bubble-content]:pe-2.5 in-data-[slot=bubble-content]:*:data-[slot=item-content]:gap-0",
+        // 链接预览卡片：大图贴边（放在 ItemHeader 里），下面一行是标题与域名；没有大图时左边是 ItemMedia，上下居中
         link:
-          "w-72 max-w-full overflow-hidden border-transparent bg-muted [a]:hover:bg-[color-mix(in_oklch,var(--muted),var(--foreground)_5%)] *:data-[slot=item-content]:min-w-0 *:data-[slot=item-content]:gap-0.5 *:data-[slot=item-content]:px-3.5 *:data-[slot=item-content]:py-2.5 *:data-[slot=item-media]:ms-3 **:data-[slot=item-title]:line-clamp-2 **:data-[slot=item-title]:w-auto **:data-[slot=item-description]:line-clamp-1 **:data-[slot=item-description]:text-xs",
+          "w-72 max-w-full overflow-hidden border-transparent bg-muted [a]:hover:bg-[color-mix(in_oklch,var(--muted),var(--foreground)_5%)] *:data-[slot=item-content]:min-w-0 *:data-[slot=item-content]:gap-0.5 *:data-[slot=item-content]:px-3.5 *:data-[slot=item-content]:py-2.5 *:data-[slot=item-media]:ms-3 *:data-[slot=item-media]:translate-y-0 *:data-[slot=item-media]:self-center **:data-[slot=item-title]:line-clamp-2 **:data-[slot=item-title]:w-auto **:data-[slot=item-description]:line-clamp-1 **:data-[slot=item-description]:text-xs",
       },
       size: {
         // 不留内边距，由内容自己决定（链接预览卡片的大图要贴边）
@@ -57,6 +58,8 @@ const itemVariants = cva(
         xs: "gap-2.5 px-3 py-2.5 in-data-[slot=dropdown-menu-content]:p-0",
       },
     },
+    // 引用左边让出竖条的位置：写在这里才能盖过 size 的 px
+    compoundVariants: [{ variant: "quote", size: "xs", className: "ps-4" }],
     defaultVariants: {
       variant: "default",
       size: "default",
