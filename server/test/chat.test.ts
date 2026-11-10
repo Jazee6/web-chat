@@ -1,12 +1,22 @@
 import { env, evictDurableObject, runDurableObjectAlarm } from 'cloudflare:test'
 import { newGroupChatId, privateChatId, type Update } from 'shared/protocol'
 import { describe, expect, it } from 'vitest'
+import type { ChatDO } from '../src/chat-do'
 import { chatWrites, connect, createUser, eventually, inChat, randomId, uid, userWrites } from './helpers'
 
 async function pair() {
   const a = await createUser()
   const b = await createUser()
   return { a, b, chatId: privateChatId(a.id, b.id) }
+}
+
+/** 直接往重试队列里放一行（模拟一次失败的扇出） */
+function queueRetry(o: ChatDO, userId: string, events: unknown[], { createdAt = Date.now(), nextAt = 0, attempts = 1 } = {}) {
+  o.sql.run('INSERT INTO fanout_outbox (user_id, events, created_at) VALUES (?, ?, ?)', userId, JSON.stringify(events), createdAt)
+  o.sql.run(
+    'INSERT INTO fanout_retry (user_id, attempts, next_at) VALUES (?, ?, ?) ON CONFLICT (user_id) DO UPDATE SET next_at = excluded.next_at',
+    userId, attempts, nextAt,
+  )
 }
 
 const newMessages = (updates: Update[]) =>
@@ -201,7 +211,7 @@ describe('扇出重试', () => {
       message: { chat_id: chatId, seq: 99, pts: 99, sender_id: a.id, date: Date.now(), kind: 'text', text: 'lost' },
     }
     await inChat(chatId, async (o, state) => {
-      o.sql.run('INSERT INTO fanout_outbox (user_id, events, attempts, next_at) VALUES (?, ?, 1, 0)', b.id, JSON.stringify([lost]))
+      queueRetry(o, b.id, [lost])
       // 定在未来，避免运行时自行触发；由 runDurableObjectAlarm 立即执行
       await state.storage.setAlarm(Date.now() + 60_000)
     })
@@ -211,11 +221,94 @@ describe('扇出重试', () => {
     const dialog = await cb.call('sync.user', { pts: 0 })
     expect(dialog).toMatchObject({ ok: true, r: { dialogs: [{ top_seq: 99, chat_pts: 99 }] } })
     expect(await inChat(chatId, (o) => o.sql.all('SELECT * FROM fanout_outbox'))).toEqual([])
+    expect(await inChat(chatId, (o) => o.sql.all('SELECT * FROM fanout_retry'))).toEqual([])
 
     // 重复投递是幂等的：不写入、不推送
     const before = await userWrites(b.id)
     await env.USER.getByName(b.id).onChatEvents(chatId, b.id, [lost as never], { kind: 'private', title: null })
     expect(await userWrites(b.id)).toBe(before)
+  })
+
+  it('重试队列里还有某个用户的事件时，后来的事件排在后面，Alarm 按顺序一起送达', async () => {
+    const { a, b, chatId } = await pair()
+    const ca = await connect(a.id)
+    const cb = await connect(b.id)
+    const send = (text: string) => ca.call('messages.send', { chat_id: chatId, random_id: randomId(), text })
+    await send('first')
+    await eventually(() => expect(newMessages(cb.updates)).toHaveLength(1))
+
+    // 让投递失败一次：A 进入重试队列
+    const fail = { on: true }
+    await inChat(chatId, (o) => {
+      const target = o as unknown as { deliver: (userId: string, events: unknown[]) => Promise<void> }
+      const deliver = target.deliver.bind(o)
+      target.deliver = async (userId, events) => {
+        if (fail.on) throw new Error('down')
+        return deliver(userId, events)
+      }
+    })
+    await send('A')
+    const outbox = () => inChat(chatId, (o) => o.sql.all('SELECT id FROM fanout_outbox'))
+    await eventually(async () => expect(await outbox()).toHaveLength(1))
+    // 模拟已经退避了很久的 A
+    const later = Date.now() + 60 * 60 * 1000
+    await inChat(chatId, async (o, state) => {
+      o.sql.run('UPDATE fanout_retry SET attempts = 10, next_at = ?', later)
+      await state.storage.setAlarm(later)
+    })
+
+    // B 本可以直接送达，但排到 A 后面；B 的到来把 A 的重试提前，Alarm 自行触发，按顺序送达
+    fail.on = false
+    await send('B')
+    await eventually(() => expect(newMessages(cb.updates).map((m) => m.kind === 'text' && m.text)).toEqual(['first', 'A', 'B']), 5000)
+    expect(await outbox()).toEqual([])
+    expect(await inChat(chatId, (o) => o.sql.all('SELECT * FROM fanout_retry'))).toEqual([])
+    expect(await cb.call('sync.user', { pts: 0 })).toMatchObject({ ok: true, r: { dialogs: [{ top_seq: 3, chat_pts: 3 }] } })
+  })
+
+  it('持续失败时，入队与退避的写入行数与积压多少无关', async () => {
+    const { a, b, chatId } = await pair()
+    const ca = await connect(a.id)
+    await ca.call('messages.send', { chat_id: chatId, random_id: randomId(), text: 'first' })
+    const writes = (backlog: number) =>
+      inChat(chatId, async (o, state) => {
+        const target = o as unknown as {
+          deliver: () => Promise<void>
+          enqueueRetry: (userId: string, events: unknown[]) => Promise<void>
+          retryFanout: (now: number) => Promise<void>
+        }
+        target.deliver = async () => {
+          throw new Error('down')
+        }
+        o.sql.run('DELETE FROM fanout_outbox')
+        o.sql.run('DELETE FROM fanout_retry')
+        for (let i = 0; i < backlog; i++) queueRetry(o, b.id, [{ type: 'peer_read', max_seq: i }], { nextAt: Date.now() + 60_000 })
+        await state.storage.setAlarm(Date.now() + 60_000)
+        const before = o.sql.rowsWritten
+        await target.enqueueRetry(b.id, [{ type: 'peer_read', max_seq: 1 }])
+        await target.retryFanout(Date.now() + 10_000)
+        return o.sql.rowsWritten - before
+      })
+    expect(await writes(30)).toBe(await writes(1))
+  })
+
+  it('入队超过 7 天的事件丢弃，不再投递', async () => {
+    const { a, b, chatId } = await pair()
+    const ca = await connect(a.id)
+    await ca.call('messages.send', { chat_id: chatId, random_id: randomId(), text: 'first' })
+    const cb = await connect(b.id)
+    const old = {
+      type: 'new_message',
+      message: { chat_id: chatId, seq: 99, pts: 99, sender_id: a.id, date: Date.now(), kind: 'text', text: 'stale' },
+    }
+    await inChat(chatId, async (o, state) => {
+      queueRetry(o, b.id, [old], { createdAt: Date.now() - 8 * 24 * 60 * 60 * 1000, attempts: 30 })
+      await state.storage.setAlarm(Date.now() + 60_000)
+    })
+    expect(await runDurableObjectAlarm(env.CHAT.getByName(chatId))).toBe(true)
+    expect(await inChat(chatId, (o) => o.sql.all('SELECT * FROM fanout_outbox'))).toEqual([])
+    expect(await inChat(chatId, (o) => o.sql.all('SELECT * FROM fanout_retry'))).toEqual([])
+    expect(await cb.call('sync.user', { pts: 0 })).toMatchObject({ ok: true, r: { dialogs: [{ top_seq: 1 }] } })
   })
 })
 

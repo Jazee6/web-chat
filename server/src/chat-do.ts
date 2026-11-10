@@ -67,6 +67,10 @@ const DELETED_KEY = 'deleted'
 const COMMITS_PAGE = 100
 const RETRY_BASE_MS = 1000
 const RETRY_MAX_MS = 60 * 60 * 1000
+/** 重试队列里的事件最多保留多久：UserDO 连续失败这么久基本是代码问题，丢弃并记日志 */
+const OUTBOX_TTL_MS = 7 * 24 * 60 * 60 * 1000
+/** Alarm 重试时一次 RPC 最多合并多少行 */
+const OUTBOX_BATCH = 50
 /** 置顶服务消息里记下的被置顶文本最多多少个字符 */
 const EXCERPT_LENGTH = 100
 
@@ -103,7 +107,10 @@ type MessageRow = {
 type Member = { role: MemberRole; joined_at: number; left_seq: number | null; last_read_seq: number }
 type MemberRow = Member & { user_id: string }
 
-type OutboxRow = { id: number; user_id: string; events: string; attempts: number; next_at: number }
+/** 待重试的扇出事件，按入队顺序（id）投递 */
+type OutboxRow = { id: number; user_id: string; events: string; created_at: number }
+/** 每个有待重试事件的用户一行：重试次数与下次重试时间，入队、提前、退避都只写这 1 行 */
+type RetryRow = { user_id: string; attempts: number; next_at: number }
 
 /**
  * 进行中（响铃或已接听）的一对一通话，存在 info 的 call 键里：ChatDO 没有长连接，空闲后会被逐出。
@@ -238,6 +245,20 @@ const MIGRATIONS = [
       next_at  INTEGER NOT NULL
     ) STRICT`,
   ],
+  // v2：同一用户的事件按顺序重试，重试状态按用户存一行（fanout_retry）；
+  // 事件行记下入队时间，超过 OUTBOX_TTL_MS 丢弃，已有的行从迁移时算起
+  [
+    `CREATE TABLE fanout_retry (
+      user_id  TEXT PRIMARY KEY,
+      attempts INTEGER NOT NULL,
+      next_at  INTEGER NOT NULL
+    ) STRICT, WITHOUT ROWID`,
+    'INSERT INTO fanout_retry (user_id, attempts, next_at) SELECT user_id, max(attempts), min(next_at) FROM fanout_outbox GROUP BY user_id',
+    'ALTER TABLE fanout_outbox ADD COLUMN created_at INTEGER NOT NULL DEFAULT 0',
+    'UPDATE fanout_outbox SET created_at = unixepoch() * 1000',
+    'ALTER TABLE fanout_outbox DROP COLUMN attempts',
+    'ALTER TABLE fanout_outbox DROP COLUMN next_at',
+  ],
 ]
 
 export class ChatDO extends DurableObject<Env> {
@@ -261,7 +282,7 @@ export class ChatDO extends DurableObject<Env> {
   private secret: SecretMeta | null
   /** 秘密聊天双方现有的设备，由各自的 UserDO 告知 */
   private devices: Map<string, string[]>
-  /** 秘密聊天已被删除 */
+  /** 秘密聊天已被删除：对谁都不存在 */
   private deleted: boolean
   private topSeq: number
   private chatPts: number
@@ -313,11 +334,6 @@ export class ChatDO extends DurableObject<Env> {
     return this.kind !== null
   }
 
-  /** 已被删除的秘密聊天对谁都不存在 */
-  private get gone() {
-    return this.deleted
-  }
-
   private get snapshot(): ChatSnapshot {
     return { kind: this.kind!, title: this.title }
   }
@@ -333,7 +349,7 @@ export class ChatDO extends DurableObject<Env> {
 
   /** 能读到的最大 seq：成员不限，前成员到离开为止，其他人 null */
   private readLimit(chatId: string, userId: string): number | null {
-    if (this.gone) return null
+    if (this.deleted) return null
     if (!this.initialized) return parsePrivateChatId(chatId)?.includes(userId) ? Infinity : null
     const m = this.members.get(userId)
     if (!m) return null
@@ -655,7 +671,7 @@ export class ChatDO extends DurableObject<Env> {
     windowMs: number,
     mutate: (row: MessageRow) => Result<MessageRow | null>,
   ): Promise<Result<Wrote | null>> {
-    if (!this.initialized || this.gone) return err('not_found')
+    if (!this.initialized || this.deleted) return err('not_found')
     if (!this.isMember(userId)) return err('forbidden')
     const row = this.sql.one<MessageRow>('SELECT * FROM messages WHERE seq = ?', seq)
     if (!row) return err('not_found')
@@ -932,7 +948,7 @@ export class ChatDO extends DurableObject<Env> {
 
   /** 会话资料与当前成员；只对当前成员开放 */
   async get(chatId: string, userId: string): Promise<Result<{ chat: ChatInfo }>> {
-    if (this.gone) return err('not_found')
+    if (this.deleted) return err('not_found')
     if (!this.initialized) return err(isGroupChatId(chatId) ? 'not_found' : 'forbidden')
     if (!this.isMember(userId)) return err('forbidden')
     const members = [...this.members]
@@ -948,7 +964,7 @@ export class ChatDO extends DurableObject<Env> {
    * 群组暂不展示已读回执，UserDO 不会为群组调用这里。
    */
   async read(_chatId: string, userId: string, maxSeq: number): Promise<Result<null>> {
-    if (this.gone) return err('not_found')
+    if (this.deleted) return err('not_found')
     if (this.kind !== 'private' && this.kind !== 'secret') return err(this.initialized ? 'bad_request' : 'not_found')
     if (!this.isMember(userId)) return err('forbidden')
     const me = this.members.get(userId)!
@@ -1489,7 +1505,7 @@ export class ChatDO extends DurableObject<Env> {
 
   /** 秘密聊天的成员身份检查：会话存在、没被删除、是成员 */
   private checkSecret(userId: string): Result<null> {
-    if (this.kind !== 'secret' || this.gone) return err('not_found')
+    if (this.kind !== 'secret' || this.deleted) return err('not_found')
     if (!this.isMember(userId)) return err('forbidden')
     return ok(null)
   }
@@ -1543,7 +1559,7 @@ export class ChatDO extends DurableObject<Env> {
     const peerId = pair[0] === creatorId ? pair[1] : pair[0]
     if (adds.some((d) => !pair.includes(d.user_id) || d.device_id === deviceId)) return err('bad_request')
     const check = (): Result<Wrote> | null => {
-      if (!this.initialized && !this.gone) return null
+      if (!this.initialized && !this.deleted) return null
       return this.dedup(creatorId, randomId) ?? err('bad_request')
     }
     const early = check()
@@ -1730,7 +1746,7 @@ export class ChatDO extends DurableObject<Env> {
    * 通知另一方的 UserDO 删除对话；发起者的由它自己的 UserDO 处理
    */
   async deleteSecret(_chatId: string, userId: string): Promise<Result<null>> {
-    if (this.gone && this.members.has(userId)) return ok(null)
+    if (this.deleted && this.members.has(userId)) return ok(null)
     const check = this.checkSecret(userId)
     if (!check.ok) return check
     const keys = this.sql.all<MessageRow>("SELECT * FROM messages WHERE kind = 'cipher' AND media IS NOT NULL").flatMap(rowKeys)
@@ -1751,7 +1767,7 @@ export class ChatDO extends DurableObject<Env> {
 
   /** 当前成员；私聊在第一条消息之前也允许（不落库） */
   private canView(chatId: string, userId: string) {
-    if (this.gone) return false
+    if (this.deleted) return false
     return this.initialized ? this.isMember(userId) : parsePrivateChatId(chatId)?.includes(userId) === true
   }
 
@@ -1845,11 +1861,17 @@ export class ChatDO extends DurableObject<Env> {
     this.ctx.waitUntil(this.flushing)
   }
 
+  /**
+   * 同一用户的事件必须按 pts 顺序送达（UserDO 跳过 pts 不大于 chat_pts 的新消息）：
+   * 重试队列里还有他的事件时，新事件排到队尾一起重试，不直接投递
+   */
   private async flush() {
     while (this.pending.size > 0) {
       const batch = [...this.pending]
       this.pending.clear()
+      const backlog = new Set(this.sql.all<{ user_id: string }>('SELECT user_id FROM fanout_retry').map((r) => r.user_id))
       await pool(batch, FANOUT_CONCURRENCY, async ([userId, events]) => {
+        if (backlog.has(userId)) return this.enqueueRetry(userId, events)
         try {
           await this.deliver(userId, events)
         } catch (e) {
@@ -1865,12 +1887,19 @@ export class ChatDO extends DurableObject<Env> {
     await this.env.USER.getByName(userId).onChatEvents(this.chatId!, userId, events, this.snapshot)
   }
 
-  /** 仅在扇出失败时写入重试队列，正常路径不产生这张表的写入 */
+  /**
+   * 仅在扇出失败（或前面还有该用户没送达的事件）时写入重试队列，正常路径不产生这两张表的写入。
+   * 新事件到来时把该用户的重试提前到最短的间隔，免得对方已经恢复、新消息还要等退避了很久的那次重试
+   * （再失败就按次数退避回去）。每次 2 行写入，与积压多少无关
+   */
   private async enqueueRetry(userId: string, events: FanoutEvent[]) {
-    const nextAt = Date.now() + retryDelay(0)
+    const now = Date.now()
+    const nextAt = now + retryDelay(0)
+    this.sql.run('INSERT INTO fanout_outbox (user_id, events, created_at) VALUES (?, ?, ?)', userId, JSON.stringify(events), now)
     this.sql.run(
-      'INSERT INTO fanout_outbox (user_id, events, attempts, next_at) VALUES (?, ?, 1, ?)',
-      userId, JSON.stringify(events), nextAt,
+      `INSERT INTO fanout_retry (user_id, attempts, next_at) VALUES (?, 1, ?)
+       ON CONFLICT (user_id) DO UPDATE SET next_at = min(next_at, excluded.next_at)`,
+      userId, nextAt,
     )
     await this.armAlarm(nextAt)
   }
@@ -1881,6 +1910,39 @@ export class ChatDO extends DurableObject<Env> {
     if (current === null || current > at) await this.ctx.storage.setAlarm(at)
   }
 
+  /**
+   * 重试扇出：过期的事件丢弃；到期的用户，按入队顺序把他所有的事件分批合并投递。
+   * 全部送达后删掉他的重试行（投递期间又排进来的留到下一轮）；失败时停下，退避只写他的重试行
+   */
+  private async retryFanout(now: number) {
+    const expired = this.sql.all<{ user_id: string; n: number; first: number; last: number }>(
+      'SELECT user_id, count(*) AS n, min(id) AS first, max(id) AS last FROM fanout_outbox WHERE created_at <= ? GROUP BY user_id',
+      now - OUTBOX_TTL_MS,
+    )
+    if (expired.length > 0) {
+      // 不记事件内容（消息明文）
+      for (const e of expired) console.error('fanout dropped', { chat_id: this.chatId, ...e })
+      this.sql.run('DELETE FROM fanout_outbox WHERE created_at <= ?', now - OUTBOX_TTL_MS)
+      this.sql.run('DELETE FROM fanout_retry WHERE user_id NOT IN (SELECT user_id FROM fanout_outbox)')
+    }
+    const due = this.sql.all<RetryRow>('SELECT * FROM fanout_retry WHERE next_at <= ?', now)
+    await pool(due, FANOUT_CONCURRENCY, async ({ user_id: userId, attempts }) => {
+      const queued = this.sql.all<OutboxRow>('SELECT * FROM fanout_outbox WHERE user_id = ? ORDER BY id', userId)
+      for (let i = 0; i < queued.length; i += OUTBOX_BATCH) {
+        const chunk = queued.slice(i, i + OUTBOX_BATCH)
+        try {
+          await this.deliver(userId, chunk.flatMap((r) => JSON.parse(r.events) as FanoutEvent[]))
+        } catch (e) {
+          console.error('fanout retry failed', { chat_id: this.chatId, user_id: userId, attempts, error: String(e) })
+          this.sql.run('UPDATE fanout_retry SET attempts = ?, next_at = ? WHERE user_id = ?', attempts + 1, Date.now() + retryDelay(attempts), userId)
+          return
+        }
+        this.sql.run('DELETE FROM fanout_outbox WHERE user_id = ? AND id <= ?', userId, chunk.at(-1)!.id)
+      }
+      this.sql.run('DELETE FROM fanout_retry WHERE user_id = ? AND NOT EXISTS (SELECT 1 FROM fanout_outbox WHERE user_id = ?)', userId, userId)
+    })
+  }
+
   /** 先处理到期的通话，再重试扇出；期限提前取消（接听、认领回来）时 Alarm 照样响一次，什么都不做 */
   override async alarm() {
     const now = Date.now()
@@ -1889,20 +1951,8 @@ export class ChatDO extends DurableObject<Env> {
     for (const [id, p] of Object.entries(this.groupCall?.participants ?? {})) {
       if (p.lost_at !== null && p.lost_at + CALL_GRACE_MS <= now) await this.dropParticipant(id)
     }
-    const due = this.sql.all<OutboxRow>('SELECT * FROM fanout_outbox WHERE next_at <= ? ORDER BY id', now)
-    await pool(due, FANOUT_CONCURRENCY, async (row) => {
-      try {
-        await this.deliver(row.user_id, JSON.parse(row.events) as FanoutEvent[])
-        this.sql.run('DELETE FROM fanout_outbox WHERE id = ?', row.id)
-      } catch (e) {
-        console.error('fanout retry failed', { chat_id: this.chatId, user_id: row.user_id, attempts: row.attempts, error: String(e) })
-        this.sql.run(
-          'UPDATE fanout_outbox SET attempts = ?, next_at = ? WHERE id = ?',
-          row.attempts + 1, Date.now() + retryDelay(row.attempts), row.id,
-        )
-      }
-    })
-    const next = this.sql.one<{ at: number | null }>('SELECT min(next_at) AS at FROM fanout_outbox')?.at ?? null
+    await this.retryFanout(now)
+    const next = this.sql.one<{ at: number | null }>('SELECT min(next_at) AS at FROM fanout_retry')?.at ?? null
     const deadlines = [next, this.call?.deadline ?? null, this.groupDeadline(this.groupCall)].filter((d) => d !== null)
     const at = deadlines.length > 0 ? Math.min(...deadlines) : null
     if (at !== null) await this.ctx.storage.setAlarm(at)
