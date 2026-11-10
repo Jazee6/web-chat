@@ -73,15 +73,15 @@ async function preloadOrFetch(e: FetchEvent): Promise<Response> {
   return ((await e.preloadResponse) as Response | undefined) ?? fetch(e.request)
 }
 
-/** 网络优先；离线或超时时用缓存的外壳。缓存里没有外壳时只能等网络 */
+/** 网络优先；离线、超时或源站出错（5xx）时用缓存的外壳（本地数据都在）。缓存里没有外壳时只能等网络 */
 async function navigate(e: FetchEvent): Promise<Response> {
   const network = preloadOrFetch(e)
   // 超时先返回缓存时，预加载请求仍要等它结束，否则浏览器会取消它并报警告
   e.waitUntil(network.catch(() => null))
   const timeout = new Promise<null>((resolve) => setTimeout(resolve, NAV_TIMEOUT_MS, null))
   const first = await Promise.race([network.catch(() => null), timeout])
-  if (first) return first
-  return (await caches.match(INDEX, { cacheName: SHELL })) ?? network
+  if (first && first.status < 500) return first
+  return (await caches.match(INDEX, { cacheName: SHELL })) ?? first ?? network
 }
 
 /**
@@ -122,8 +122,17 @@ type ChatNotificationOptions = NotificationOptions & { renotify?: boolean }
  * 来电的通知一直显示到被处理，通话记录到了用同一个 tag 替换它；点开后应用连上服务器即显示来电
  */
 self.addEventListener('push', (e) => {
-  const payload = e.data?.json() as PushPayload | undefined
-  if (!payload) return
+  let payload: PushPayload | undefined
+  try {
+    payload = e.data?.json() as PushPayload | undefined
+  } catch {
+    // 下面显示通用的通知
+  }
+  // 没显示通知的推送，Chrome 会代为显示一条「网站已在后台更新」，次数多了可能收回权限
+  if (!payload) {
+    e.waitUntil(self.registration.showNotification('Web Chat', { body: 'New activity', icon: '/icons/icon-192.png' }))
+    return
+  }
   const options: ChatNotificationOptions = {
     body: payload.body,
     tag: payload.chat_id,

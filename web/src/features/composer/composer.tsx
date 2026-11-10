@@ -54,6 +54,9 @@ const RECORDING_PING_MS = 1000
 /** 候选列表最多显示几个人 */
 const MAX_CANDIDATES = 6
 
+/** 超长的正文：maxLength 只限制键入，分享预填、插入提及等程序设的值可能超出，服务端会拒绝 */
+const tooLong = (text: string) => text.length > MAX_TEXT_LENGTH
+
 /** 在候选列表里选过的人：文字里的 @名字 发送时据此变成提及 */
 type Picked = { user_id: string; name: string }
 
@@ -215,7 +218,8 @@ export function Composer({
   }
 
   // 要保存的草稿：编辑消息时是暂存的文字；只有空白不算。草稿只存文字，提及不随草稿保存
-  const draftText = editing ? (stash?.text ?? '') : text
+  // 超长的部分不存（服务端同样有长度上限，存不进去的草稿会一直重试）
+  const draftText = (editing ? (stash?.text ?? '') : text).slice(0, MAX_TEXT_LENGTH)
   const draft: Draft = { text: draftText.trim() ? draftText : '', reply_to: target?.mode === 'reply' ? target.seq : null }
   const latestDraft = useRef(draft)
   // 恢复回复目标的回调经 ref 读取：草稿的恢复与保存只随会话变化，不随会话页重渲染
@@ -282,8 +286,13 @@ export function Composer({
     const shared = takePendingShare()
     if (!shared) return
     // 分享内容只能取一次（取走即清除），不能放进 useState 的初始化（StrictMode 会执行两次）
-    // oxlint-disable-next-line react/set-state-in-effect
-    if (shared.text) setText((t) => (t ? `${t}\n${shared.text}` : shared.text))
+    if (shared.text) {
+      const t = textareaRef.current?.value ?? ''
+      const full = t ? `${t}\n${shared.text}` : shared.text
+      // oxlint-disable-next-line react/set-state-in-effect
+      setText(full.slice(0, MAX_TEXT_LENGTH))
+      if (tooLong(full)) toast.add({ type: 'info', title: 'Shared text was shortened', description: `Messages can be up to ${MAX_TEXT_LENGTH} characters.` })
+    }
     if (shared.files.length > 0) addFiles(shared.files, 'auto')
     textareaRef.current?.focus()
   }, [chatId, addFiles])
@@ -332,6 +341,10 @@ export function Composer({
 
   const send = () => {
     if (!canSend || saving) return
+    if (tooLong(trimmed)) {
+      toast.add({ type: 'error', title: 'Message is too long', description: `Use ${MAX_TEXT_LENGTH} characters or fewer.` })
+      return
+    }
     if (target?.mode === 'edit') {
       void saveEdit(target.seq)
       return
@@ -472,6 +485,9 @@ export function Composer({
             }}
             onPaste={(e) => {
               if (textOnly || e.clipboardData.files.length === 0) return
+              // 从 Excel、Word 等办公软件复制的内容同时带着文字（含 RTF）与一张渲染好的图片：按文字粘贴。
+              // 只看 text/plain 或 text/html 不行：从访达复制文件、在网页上复制图片时也可能带着它们
+              if (e.clipboardData.types.includes('text/rtf')) return
               e.preventDefault()
               attachments.add([...e.clipboardData.files], 'auto')
             }}

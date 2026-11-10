@@ -2,6 +2,7 @@
 // RTCPeerConnection 不能在 Dedicated Worker 里用，所以通话放在发起或接听的那个标签页里，
 // 同步 Worker 记下这个标签页，只把信令转给它。见 docs/architecture/07-client.md § 通话、docs/adr/0009
 import { useSyncExternalStore } from 'react'
+import * as v from 'valibot'
 import { CALL_GRACE_MS, isMissedCall, randomToken, type Call, type CallResult, type IceServer } from 'shared/protocol'
 
 import { toast } from '@/components/ui/toast'
@@ -10,6 +11,7 @@ import { openMicrophone, type Microphone } from '@/features/av/microphone'
 import { inPip } from '@/features/pip/pip'
 import { blockReload } from '@/lib/reload'
 import { call as op, onCall, onCallSignal, onReady, OpFailure } from '@/sync/client'
+import { CallError, callErrorText, deflate, inflate, stopStream } from './common'
 import { playRingback, playRingtone, type Tone } from './tones'
 
 /**
@@ -19,7 +21,8 @@ import { playRingback, playRingtone, type Tone } from './tones'
 type Phase = 'idle' | 'incoming' | 'outgoing' | 'connecting' | 'active' | 'ended'
 
 /** 对方的媒体开关，经 DataChannel 告知 */
-type PeerMedia = { mic: boolean; camera: boolean; screen: boolean }
+const PeerMedia = v.object({ mic: v.boolean(), camera: v.boolean(), screen: v.boolean() })
+type PeerMedia = v.InferOutput<typeof PeerMedia>
 
 export type CallView = {
   phase: Phase
@@ -147,8 +150,13 @@ function onCallState(call: Call | null, _tab: string | null) {
     return
   }
   if (cur && cur.call_id !== call.call_id) {
+    // 上一通刚结束、还在显示结果时来的新电话：收起结果，显示来电。
     // 别的通话（忙线时的旧来电结束之类）与本标签页无关；正在通话时来的新电话由服务端判为忙线
-    if (call.state === 'ringing' && view.phase === 'idle') set({ ...IDLE, phase: 'incoming', call, peerId: call.caller_id })
+    if (call.state === 'ringing' && view.phase === 'ended' && call.callee_id === me) {
+      clearTimeout(lingerTimer)
+      set({ ...IDLE, phase: 'incoming', call, peerId: call.caller_id })
+      tone ??= playRingtone()
+    }
     return
   }
   switch (call.state) {
@@ -229,8 +237,12 @@ export async function acceptCall(relay: boolean): Promise<void> {
   owner = true
   relayOnly = relay
   set({ phase: 'connecting' })
+  /** 等授权期间可能已经挂断，或对方取消了 */
+  const pending = () => view.phase === 'connecting' && view.call?.call_id === call.call_id
   try {
-    mic = await getMic()
+    const opened = await getMic()
+    if (!pending()) return opened.close()
+    mic = opened
     const res = await op('acceptCall', { chatId: call.chat_id, callId: call.call_id })
     iceServers = res.iceServers
     set({ call: res.call })
@@ -393,7 +405,14 @@ function createConnection() {
   // 双方各建一个协商好的通道，不需要再等 ondatachannel
   channel = conn.createDataChannel('state', { negotiated: true, id: 0 })
   channel.onopen = sendState
-  channel.onmessage = (e) => set({ peer: JSON.parse(e.data as string) as PeerMedia })
+  channel.onmessage = (e) => {
+    try {
+      const peer = v.safeParse(PeerMedia, JSON.parse(e.data as string))
+      if (peer.success) set({ peer: peer.output })
+    } catch {
+      // 不是 JSON：不理会
+    }
+  }
 
   for (const s of queued.splice(0)) void onSignal(s)
 }
@@ -444,10 +463,14 @@ async function onSignal(s: Signal) {
   try {
     if (s.t === 'offer') {
       await conn.setRemoteDescription({ type: 'offer', sdp: s.sdp })
-      // 收发器随 offer 建立，默认只收：改成收发，放上麦克风
+      // 收发器随 offer 建立，默认只收：改成收发，放上麦克风，以及 offer 到达之前就开了的摄像头与屏幕共享
       const transceivers = conn.getTransceivers()
       for (const t of transceivers) t.direction = 'sendrecv'
-      if (!transceivers[0]?.sender.track) await transceivers[0]?.sender.replaceTrack(mic!.track)
+      const tracks = [mic!.track, camera?.track ?? null, view.screen?.getVideoTracks()[0] ?? null]
+      for (const [i, track] of tracks.entries()) {
+        const sender = transceivers[i]?.sender
+        if (track && sender && !sender.track) await sender.replaceTrack(track)
+      }
       await conn.setLocalDescription(await conn.createAnswer())
       await gathered(conn)
       await signal({ t: 'answer', sdp: conn.localDescription!.sdp })
@@ -492,27 +515,11 @@ async function signal(s: Signal) {
   throw new CallError("Couldn't reach the other device")
 }
 
-/**
- * 信令压缩后再发：不做 trickle ICE 的 SDP 带着全部候选与两个视频段的编解码器列表，
- * 只有 STUN 时就已经约 11KB，加上 TURN 的中继候选会超过帧的上限；SDP 重复内容多，压缩后约剩四分之一
- */
-async function pack(s: Signal): Promise<string> {
-  const stream = new Blob([JSON.stringify(s)]).stream().pipeThrough(new CompressionStream('deflate-raw'))
-  const bytes = new Uint8Array(await new Response(stream).arrayBuffer())
-  let binary = ''
-  for (const b of bytes) binary += String.fromCharCode(b)
-  return btoa(binary)
-}
-
-async function unpack(data: string): Promise<Signal> {
-  const bytes = Uint8Array.from(atob(data), (c) => c.charCodeAt(0))
-  const stream = new Blob([bytes]).stream().pipeThrough(new DecompressionStream('deflate-raw'))
-  return JSON.parse(await new Response(stream).text()) as Signal
-}
+/** 信令压缩后再发：只有 STUN 时 SDP 就已经约 11KB，加上 TURN 的中继候选会超过帧的上限 */
+const pack = (s: Signal) => deflate(JSON.stringify(s))
+const unpack = async (data: string) => JSON.parse(await inflate(data)) as Signal
 
 // ---------- 收尾 ----------
-
-class CallError extends Error {}
 
 /** 出错：结束本标签页的通话；还在进行的话通知服务端挂断 */
 function fail(e: unknown) {
@@ -524,23 +531,7 @@ function fail(e: unknown) {
   if (call && wasOwner && code !== 'call_ended') void op('endCall', { chatId: call.chat_id, callId: call.call_id }).catch(() => {})
 }
 
-function errorText(e: unknown) {
-  if (e instanceof CallError) return e.message
-  if (e instanceof DOMException && e.name === 'NotAllowedError') return 'Microphone access was denied'
-  if (!(e instanceof OpFailure)) return 'Call failed'
-  switch (e.code) {
-    case 'busy':
-      return 'You’re already in a call'
-    case 'blocked':
-      return 'You can’t call this person'
-    case 'offline':
-      return 'You’re offline'
-    case 'call_ended':
-      return 'The call has ended'
-    default:
-      return 'Call failed'
-  }
-}
+const errorText = (e: unknown) => callErrorText(e, { blocked: 'You can’t call this person' })
 
 /** 结束本标签页的通话：释放媒体与连接，显示一会儿结果再收起 */
 function finish(result: CallResult | null, error: string | null) {
@@ -578,10 +569,6 @@ function releaseLocal() {
 function stopTone() {
   tone?.stop()
   tone = null
-}
-
-function stopStream(stream: MediaStream) {
-  for (const track of stream.getTracks()) track.stop()
 }
 
 /** 选定的麦克风（开着 AI 降噪时接上降噪）；换了麦克风时换掉发出去的音轨，不重新协商 */

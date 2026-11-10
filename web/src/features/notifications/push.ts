@@ -2,6 +2,7 @@
 // 见 docs/architecture/04-realtime-and-fanout.md § Web Push
 import { useSyncExternalStore } from 'react'
 import type { PushSubscriptionKeys } from 'shared/protocol'
+import { toBase64Url } from '@/lib/base64'
 import { VAPID_PUBLIC_KEY } from '@/lib/deploy'
 import { setPushSubscription } from '@/sync/client'
 
@@ -63,20 +64,16 @@ export function usePushState(): PushState {
   return useSyncExternalStore(subscribe, pushState)
 }
 
-function toBase64Url(buffer: ArrayBuffer | null) {
-  const bytes = new Uint8Array(buffer ?? new ArrayBuffer(0))
-  return btoa(String.fromCharCode(...bytes)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
-}
-
 function toKeys(sub: PushSubscription): PushSubscriptionKeys {
-  return { endpoint: sub.endpoint, p256dh: toBase64Url(sub.getKey('p256dh')), auth: toBase64Url(sub.getKey('auth')) }
+  const key = (name: PushEncryptionKeyName) => toBase64Url(new Uint8Array(sub.getKey(name) ?? new ArrayBuffer(0)))
+  return { endpoint: sub.endpoint, p256dh: key('p256dh'), auth: key('auth') }
 }
 
 const serverKey = () => Uint8Array.from(atob(VAPID_PUBLIC_KEY.replace(/-/g, '+').replace(/_/g, '/')), (c) => c.charCodeAt(0))
 
 function sameServerKey(sub: PushSubscription) {
   const key = sub.options.applicationServerKey
-  return key !== null && toBase64Url(key) === VAPID_PUBLIC_KEY
+  return key !== null && toBase64Url(new Uint8Array(key)) === VAPID_PUBLIC_KEY
 }
 
 async function newSubscription(registration: ServiceWorkerRegistration) {
@@ -147,6 +144,12 @@ export async function releasePush() {
   if (!('PushManager' in window)) return
   await (await (await navigator.serviceWorker.ready).pushManager.getSubscription())?.unsubscribe()
   await setPushSubscription(null).catch(() => {})
+}
+
+/** 退出登录没有成功（离线）：退掉的订阅按本机开关恢复 */
+export function restorePush() {
+  if (!VAPID_PUBLIC_KEY || !('PushManager' in window)) return
+  void syncPushInBackground()
 }
 
 /**

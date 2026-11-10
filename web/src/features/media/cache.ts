@@ -52,17 +52,24 @@ async function touch(url: string) {
   if (entry && now - entry.used >= TOUCH_INTERVAL_MS) await done(entries.put({ ...entry, used: now }))
 }
 
-let trimTimer: ReturnType<typeof setTimeout> | null = null
+let trimming: Promise<void> | null = null
 
-/** 存入一张图，稍后检查是否超过上限（连续加载很多图时只检查一次） */
+/**
+ * 存入一张图，稍后检查是否超过上限（连续加载很多图时只检查一次）。返回的 Promise 包含这次检查，
+ * SW 里放进 waitUntil，免得在检查之前被回收。先写索引：存进缓存却没进索引的就永远不会被淘汰了，
+ * 反过来索引里多一项只是淘汰时多删一个不存在的
+ */
 export async function putMedia(url: string, res: Response) {
   const size = Number(res.headers.get('Content-Length')) || (await res.clone().blob()).size
-  await caches.open(CACHE).then((cache) => cache.put(url, res))
   await done((await store(ENTRIES, 'readwrite')).put({ url, size, used: Date.now() } satisfies Entry))
-  trimTimer ??= setTimeout(() => {
-    trimTimer = null
-    void trimMedia().catch(() => {})
-  }, 5000)
+  await caches.open(CACHE).then((cache) => cache.put(url, res))
+  trimming ??= new Promise((resolve) => setTimeout(resolve, 5000))
+    .then(trimMedia)
+    .catch(() => {})
+    .finally(() => {
+      trimming = null
+    })
+  await trimming
 }
 
 export async function mediaCacheLimit(): Promise<CacheLimit> {

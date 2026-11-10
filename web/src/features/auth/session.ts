@@ -2,7 +2,7 @@
 import { createAuthClient } from 'better-auth/client'
 import { clearMediaCache } from '@/features/media/cache'
 import { clearBadge } from '@/features/notifications/badge'
-import { releasePush, resetPushOnDevice } from '@/features/notifications/push'
+import { releasePush, resetPushOnDevice, restorePush } from '@/features/notifications/push'
 import { clearShare } from '@/features/share/stash'
 import { call, onWiped } from '@/sync/client'
 
@@ -136,10 +136,18 @@ export async function signOut() {
     Promise.all([call('releaseMedia', {}).catch(() => {}), releasePush().catch(() => {})]),
     new Promise((r) => setTimeout(r, 3000)),
   ])
-  const { data, error } = await authClient.signOut({ disableRedirect: true })
-  if (error) throw new Error(error.message ?? 'sign-out failed')
+  let url: string | undefined
+  try {
+    const { data, error } = await authClient.signOut({ disableRedirect: true })
+    if (error) throw new Error(error.message ?? 'sign-out failed')
+    url = data?.url
+  } catch (e) {
+    // 仍然登录着：恢复已经退掉的推送订阅（已删除的待发媒体发送时会重新上传）
+    restorePush()
+    throw e
+  }
   await call('wipe', {})
   writeMe(null)
   await clearDeviceState()
-  location.href = data?.url ?? '/'
+  location.href = url ?? '/'
 }

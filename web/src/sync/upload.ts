@@ -7,6 +7,8 @@ import type { OutboxLinkPhoto, OutboxMedia } from './store'
 
 /** 同时进行的 PUT 数 */
 const PUT_CONCURRENCY = 3
+/** PUT 多久没有进度就放弃：请求挂住而 WebSocket 仍然在线时，不能让这个会话的发件箱一直停在这条上 */
+const PUT_STALL_MS = 60_000
 
 /** 上传失败：服务端拒绝签发，或 R2 拒绝了请求 */
 export class UploadError extends Error {}
@@ -56,13 +58,15 @@ export async function uploadMedia(
   }
   const targets = await sign(request)
 
-  // 每个 PUT 一项：(媒体序号, 本地文件名, 签发的目标, 写回哪个字段)
+  // 每个 PUT 一项：(媒体序号, 本地文件名, 签发的目标, 写回哪个字段)。
+  // 签发时大图与预览图总是成对的，已经传完的那个不再传（各自的键互不相干，签了没用的不产生对象）
   const puts = todo.flatMap(({ m, i }, n) => {
     const t = targets[n]!
-    const list: { index: number; file: string; target: UploadTarget; field: 'key' | 'preview_key'; size: number }[] = [
-      { index: i, file: m.file!, target: t.main, field: 'key', size: m.size + extra },
-    ]
-    if ('preview' in m) list.push({ index: i, file: m.preview, target: t.preview!, field: 'preview_key', size: m.preview_size + extra })
+    const list: { index: number; file: string; target: UploadTarget; field: 'key' | 'preview_key'; size: number }[] = []
+    if (!m.key) list.push({ index: i, file: m.file!, target: t.main, field: 'key', size: m.size + extra })
+    if ('preview' in m && !m.preview_key) {
+      list.push({ index: i, file: m.preview, target: t.preview!, field: 'preview_key', size: m.preview_size + extra })
+    }
     return list
   })
 
@@ -130,17 +134,39 @@ async function sign(request: UploadRequest): Promise<UploadResponse['media']> {
   return ((await res.json()) as UploadResponse).media
 }
 
-/** XHR 才有上传进度；预签名里签了 content-length，文件大小变了会被 R2 拒绝 */
+/** XHR 才有上传进度；预签名里签了 content-length，文件大小变了会被 R2 拒绝。PUT_STALL_MS 没有进度时按网络不通处理 */
 function put(target: UploadTarget, body: Blob, signal: AbortSignal, onProgress: (loaded: number) => void): Promise<void> {
   return new Promise((resolve, reject) => {
+    // 别的 PUT 在本项读文件期间失败了
+    if (signal.aborted) return reject(new UploadError('aborted'))
     const xhr = new XMLHttpRequest()
-    signal.addEventListener('abort', () => xhr.abort(), { once: true })
-    xhr.onabort = () => reject(new UploadError('aborted'))
+    let stall: ReturnType<typeof setTimeout> | undefined
+    let stalled = false
+    const watch = () => {
+      clearTimeout(stall)
+      stall = setTimeout(() => {
+        stalled = true
+        xhr.abort()
+      }, PUT_STALL_MS)
+    }
+    const settle = (fn: () => void) => {
+      clearTimeout(stall)
+      signal.removeEventListener('abort', onAbort)
+      fn()
+    }
+    const onAbort = () => xhr.abort()
+    signal.addEventListener('abort', onAbort, { once: true })
+    xhr.onabort = () => settle(() => reject(stalled ? new UploadOffline() : new UploadError('aborted')))
     xhr.open('PUT', target.url)
     for (const [name, value] of Object.entries(target.headers)) xhr.setRequestHeader(name, value)
-    xhr.upload.onprogress = (e) => onProgress(e.loaded)
-    xhr.onload = () => (xhr.status >= 200 && xhr.status < 300 ? resolve() : reject(new UploadError(`put failed: ${xhr.status}`)))
-    xhr.onerror = () => reject(new UploadOffline())
+    xhr.upload.onprogress = (e) => {
+      watch()
+      onProgress(e.loaded)
+    }
+    xhr.onload = () =>
+      settle(() => (xhr.status >= 200 && xhr.status < 300 ? resolve() : reject(new UploadError(`put failed: ${xhr.status}`))))
+    xhr.onerror = () => settle(() => reject(new UploadOffline()))
+    watch()
     xhr.send(body)
   })
 }

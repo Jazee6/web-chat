@@ -67,6 +67,8 @@ export function useRecorder({ onLimit, onLost }: { onLimit: (take: VoiceTake | n
   const session = useRef<Session | null>(null)
   const callbacks = useRef({ onLimit, onLost })
   const busy = useRef(false)
+  /** 每次开始与停止都加一：等麦克风授权期间停止（取消、离开会话）时，授权回来的那次开始作废 */
+  const generation = useRef(0)
   useEffect(() => {
     callbacks.current = { onLimit, onLost }
     busy.current = state.status !== 'idle'
@@ -76,6 +78,7 @@ export function useRecorder({ onLimit, onLost }: { onLimit: (take: VoiceTake | n
 
   /** 停止录音并释放麦克风（录音指示随之消失），返回录到的数据 */
   const stop = async (): Promise<{ blob: Blob; elapsed: number; levels: number[] } | null> => {
+    generation.current++
     const s = session.current
     if (!s) return null
     session.current = null
@@ -104,6 +107,7 @@ export function useRecorder({ onLimit, onLost }: { onLimit: (take: VoiceTake | n
   const start = async () => {
     if (session.current || state.status === 'starting') return
     setState({ status: 'starting' })
+    const attempt = ++generation.current
     // 在用户点击里同步建好 AudioContext：之后（await 之后）再建，Safari 可能让它停在 suspended，实时音量全是零
     const context = typeof AudioContext === 'undefined' ? null : new AudioContext()
     let mic: Microphone
@@ -119,6 +123,12 @@ export function useRecorder({ onLimit, onLost }: { onLimit: (take: VoiceTake | n
     }
     // 只影响实时波形，恢复不了也照常录
     await context.resume().catch(() => {})
+    if (attempt !== generation.current) {
+      // 等授权期间取消或离开了
+      mic.close()
+      void context.close().catch(() => {})
+      return
+    }
     const stream = new MediaStream([mic.track])
     const mimeType = CANDIDATES.find((t) => MediaRecorder.isTypeSupported(t))
     const recorder = new MediaRecorder(stream, { mimeType, audioBitsPerSecond: BITS_PER_SECOND })

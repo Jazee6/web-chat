@@ -1,8 +1,9 @@
 // 路由（代码定义）。见 docs/architecture/07-client.md § 路由与页面
-import { createRootRouteWithContext, createRoute, createRouter } from '@tanstack/react-router'
+import { createRootRouteWithContext, createRoute, createRouter, redirect } from '@tanstack/react-router'
 import * as v from 'valibot'
 
 import type { Boot } from '@/features/auth/session'
+import { inPip } from '@/features/pip/pip'
 import { HomePage } from './home-page'
 import { NotFoundPage } from './not-found-page'
 import { viewTransition } from './page-transition'
@@ -80,6 +81,10 @@ const shareRoute = createRoute({
 const pipRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/pip/$chatId',
+  // 小窗之外打开（手输地址）：没有侧栏与通话层，换成普通的会话页
+  beforeLoad: ({ params }) => {
+    if (!inPip) throw redirect({ to: '/c/$chatId', params: { chatId: params.chatId }, replace: true })
+  },
   component: Pip,
 })
 

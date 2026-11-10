@@ -10,6 +10,7 @@ import { openMicrophone, type Microphone } from '@/features/av/microphone'
 import { inPip } from '@/features/pip/pip'
 import { blockReload } from '@/lib/reload'
 import { call as op, onGroupCall, OpFailure } from '@/sync/client'
+import { CallError, callErrorText, deflate, stopStream } from './common'
 import { repairSdp } from './sdp'
 
 /** joining：正在加入；active：在通话里 */
@@ -206,6 +207,12 @@ export async function joinGroupCall(chatId: string): Promise<void> {
   const pending = () => view.phase === 'joining' && view.chatId === chatId
   try {
     if (!(await holdLock())) throw new CallError('You’re in a call in another tab')
+    // 拿锁期间离开了：那时还没有锁可放，现在放掉
+    if (!pending()) {
+      releaseLock?.()
+      releaseLock = null
+      return
+    }
     // 发起时在用户操作里先取麦克风（要授权）
     let opened = starting ? await getMic() : null
     if (!pending()) {
@@ -406,7 +413,7 @@ async function publish(slot: CallSlot, track: MediaStreamTrack, sendEncodings?: 
     const sdp = await op('publishGroupCall', {
       chatId: call.chat_id,
       callId: call.call_id,
-      sdp: await pack(conn.localDescription!.sdp),
+      sdp: await deflate(conn.localDescription!.sdp),
       tracks: [{ mid: t.mid!, slot }],
     })
     await conn.setRemoteDescription({ type: 'answer', sdp: repairSdp(sdp) })
@@ -426,7 +433,7 @@ async function unpublish(slot: CallSlot) {
   delete sending[slot]
   t.stop()
   await conn.setLocalDescription(await conn.createOffer())
-  const sdp = await op('unpublishGroupCall', { chatId: call.chat_id, callId: call.call_id, sdp: await pack(conn.localDescription!.sdp), slots: [slot] })
+  const sdp = await op('unpublishGroupCall', { chatId: call.chat_id, callId: call.call_id, sdp: await deflate(conn.localDescription!.sdp), slots: [slot] })
   await conn.setRemoteDescription({ type: 'answer', sdp: repairSdp(sdp) })
 }
 
@@ -484,7 +491,7 @@ async function reconcile() {
     if (res.sdp) {
       await conn.setRemoteDescription({ type: 'offer', sdp: repairSdp(res.sdp) })
       await conn.setLocalDescription(await conn.createAnswer())
-      await op('answerGroupCall', { chatId: call.chat_id, callId: call.call_id, sdp: await pack(conn.localDescription!.sdp) })
+      await op('answerGroupCall', { chatId: call.chat_id, callId: call.call_id, sdp: await deflate(conn.localDescription!.sdp) })
     }
   }
 
@@ -524,18 +531,7 @@ async function pollSpeaking() {
   if (next.join() !== view.speaking.join()) set({ speaking: next })
 }
 
-/** SDP 压缩后再发：一个人拉的路数多了，SDP 会超过帧的上限；内容重复多，压缩后剩很少 */
-async function pack(sdp: string): Promise<string> {
-  const stream = new Blob([sdp]).stream().pipeThrough(new CompressionStream('deflate-raw'))
-  const bytes = new Uint8Array(await new Response(stream).arrayBuffer())
-  let binary = ''
-  for (const b of bytes) binary += String.fromCharCode(b)
-  return btoa(binary)
-}
-
 // ---------- 收尾 ----------
-
-class CallError extends Error {}
 
 /** 出错：离开通话，提示原因 */
 function fail(e: unknown) {
@@ -553,23 +549,7 @@ function report(e: unknown, title: string) {
   toast.add({ type: 'error', title, description: e instanceof DOMException && e.name === 'NotAllowedError' ? 'Permission was denied.' : undefined })
 }
 
-function errorText(e: unknown) {
-  if (e instanceof CallError) return e.message
-  if (e instanceof DOMException && e.name === 'NotAllowedError') return 'Microphone access was denied'
-  if (!(e instanceof OpFailure)) return 'Call failed'
-  switch (e.code) {
-    case 'busy':
-      return 'You’re already in a call'
-    case 'offline':
-      return 'You’re offline'
-    case 'call_ended':
-      return 'The call has ended'
-    case 'forbidden':
-      return 'You’re not a member of this group'
-    default:
-      return 'Call failed'
-  }
-}
+const errorText = (e: unknown) => callErrorText(e, { forbidden: 'You’re not a member of this group' })
 
 /** 结束本标签页的通话；reason 显示成提示 */
 function finish(reason: string | null) {
@@ -593,10 +573,6 @@ function release() {
   camera?.close()
   camera = null
   if (view.screen) stopStream(view.screen)
-}
-
-function stopStream(stream: MediaStream) {
-  for (const track of stream.getTracks()) track.stop()
 }
 
 /** 选定的麦克风（开着 AI 降噪时接上降噪）；换了麦克风时换掉发布着的音轨，不重新协商 */

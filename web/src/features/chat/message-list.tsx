@@ -192,8 +192,11 @@ type Delivery = 'pending' | 'sent' | 'read' | null
 const DELIVERY_TEXT = { pending: 'Sending…', sent: 'Sent', read: 'Read' } as const
 
 const rowKey = (row: MessageRow) => (row.seq !== null ? `m${row.seq}` : `o${row.random_id}`)
-/** React key：自己发的消息按 random_id，发送成功从发件箱换成已落库的消息时沿用同一个元素，入场动画不被打断 */
-const elementKey = (row: MessageRow) => (row.random_id !== null ? `r${row.random_id}` : rowKey(row))
+/**
+ * React key：自己发的消息按 random_id，发送成功从发件箱换成已落库的消息时沿用同一个元素，入场动画不被打断。
+ * 只认自己的：秘密聊天里对方的消息也带着解开的 random_id，可以故意与我的某条相同
+ */
+const elementKey = (row: MessageRow, mine: boolean) => (mine && row.random_id !== null ? `r${row.random_id}` : rowKey(row))
 
 /** 标题栏（h-14）与置顶条（h-16）的高度 */
 const HEADER_HEIGHT = 56
@@ -241,9 +244,12 @@ export function MessageList({
   const pinned = useLiveQuery<PinnedRow>(PINNED_SQL, [chatId], [topics.chat(chatId)]) ?? []
   // 秘密聊天：本设备加入之前的消息（sealed）在这里读不了、不显示；在分界之后读得到的第一条上方说明一句。
   // 按分界定位，不按窗口：窗口顶上的那条不一定紧挨着分界
+  // 其他会话没有 sealed 的消息，不必扫
   const sealed = useLiveQuery<{ last: number | null; first_readable: number | null }>(
-    `SELECT s.last, (SELECT min(seq) FROM messages WHERE chat_id = ?1 AND kind != 'sealed' AND seq > s.last) AS first_readable
-     FROM (SELECT max(seq) AS last FROM messages WHERE chat_id = ?1 AND kind = 'sealed') s`,
+    parseSecretChatId(chatId)
+      ? `SELECT s.last, (SELECT min(seq) FROM messages WHERE chat_id = ?1 AND kind != 'sealed' AND seq > s.last) AS first_readable
+         FROM (SELECT max(seq) AS last FROM messages WHERE chat_id = ?1 AND kind = 'sealed') s`
+      : 'SELECT NULL AS last, NULL AS first_readable WHERE ?1 IS NOT NULL',
     [chatId],
     [topics.chat(chatId)],
   )?.[0]
@@ -544,7 +550,7 @@ export function MessageList({
                 isGroup && !mine && (newGroup || prev?.sender_id !== row.sender_id || isNotice(prev))
               return (
                 <MessageScrollerItem
-                  key={elementKey(row)}
+                  key={elementKey(row, mine)}
                   messageId={key}
                   variant={key === highlightKey ? 'highlighted' : 'default'}
                 >

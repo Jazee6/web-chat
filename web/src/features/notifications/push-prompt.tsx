@@ -15,7 +15,7 @@ export function PushPrompt() {
         <BellIcon />
         <AlertTitle>Turn on notifications?</AlertTitle>
         <AlertDescription>
-          <p>Get notified about new messages when Chat isn’t open.</p>
+          <p>Get notified about new messages when Web Chat isn’t open.</p>
           <Button
             size="sm"
             onClick={() => enablePush().catch(() => toast.add({ type: 'error', title: "Couldn't turn on notifications" }))}

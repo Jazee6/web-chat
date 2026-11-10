@@ -4,6 +4,7 @@ import {
   GROUP_CALL_LOCK,
   MAX_ALBUM_SIZE,
   MAX_PAGE_LIMIT,
+  MAX_TEXT_LENGTH,
   MAX_VIEWING,
   PRESENCE_RENEW_MS,
   TYPING_THROTTLE_MS,
@@ -1224,7 +1225,13 @@ export class Engine {
     // 秘密聊天的草稿只留在本设备
     if (status !== 'member' || isSecret(chatId)) return
     this.flushingDrafts.add(chatId)
-    const sent: Draft | null = cur.draft
+    let sent: Draft | null = cur.draft
+    if (sent && sent.text.length > MAX_TEXT_LENGTH) {
+      // 超长的草稿服务端存不进去，会每次重连都失败一次：截断后再同步
+      const cut = { ...sent, text: sent.text.slice(0, MAX_TEXT_LENGTH) }
+      this.store.tx(() => this.store.setDraft(chatId, cut))
+      sent = cut
+    }
     let again = false
     try {
       const res = await this.conn.request('dialogs.update', { chat_id: chatId, draft: sent })
