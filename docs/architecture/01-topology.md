@@ -24,7 +24,7 @@
 
 整个后端就是一个 Worker（`server/`），配置在仓库根目录的 `wrangler.jsonc`（Deploy to Cloudflare 按钮只认根目录）：
 
-- 绑定：`USER` / `CHAT` 两个 SQLite 后端的 Durable Object、D1 `DIRECTORY`（better-auth）、R2 `MEDIA`（媒体桶）。静态资源由 `web` 的 vite 构建产出，`/api/*` 与 `/ws` 先进 Worker，其余路径走 SPA。
+- 绑定：`USER` / `CHAT` 两个 SQLite 后端的 Durable Object、D1 `DIRECTORY`（better-auth）、R2 `MEDIA`（媒体桶）。静态资源由 `web` 的 vite 构建产出（`ASSETS` 绑定），`/`、`/en`、`/.well-known/*`、`/api/*` 与 `/ws` 先进 Worker，其余路径走静态资源与 SPA 回退。
 - 顶层是给别人部署用的模板：Worker 名 `web-chat-app`，用 `*.workers.dev`，vars 留空，部署后再填。chat.jaze.top 的配置在 `env.production`：Worker 名 `web-chat`，自定义域名 `chat.jaze.top`，关闭 `*.workers.dev` 与预览地址（其他 Origin 过不了 Origin 校验）。见 [ADR-0014](../adr/0014-template-config-at-top-level.md)。本地开发由根目录的 `.dev.vars` 覆盖 `vars`。
 - 机密通过 `wrangler secret` 注入：`BETTER_AUTH_SECRET`、`OAUTH_CLIENT_SECRET`、`R2_ACCESS_KEY_ID` / `R2_SECRET_ACCESS_KEY`（用于预签名），以及可选的 `VAPID_PRIVATE_KEY`（推送）与 `TURN_KEY_*` / `SFU_KEY_*`（通话）。清单在 `.dev.vars.example`。必填的 vars 与机密缺了任何一项时，`/api/*` 与 `/ws` 都返回 500 并列出缺了哪些。本地开发时这些值都写在 `.dev.vars` 中（不提交）。环境变量的完整说明见 [06 § 环境变量](./06-auth-and-security.md#环境变量)，部署步骤见 [README](../../README.zh.md#部署)。
 
@@ -33,7 +33,10 @@
 ```mermaid
 flowchart TD
   R["请求进入"] --> A{"路径"}
-  A -- "其他路径" --> S["Static Assets<br/>index.html / JS / CSS"]
+  A -- "其他路径" --> S["Static Assets<br/>index.html / zh.html / JS / CSS"]
+  A -- "/" --> ROOT{"signed_in 或会话 cookie？"}
+  ROOT -- "有" --> SHELL["ASSETS：index.html（应用外壳）"]
+  ROOT -- "没有" --> LAND["ASSETS：en.html（介绍页）"]
   A -- "/api/auth/*" --> AU["better-auth handler<br/>OAuth 跳转 / 回调 / 会话"]
   AU <--> IDP["自建 IdP"]
   AU --> D1q["D1：user / session / account"]
@@ -43,6 +46,7 @@ flowchart TD
 ```
 
 - **业务调用几乎都经过 WebSocket**：一条入站 WS 消息按 1/20 个 DO 请求计费，也不消耗 Worker 请求额度（Worker 请求免费 10 万/天）。HTTP 只用于无法走 WS 的场景：登录 / 登出（better-auth）、上传签名、链接预览。
+- **根地址分流**（[ADR-0015](../adr/0015-prerendered-landing-page-at-root.md)）：未登录的人在 `/` 看到介绍页，已登录的看到应用外壳。只看 cookie 在不在，不校验：会话 cookie 是 `SameSite=Strict`，从别的站点点进来时不会发出，所以 better-auth 设置或清除会话 cookie 时，Worker 同时设置或清除一个 `Lax` 的 `signed_in` 标记。`/?shell` 总是外壳（Service Worker 预缓存用），`/en` 跳回 `/`，`/zh` 是静态的中文介绍页。这几条路由注册在必填配置检查之前，配置补完前首页也能显示。
 - **`ChatDO` 从不直接暴露给公网**：只有 `UserDO` 和 Worker 通过 RPC 调用它。调用方身份由可信的 `UserDO` 传入，由 `ChatDO` 做成员与权限校验。
 
 ## Durable Object 职责边界

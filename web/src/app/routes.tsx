@@ -5,7 +5,7 @@ import { Outlet, lazyRouteComponent, useNavigate, useParams, useRouteContext, us
 import { Toaster } from '@/components/ui/toast'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { ChatPage } from '@/features/chat/chat-page'
-import { AppLayout } from './app-layout'
+import { AppLayout, RedirectToSignIn } from './app-layout'
 
 const LoginPage = lazy(() => import('@/features/auth/login-page').then((m) => ({ default: m.LoginPage })))
 // 会话里点进去的页面：加载完之后同步渲染（React.lazy 即使代码已取回，第一次渲染也要挂起一下），
@@ -28,7 +28,8 @@ export function Root() {
 
 export function Login() {
   const { error } = useSearch({ from: '/login' })
-  return <LoginPage error={error} />
+  // 介绍页的登录按钮来到这里：已登录的在 beforeLoad 里回到首页，未登录的直接去 IdP；带 error 的是 IdP 回调失败
+  return error === undefined ? <RedirectToSignIn /> : <LoginPage error={error} />
 }
 
 export function App() {

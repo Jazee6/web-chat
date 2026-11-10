@@ -158,6 +158,13 @@
     @apply font-sans;
     }
 }
+/* 介绍页首屏的背景：边框色的方格，从顶部向下淡出 */
+@utility bg-grid {
+    background-image: linear-gradient(to right, var(--border) 1px, transparent 1px),
+        linear-gradient(to bottom, var(--border) 1px, transparent 1px);
+    background-size: 3.5rem 3.5rem;
+    mask-image: radial-gradient(ellipse at top, black, transparent 70%);
+}
 @layer utilities {
   .app-blur {
     @apply bg-background/80 backdrop-blur-[20px] backdrop-saturate-180;

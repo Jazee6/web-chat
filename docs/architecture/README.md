@@ -19,7 +19,7 @@ flowchart LR
   end
 
   subgraph CF["Cloudflare（单个 Worker 部署）"]
-    ASSETS["Static Assets<br/>SPA 外壳（免费无限）"]
+    ASSETS["Static Assets<br/>SPA 外壳与介绍页（免费无限）"]
     W["Worker 入口（Hono + better-auth）<br/>/api/* · /api/auth/* · /ws"]
     IDP["自建 IdP（OIDC）"]
     W <--> IDP

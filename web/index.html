@@ -9,7 +9,9 @@
     <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
     <link rel="manifest" href="/manifest.webmanifest" />
     <title>Web Chat</title>
-    <!-- 所有部署共用：介绍的是开源项目本身，图片用 GitHub 上的绝对地址，不写 canonical -->
+    <!-- 应用外壳：登录后的 /、邀请链接等 SPA 路由都返回它。供搜索与 AI 读的内容在介绍页（src/landing，ADR-0015），这里不收录；
+         OG 留给在别的应用里分享邀请链接时的预览，图片与介绍页一样用官网的绝对地址 -->
+    <meta name="robots" content="noindex" />
     <meta
       name="description"
       content="Open-source, Telegram-style chat on Cloudflare Workers: groups, end-to-end encrypted secret chats, calls, media and offline-first sync. Deploy your own on the free plan."
@@ -21,35 +23,11 @@
       property="og:description"
       content="Groups, end-to-end encrypted secret chats, voice and video calls, media and offline-first sync, all on Cloudflare Workers, Durable Objects, D1 and R2."
     />
-    <meta property="og:image" content="https://raw.githubusercontent.com/Jazee6/web-chat/main/docs/screenshot.png" />
-    <meta property="og:image:width" content="2560" />
-    <meta property="og:image:height" content="1600" />
-    <meta property="og:image:alt" content="Web Chat with the chat list on the left and a conversation on the right" />
+    <meta property="og:image" content="https://chat.jaze.top/og-en.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="Web Chat: a group conversation with replies, reactions, a voice message and a link preview" />
     <meta name="twitter:card" content="summary_large_image" />
-    <script type="application/ld+json">
-      {
-        "@context": "https://schema.org",
-        "@type": "SoftwareApplication",
-        "name": "Web Chat",
-        "description": "An open-source, Telegram-style chat app that runs entirely on the Cloudflare developer platform (Workers, Durable Objects, D1, R2) and fits the Workers Free plan.",
-        "applicationCategory": "CommunicationApplication",
-        "operatingSystem": "Web",
-        "browserRequirements": "Requires JavaScript, WebAssembly and the Origin Private File System",
-        "isAccessibleForFree": true,
-        "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
-        "image": "https://raw.githubusercontent.com/Jazee6/web-chat/main/docs/screenshot.png",
-        "sameAs": "https://github.com/Jazee6/web-chat",
-        "featureList": [
-          "Private chats and groups of up to 20 members",
-          "End-to-end encrypted secret chats (MLS) across devices",
-          "Photos, videos, files, voice messages, stickers and link previews",
-          "One-to-one and group voice and video calls with screen sharing",
-          "Local-first: messages stored in SQLite in the browser, offline and synced across devices",
-          "Installable PWA with Web Push notifications",
-          "Sign in with any OpenID Connect provider"
-        ]
-      }
-    </script>
   </head>
   <body>
     <div id="root"></div>

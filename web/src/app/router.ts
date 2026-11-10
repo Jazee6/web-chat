@@ -22,6 +22,9 @@ const loginRoute = createRoute({
     const result = v.safeParse(loginSearch, search)
     return result.success ? result.output : {}
   },
+  beforeLoad: ({ context, search }) => {
+    if (context.boot.me && search.error === undefined) throw redirect({ to: '/', replace: true })
+  },
   component: Login,
 })
 

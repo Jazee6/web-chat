@@ -12,9 +12,11 @@
   // 模板没有自定义域名，用 workers.dev；预览地址同样过不了 Origin 检查，关掉
   "workers_dev": true,
   "preview_urls": false,
+  // 根地址由 Worker 按 cookie 选外壳或介绍页，/en 跳回根地址（ADR-0015）；/.well-known/* 不走 SPA 回退。env.production 继承这一项
   "assets": {
+    "binding": "ASSETS",
     "not_found_handling": "single-page-application",
-    "run_worker_first": ["/api/*", "/ws"]
+    "run_worker_first": ["/", "/en", "/.well-known/*", "/api/*", "/ws"]
   },
   "durable_objects": {
     "bindings": [

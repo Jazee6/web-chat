@@ -1,6 +1,7 @@
 import { Hono } from 'hono'
 import { CLOSE_OUTDATED, PROTOCOL_PARAM, PROTOCOL_VERSION } from 'shared/protocol'
 import { getAuth, requestIdentity } from './auth'
+import { mirrorSignedIn, redirectLandingEn, serveRoot } from './landing'
 import { linkPreview } from './link-preview'
 import { media } from './media'
 import { DEVICE_HEADER, LOCATION_HEADER, USER_HEADER, type DeviceLocation } from './user-do'
@@ -24,6 +25,12 @@ const REQUIRED = [
   'R2_SECRET_ACCESS_KEY',
 ] as const
 
+// 介绍页与外壳不依赖任何配置：按钮部署之后、补完配置之前首页也照常显示。必须注册在下面的检查之前
+app.get('/', serveRoot)
+app.get('/en', redirectLandingEn)
+// 没有的 /.well-known/* 照实返回 404，不交给 SPA 回退：AI 代理与爬虫会把那份 HTML 当成坏掉的清单
+app.get('/.well-known/*', (c) => c.notFound())
+
 // 按钮部署之后、补完配置之前：直接说明缺了哪些，而不是在用到它们的地方各自出错
 app.use(async (c, next) => {
   const missing = REQUIRED.filter((name) => !c.env[name])
@@ -31,7 +38,9 @@ app.use(async (c, next) => {
   await next()
 })
 
-app.on(['GET', 'POST'], '/api/auth/*', (c) => getAuth().handler(c.req.raw))
+app.on(['GET', 'POST'], '/api/auth/*', async (c) =>
+  mirrorSignedIn(await getAuth().handler(c.req.raw), new URL(c.req.url).protocol === 'https:'),
+)
 
 app.route('/api/media', media)
 app.route('/api/link-preview', linkPreview)

@@ -2,7 +2,7 @@
 
 > Web Chat is an open-source, Telegram-style chat app that runs entirely on the Cloudflare developer platform (Workers, Durable Objects, D1 and R2) and is designed to fit the Workers Free plan. Anyone can deploy their own instance with the Deploy to Cloudflare button and sign in with their own OpenID Connect provider.
 
-This site is one deployment of Web Chat. Signing in is required; there is no public content beyond this page. The source code, documentation and deployment guide are on GitHub.
+The official site is https://chat.jaze.top, which is also an example instance. Its landing page describes the project in English (https://chat.jaze.top/) and Chinese (https://chat.jaze.top/zh); everything else needs signing in. Every deployment serves the same landing page. The source code, documentation and deployment guide are on GitHub.
 
 ## Features
 
@@ -23,6 +23,8 @@ This site is one deployment of Web Chat. Signing in is required; there is no pub
 
 ## Docs
 
+- [Full text for LLMs](https://chat.jaze.top/llms-full.txt): this file plus deployment, the free-plan budget and answers to common questions
+- [Landing page](https://chat.jaze.top/) and its [Chinese version](https://chat.jaze.top/zh)
 - [README](https://github.com/Jazee6/web-chat/blob/main/README.md): features, deployment (one-click and manual), configuration and development
 - [Architecture](https://github.com/Jazee6/web-chat/blob/main/docs/architecture/README.md): topology, data model, sync protocol, realtime and fan-out, media, auth and security, client, free-tier budget (in Chinese)
 - [Architecture decision records](https://github.com/Jazee6/web-chat/tree/main/docs/adr) (in Chinese)

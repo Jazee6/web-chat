@@ -22,6 +22,8 @@ const SHELL_PREFIX = 'shell-'
 const SHELL = SHELL_PREFIX + build.version
 /** SPA 的所有路由都返回同一个 index.html。不用 /index.html 作键：它会被重定向到 /，重定向过的响应不能用于导航 */
 const INDEX = '/'
+/** 根地址未登录时是介绍页（ADR-0015），外壳从 /?shell 取，存在 INDEX 名下 */
+const SHELL_URL = '/?shell'
 /** 导航网络优先：超过这个时间还没有响应就先用缓存的外壳 */
 const NAV_TIMEOUT_MS = 3000
 
@@ -29,7 +31,9 @@ self.addEventListener('install', (e) => {
   e.waitUntil(
     (async () => {
       const cache = await caches.open(SHELL)
-      await cache.addAll([INDEX, ...build.files])
+      const [shell] = await Promise.all([fetch(SHELL_URL), cache.addAll(build.files)])
+      if (!shell.ok) throw new Error(`shell: ${shell.status}`)
+      await cache.put(INDEX, shell)
       // 导航网络优先、资源带哈希，新旧版本不会混用同一份缓存，所以新 SW 立即接管
       await self.skipWaiting()
     })(),

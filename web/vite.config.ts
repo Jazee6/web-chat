@@ -2,7 +2,9 @@ import react, { reactCompilerPreset } from '@vitejs/plugin-react'
 import babel from '@rolldown/plugin-babel'
 import { cloudflare } from '@cloudflare/vite-plugin'
 import { createHash } from 'node:crypto'
-import { defineConfig, type Plugin } from 'vite'
+import { readFile, writeFile } from 'node:fs/promises'
+import { join } from 'node:path'
+import { defineConfig, runnerImport, type Plugin } from 'vite'
 import tailwindcss from '@tailwindcss/vite'
 import { unstable_readConfig } from 'wrangler'
 
@@ -60,10 +62,73 @@ function swBuild(): Plugin {
   }
 }
 
+/**
+ * 介绍页（ADR-0015）：src/landing/render.tsx 渲染出静态 HTML。构建时写成 en.html 与 zh.html，
+ * Worker 在未登录时把 / 发成 en.html，zh.html 由静态资源直接发在 /zh；样式表沿用应用的那份（登录后已在缓存里）。
+ * 开发时没有这两个文件，由这里在 Worker 之前接管 / 与 /zh。llms-full.txt 由 public/llms.txt 加上介绍页的文字生成
+ */
+type LandingModule = {
+  LANGS: ('en' | 'zh')[]
+  renderLanding: (lang: 'en' | 'zh', css: string[]) => string
+  renderLlmsFull: (llms: string) => string
+}
+
+function landing(): Plugin {
+  const SIGNED_IN = /(?:^|;\s*)(?:signed_in|(?:__Secure-)?better-auth\.session_token)=/
+  const load = async () =>
+    (
+      await runnerImport<LandingModule>('./src/landing/render.tsx', {
+        configFile: false,
+        root: import.meta.dirname,
+        resolve: { tsconfigPaths: true },
+        logLevel: 'error',
+      })
+    ).module
+  return {
+    name: 'landing',
+    configureServer(server) {
+      server.middlewares.use(async (req, res, next) => {
+        const url = new URL(req.url ?? '/', 'http://localhost')
+        if (req.method === 'GET' && url.pathname === '/llms-full.txt') {
+          const llms = await readFile(join(import.meta.dirname, 'public/llms.txt'), 'utf8')
+          res.setHeader('Content-Type', 'text/plain; charset=utf-8')
+          return res.end((await load()).renderLlmsFull(llms))
+        }
+        const lang =
+          url.pathname === '/zh'
+            ? 'zh'
+            : url.pathname === '/' && !url.searchParams.has('shell') && !SIGNED_IN.test(req.headers.cookie ?? '')
+              ? 'en'
+              : null
+        if (req.method !== 'GET' || !lang) return next()
+        try {
+          const html = (await load()).renderLanding(lang, ['/src/index.css'])
+          res.setHeader('Content-Type', 'text/html; charset=utf-8')
+          res.end(html)
+        } catch (e) {
+          next(e)
+        }
+      })
+    },
+    async writeBundle(options, bundle) {
+      if (this.environment.name !== 'client') return
+      const index = bundle['index.html']
+      if (index?.type !== 'asset') this.error('没有找到 index.html')
+      const css = [...String(index.source).matchAll(/<link rel="stylesheet"[^>]*href="([^"]+)"/g)].map((m) => m[1]!)
+      if (css.length === 0) this.error('index.html 里没有样式表')
+      const { renderLanding, renderLlmsFull, LANGS } = await load()
+      for (const lang of LANGS) await writeFile(join(options.dir!, `${lang}.html`), renderLanding(lang, css))
+      const llms = await readFile(join(options.dir!, 'llms.txt'), 'utf8')
+      await writeFile(join(options.dir!, 'llms-full.txt'), renderLlmsFull(llms))
+    },
+  }
+}
+
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [
     swBuild(),
+    landing(),
     deployConfig(),
     react(),
     babel({ presets: [reactCompilerPreset()] }),

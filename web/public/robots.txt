@@ -1,4 +1,5 @@
-# Only the home page and llms.txt are worth indexing: every other path needs signing in (served without a charset, keep this file ASCII)
+# Only the landing pages (/ and /zh) and llms.txt are worth indexing: every other path needs signing in (served without a charset, keep this file ASCII)
+# The landing pages are the same on every deployment and point to the official site, so the sitemap does too (ADR-0015)
 User-agent: *
 Allow: /
 Disallow: /c/
@@ -9,3 +10,5 @@ Disallow: /pip/
 Disallow: /login
 Disallow: /api/
 Disallow: /ws
+
+Sitemap: https://chat.jaze.top/sitemap.xml

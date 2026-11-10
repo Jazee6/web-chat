@@ -16,10 +16,10 @@
 
 | 产品 | 指标 | Free 额度 | 本架构的用法 |
 | --- | --- | --- | --- |
-| Workers | 请求 | 100,000 / 天 | 只用于 better-auth（登录 / 登出 / 会话）、WS 升级、上传签名、链接预览 |
+| Workers | 请求 | 100,000 / 天 | 只用于 better-auth（登录 / 登出 / 会话）、WS 升级、上传签名、链接预览，以及打开根地址 `/`（按 cookie 选介绍页或外壳） |
 | Workers | CPU | 10 ms / 次调用 | 不做密码哈希；better-auth 冷启动耗时需要实测（见 [06 § Worker CPU 风险](./06-auth-and-security.md#worker-cpu-风险)） |
 | Workers | 子请求 / 次调用 | 外部 50，内部服务 1,000；同时等待 6 个连接 | 一次扇出最多 19 个 RPC，使用并发为 6 的池（见 [04 § 调用限额](./04-realtime-and-fanout.md#调用限额)） |
-| Static Assets | 请求 | 免费且不限量 | SPA 外壳 |
+| Static Assets | 请求 | 免费且不限量 | SPA 外壳、`/zh` 介绍页 |
 | Durable Objects | 请求 | 100,000 / 天 | **瓶颈之一**。入站 WS 消息按 20:1 折算；每次 RPC 方法调用计 1 次请求 |
 | Durable Objects | 时长 | 13,000 GB-s / 天 | 按 128MB 计算，约等于 29 个 DO·小时/天。**必须使用 Hibernation**；空闲且可休眠的对象不计时长 |
 | Durable Objects | SQL 行读取 | 5,000,000 / 天 | 用来换取写入：少建索引、扫描小表 |

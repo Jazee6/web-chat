@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Spinner } from '@/components/ui/spinner'
 import { signIn } from './session'
 
-/** 仅展示登录错误（例如 IdP 拒绝授权）；正常情况下未登录会直接跳转到 IdP */
+/** 展示登录错误（例如 IdP 拒绝授权）；没有错误时 /login 直接跳转到 IdP（app/routes.tsx） */
 export function LoginPage({ error }: { error: string | undefined }) {
   const [redirecting, setRedirecting] = useState(false)
 

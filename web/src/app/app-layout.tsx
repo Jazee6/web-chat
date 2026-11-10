@@ -69,7 +69,8 @@ function ConnectionBar() {
 let signInStarted = false
 
 /** 没有独立的登录页：未登录时直接跳转到 IdP，跳转前保持启动画面 */
-function RedirectToSignIn() {
+/** 未登录：直接去 IdP。/login（介绍页的登录按钮）也用它 */
+export function RedirectToSignIn() {
   useEffect(() => {
     if (signInStarted) return
     signInStarted = true
