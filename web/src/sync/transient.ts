@@ -38,7 +38,10 @@ export function applyTyping(chatId: string, userId: string, action: TypingAction
   let users = typing.get(chatId)
   if (!users) typing.set(chatId, (users = new Map()))
   if (action === null) {
-    if (!users.delete(userId)) return
+    if (!users.delete(userId)) {
+      if (users.size === 0) typing.delete(chatId)
+      return
+    }
   } else {
     users.set(userId, { action, expires: Date.now() + TYPING_TTL_MS })
     setTimeout(() => expire(chatId), TYPING_TTL_MS)
@@ -62,8 +65,12 @@ function expire(chatId: string) {
 
 function refresh(chatId: string) {
   const users = [...(typing.get(chatId) ?? [])].map(([user_id, { action }]) => ({ user_id, action }))
-  if (users.length === 0) typingSnapshot.delete(chatId)
-  else typingSnapshot.set(chatId, users)
+  if (users.length === 0) {
+    typing.delete(chatId)
+    typingSnapshot.delete(chatId)
+  } else {
+    typingSnapshot.set(chatId, users)
+  }
   notify()
 }
 

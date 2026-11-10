@@ -28,7 +28,8 @@ import {
   type PrivateKeyPackage,
   type Proposal,
 } from 'ts-mls'
-import { fromBase64, toBase64, type Leaf } from './format'
+import { fromBase64, toBase64 } from '../../lib/base64'
+import type { Leaf } from './format'
 
 const SUITE = 'MLS_128_DHKEMX25519_AES128GCM_SHA256_Ed25519'
 /** 消息密钥的 exporter 标签 */

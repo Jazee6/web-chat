@@ -1,6 +1,7 @@
 // 语音消息的波形：WAVEFORM_LENGTH 个 0–255 的音量采样，base64 内联进消息。
 // 见 docs/architecture/05-media.md § 语音消息
 import { WAVEFORM_LENGTH } from 'shared/protocol'
+import { toBase64 } from '@/lib/base64'
 
 /**
  * 把录音时按固定间隔采到的音量（0–1）压缩成 WAVEFORM_LENGTH 个采样：每段取峰值，再按整段的最大值归一化，
@@ -23,7 +24,7 @@ export function downsample(levels: number[]): Uint8Array {
 }
 
 export function encodeWaveform(samples: Uint8Array): string {
-  return btoa(String.fromCharCode(...samples))
+  return toBase64(samples)
 }
 
 /** 解码为 0–1；格式不对时返回全零，不影响播放 */

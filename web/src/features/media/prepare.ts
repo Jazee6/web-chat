@@ -3,6 +3,7 @@
 import { rgbaToThumbHash } from 'thumbhash'
 import { PHOTO_SIZE, PREVIEW_SIZE } from 'shared/protocol'
 
+import { toBase64 } from '@/lib/base64'
 import type { OutgoingMedia } from '@/sync/bridge'
 
 const PHOTO_QUALITY = 0.85
@@ -120,5 +121,5 @@ export function thumbhashOf(bitmap: Frame) {
   const ctx = new OffscreenCanvas(w, h).getContext('2d')!
   ctx.drawImage(bitmap, 0, 0, w, h)
   const hash = rgbaToThumbHash(w, h, ctx.getImageData(0, 0, w, h).data)
-  return btoa(String.fromCharCode(...hash))
+  return toBase64(hash)
 }

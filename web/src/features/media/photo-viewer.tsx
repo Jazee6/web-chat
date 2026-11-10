@@ -9,6 +9,7 @@ import { toast } from '@/components/ui/toast'
 import { useSealedUrls } from '@/features/secret/sealed-media'
 import { addStickerFromImage } from '@/features/stickers/add'
 import { pause as pauseVoice } from '@/features/voice/player'
+import { downloadBlob } from '@/lib/download'
 import { cn } from '@/lib/utils'
 import { mediaImgProps } from './media-url'
 import type { AlbumPhoto } from './album'
@@ -215,10 +216,5 @@ export function PhotoViewer({
 async function saveAs(url: string, name: string) {
   const res = await fetch(url, { referrerPolicy: mediaImgProps.referrerPolicy })
   if (!res.ok) throw new Error(`download failed: ${res.status}`)
-  const href = URL.createObjectURL(await res.blob())
-  const a = document.createElement('a')
-  a.href = href
-  a.download = name
-  a.click()
-  setTimeout(() => URL.revokeObjectURL(href), 60_000)
+  downloadBlob(await res.blob(), name)
 }

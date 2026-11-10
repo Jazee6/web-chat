@@ -5,6 +5,7 @@
 import { useEffect, useState } from 'react'
 
 import { mediaImgProps, mediaUrl } from '@/features/media/media-url'
+import { downloadBlob } from '@/lib/download'
 import { openMedia, type MediaRole } from '@/sync/secret/format'
 
 /** 解开的内容在内存里最多留多少字节 */
@@ -91,10 +92,5 @@ export function useSealedUrls(refs: (SealedRef | null)[]): (string | null)[] {
 
 /** 解开后保存到本地 */
 export async function saveSealed(ref: SealedRef, name: string) {
-  const href = URL.createObjectURL(await openSealed(ref))
-  const a = document.createElement('a')
-  a.href = href
-  a.download = name
-  a.click()
-  setTimeout(() => URL.revokeObjectURL(href), 60_000)
+  downloadBlob(await openSealed(ref), name)
 }

@@ -10,7 +10,16 @@ const KEY = 'current'
 /** 一次分享的内容：title / text / url 合成的文字，以及文件 */
 export type SharedContent = { text: string; files: File[] }
 
-const openDb = () => openDatabase(DB_NAME, 1, (db) => db.createObjectStore(STORE))
+let db: Promise<IDBDatabase> | null = null
+
+/** 连接打开一次后复用；打开失败时下次重试 */
+function openDb(): Promise<IDBDatabase> {
+  db ??= openDatabase(DB_NAME, 1, (created) => created.createObjectStore(STORE)).catch((e: unknown) => {
+    db = null
+    throw e
+  })
+  return db
+}
 
 async function store(mode: IDBTransactionMode) {
   return (await openDb()).transaction(STORE, mode).objectStore(STORE)

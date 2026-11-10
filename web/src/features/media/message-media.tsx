@@ -1,4 +1,3 @@
-import { useEffect, useState } from 'react'
 import { FileIcon } from 'lucide-react'
 import type { Media, SealedMedia } from 'shared/protocol'
 
@@ -16,7 +15,7 @@ import { fadeOutMotion } from '@/features/chat/item-motion'
 import { saveSealed, useSealedUrls } from '@/features/secret/sealed-media'
 import { StickerImage, StickerMessage } from '@/features/stickers/sticker-message'
 import { formatBytes } from '@/lib/format'
-import { readBlob } from '@/sync/blobs'
+import { useLocalUrls } from '@/hooks/use-local-urls'
 import type { OutboxMedia } from '@/sync/store'
 import { useUploadProgress } from '@/sync/transient'
 import { Album, AlbumSkeleton, type AlbumPhoto } from './album'
@@ -93,7 +92,8 @@ function SealedSentMedia({ media }: { media: SealedMedia[] }) {
  */
 export function PendingMedia({ json, randomId, failed }: { json: string; randomId: number; failed: boolean }) {
   const media = JSON.parse(json) as OutboxMedia[]
-  const urls = useLocalUrls(randomId, media)
+  // 只要图片与视频的（文件消息不需要预览）
+  const urls = useLocalUrls(randomId, media.flatMap((m) => ('preview' in m ? [m.file, m.preview] : [])))
   const uploaded = useUploadProgress(randomId)
   const progress = failed ? undefined : uploaded === undefined ? null : Math.round(uploaded * 100)
   const [first] = media
@@ -133,35 +133,6 @@ export function PendingMedia({ json, randomId, failed }: { json: string; randomI
       )}
     </div>
   )
-}
-
-/** 读出暂存的图片与视频并生成 object URL；卸载时回收。文件消息不需要预览 */
-function useLocalUrls(randomId: number, media: OutboxMedia[]) {
-  const [urls, setUrls] = useState<Map<string, string> | null>(null)
-  const names = media.flatMap((m) => ('preview' in m ? [m.file, m.preview] : [])).join('\n')
-
-  useEffect(() => {
-    if (!names) return
-    let cancelled = false
-    const created: string[] = []
-    void Promise.all(
-      names.split('\n').map(async (name) => {
-        const url = URL.createObjectURL(await readBlob(randomId, name))
-        created.push(url)
-        return [name, url] as const
-      }),
-    ).then(
-      (entries) => !cancelled && setUrls(new Map(entries)),
-      // 已发送成功、暂存文件已删除：这一行马上会被已发送的消息替换
-      () => {},
-    )
-    return () => {
-      cancelled = true
-      for (const url of created) URL.revokeObjectURL(url)
-    }
-  }, [randomId, names])
-
-  return urls
 }
 
 /**

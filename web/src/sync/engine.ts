@@ -894,6 +894,8 @@ export class Engine {
     const now = Date.now()
     const key = `${chatId}:${action}`
     if (!this.conn.online || now - (this.typingSentAt.get(key) ?? 0) < TYPING_THROTTLE_MS) return null
+    // 过了节流间隔的条目已经没用了，顺手清掉
+    for (const [k, at] of this.typingSentAt) if (now - at >= TYPING_THROTTLE_MS) this.typingSentAt.delete(k)
     this.typingSentAt.set(key, now)
     this.conn.request('presence.typing', { chat_id: chatId, action }).catch(ignoreOffline)
     return null

@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { MAX_ALBUM_SIZE, MAX_MEDIA_BYTES, type MessageEntity } from 'shared/protocol'
 
 import { toast } from '@/components/ui/toast'
+import { formatBytes } from '@/lib/format'
 import { isPhotoCandidate, prepareFile, preparePhoto } from '@/features/media/prepare'
 import { isVideoCandidate, prepareVideo, type VideoResult } from '@/features/media/video'
 import type { OutgoingLink, OutgoingMedia, OutgoingMessage } from '@/sync/bridge'
@@ -84,7 +85,7 @@ export function useAttachments() {
       // 视频要转码，原文件多大都可以；转码后的大小另有上限
       const video = as !== 'file' && isVideoCandidate(file)
       if (!video && file.size > MAX_MEDIA_BYTES) {
-        toast.add({ type: 'error', title: `“${file.name}” is larger than 20 MB` })
+        toast.add({ type: 'error', title: `“${file.name}” is larger than ${formatBytes(MAX_MEDIA_BYTES)}` })
         continue
       }
       const item: Attachment = { id: crypto.randomUUID(), name: file.name || 'file', photo: false, thumb: null, full: null, media: null }
@@ -132,12 +133,6 @@ export function useAttachments() {
     })
   }
 
-  const clear = () => {
-    for (const job of jobs.current.values()) job.abort()
-    revoke(latest.current)
-    setItems([])
-  }
-
   /** 发送：交出附件栏里的全部附件，预览图先留着；发送成功后 discard，失败时 putBack */
   const take = () => {
     const list = latest.current
@@ -157,7 +152,7 @@ export function useAttachments() {
     return true
   }
 
-  return { items, add, remove, clear, take, putBack, discard: revoke, ready: items.every((a) => a.media !== null) }
+  return { items, add, remove, take, putBack, discard: revoke, ready: items.every((a) => a.media !== null) }
 }
 
 function revoke(items: Attachment[]) {

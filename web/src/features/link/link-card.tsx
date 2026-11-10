@@ -1,4 +1,4 @@
-import { useEffect, useState, type CSSProperties } from 'react'
+import type { CSSProperties } from 'react'
 import { LinkIcon } from 'lucide-react'
 import type { LinkPreview } from 'shared/protocol'
 import { inviteCodeOf, linkOnly } from 'shared/text'
@@ -8,7 +8,7 @@ import { Item, ItemContent, ItemDescription, ItemHeader, ItemMedia, ItemTitle } 
 import { Spinner } from '@/components/ui/spinner'
 import { UserAvatar } from '@/components/user-avatar'
 import { mediaImgProps, mediaUrl, thumbhashUrl } from '@/features/media/media-url'
-import { readBlob } from '@/sync/blobs'
+import { useLocalUrls } from '@/hooks/use-local-urls'
 import type { PreparedPreview } from '@/sync/bridge'
 import { displayHost, useOpenLink } from './open-link'
 import type { OutboxLink } from '@/sync/store'
@@ -88,32 +88,11 @@ export function PendingLinkCard({ text, json, randomId }: { text: string; json: 
   const url = linkOnly(text)
   const link = JSON.parse(json) as OutboxLink
   const file = link.state === 'ready' ? link.photo?.file : undefined
-  const src = useLocalBlob(randomId, file)
+  const local = useLocalUrls(randomId, file ? [file] : [])
+  const src = (file && local?.get(file)) ?? null
   if (!url) return null
   if (link.state === 'pending') return <LinkCard url={url} preview={{ type: 'web', title: null }} loading />
   const photo = link.photo && { src, w: link.photo.w, h: link.photo.h, thumbhash: link.photo.thumbhash }
   return <LinkCard url={url} preview={link.preview} photo={photo} />
 }
 
-function useLocalBlob(randomId: number, file: string | undefined) {
-  const [src, setSrc] = useState<string | null>(null)
-  useEffect(() => {
-    if (!file) return
-    let url: string | null = null
-    let cancelled = false
-    readBlob(randomId, file).then(
-      (blob) => {
-        if (cancelled) return
-        url = URL.createObjectURL(blob)
-        setSrc(url)
-      },
-      // 已发送成功、暂存文件已删除：这一行马上会被已发送的消息替换
-      () => {},
-    )
-    return () => {
-      cancelled = true
-      if (url) URL.revokeObjectURL(url)
-    }
-  }, [randomId, file])
-  return file ? src : null
-}

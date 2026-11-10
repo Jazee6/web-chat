@@ -1,32 +1,27 @@
 // 本地保存的秘密聊天密钥材料（KeyPackage 私钥、MLS 状态、纪元密钥）再包一层：
 // 用存在 IndexedDB 里、不可导出的 AES-GCM 密钥加密后才写进本地库，只拿到本地库文件的人解不开
+import { done } from '@/lib/idb'
+
 const DB = 'web-chat-keys'
 const STORE = 'keys'
 const WRAP_KEY = 'wrap'
 
 let key: Promise<CryptoKey> | null = null
 
-function request<T>(req: IDBRequest<T>): Promise<T> {
-  return new Promise((resolve, reject) => {
-    req.onsuccess = () => resolve(req.result)
-    req.onerror = () => reject(req.error)
-  })
-}
-
 async function loadKey(): Promise<CryptoKey> {
   const open = indexedDB.open(DB, 1)
   open.onupgradeneeded = () => open.result.createObjectStore(STORE)
-  const db = await request(open)
+  const db = await done(open)
   try {
-    const existing = (await request(db.transaction(STORE).objectStore(STORE).get(WRAP_KEY))) as CryptoKey | undefined
+    const existing = (await done(db.transaction(STORE).objectStore(STORE).get(WRAP_KEY))) as CryptoKey | undefined
     if (existing) return existing
     const created = await crypto.subtle.generateKey({ name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt'])
     // 两个 Worker 同时创建时以先写入的为准
     const tx = db.transaction(STORE, 'readwrite')
     const store = tx.objectStore(STORE)
-    const raced = (await request(store.get(WRAP_KEY))) as CryptoKey | undefined
+    const raced = (await done(store.get(WRAP_KEY))) as CryptoKey | undefined
     if (raced) return raced
-    await request(store.add(created, WRAP_KEY))
+    await done(store.add(created, WRAP_KEY))
     return created
   } finally {
     db.close()

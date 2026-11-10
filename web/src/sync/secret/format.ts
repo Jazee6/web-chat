@@ -1,5 +1,6 @@
 // 秘密聊天的密文格式、加解密与安全码。不依赖 ts-mls：签名与验证由调用方传入。
 // 见 docs/adr/0010-secret-chats-multi-device-mls.md
+import { fromBase64, toBase64 } from '../../lib/base64'
 import { SEALED_MEDIA_OVERHEAD, type ReactionEmoji, type SealedMedia, type SecretPayload } from 'shared/protocol'
 
 export type { SealedMedia, SecretPayload }
@@ -21,18 +22,6 @@ export type SecretReaction = { emoji: ReactionEmoji }
 /** 密文的用途 */
 export type Binding = { kind: 'message' } | { kind: 'edit'; seq: number } | { kind: 'react'; seq: number }
 
-export function toBase64(bytes: Uint8Array): string {
-  let s = ''
-  for (let i = 0; i < bytes.length; i += 0x8000) s += String.fromCharCode(...bytes.subarray(i, i + 0x8000))
-  return btoa(s)
-}
-
-export function fromBase64(s: string): Uint8Array<ArrayBuffer> {
-  const bin = atob(s)
-  const bytes = new Uint8Array(bin.length)
-  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i)
-  return bytes
-}
 
 /** 只读头部：纪元与叶子序号；格式不对返回 null */
 export function header(cipher: string): { epoch: number; leaf: number } | null {
