@@ -2,9 +2,11 @@
 // 通过 BroadcastChannel 为所有标签页服务。见 docs/architecture/07-client.md
 import sqlite3InitModule, { type Database, type SAHPoolUtil, type Sqlite3Static } from '@sqlite.org/sqlite-wasm'
 import { PROTOCOL_PARAM, PROTOCOL_VERSION } from 'shared/protocol'
-import { sweepBlobs, wipeBlobs } from './blobs'
+import { deleteBlobs, sweepBlobs, wipeBlobs } from './blobs'
 import {
   CHANNEL,
+  OpFailure,
+  type CallMessage,
   type InitMessage,
   type Op,
   type OpError,
@@ -14,7 +16,7 @@ import {
 } from './bridge'
 import { BUILD } from '@/lib/build'
 import { Connection, OfflineError } from './connection'
-import { Engine, OpFailure } from './engine'
+import { Engine } from './engine'
 import { Store, intact, migrate } from './store'
 
 const POOL_DIRECTORY = '/web-chat'
@@ -22,10 +24,11 @@ const POOL_DIRECTORY = '/web-chat'
 const POOL_INSTALL_ATTEMPTS = 8
 
 const channel = new BroadcastChannel(CHANNEL)
-const queue: TabMessage[] = []
 let runtime: { pool: SAHPoolUtil; db: Database; conn: Connection; engine: Engine } | null = null
 let wiped = false
 let restarting = false
+/** 启动失败：之后打开的标签页也要知道 */
+let failed = false
 
 function post(message: WorkerMessage) {
   channel.postMessage(message)
@@ -34,18 +37,27 @@ function post(message: WorkerMessage) {
 channel.onmessage = (e: MessageEvent<TabMessage | WorkerMessage>) => {
   const message = e.data
   if (message.k !== 'call' || wiped) return
+  if (failed) {
+    post({ k: 'failed' })
+    return
+  }
   // 新旧版本的标签页同时开着：不处理另一个构建的请求，请较旧的一方重载。
   // 本 Worker 较旧时照样为同一构建的标签页服务，直到它们重载（通话中的标签页要等通话结束）
   if (message.build !== BUILD) {
     post({ k: 'outdated', newest: Math.max(message.build, BUILD) })
     return
   }
+  // 还没就绪（本地库还没打开，或丢失后正在换新的 Worker）的请求不处理：标签页收到 ready 后会全部重放
   if (runtime) void handle(message)
-  else queue.push(message)
 }
 
 addEventListener('message', (e: MessageEvent<InitMessage>) => {
-  if (e.data.k === 'init') void start(e.data.userId)
+  if (e.data.k !== 'init') return
+  start(e.data.userId).catch((err: unknown) => {
+    console.error('sync worker failed to start', err)
+    failed = true
+    post({ k: 'failed' })
+  })
 })
 
 // 出错时检查本地库还在不在：浏览器可能在运行中清掉 OPFS（实测在无痕式上下文里闲置后发生），
@@ -86,7 +98,15 @@ async function start(userId: string) {
     return
   }
 
-  const store = new Store(db, userId, (topics) => post({ k: 'changed', topics }))
+  const store = new Store(
+    db,
+    userId,
+    (topics) => post({ k: 'changed', topics }),
+    // 删会话、发出的消息推回来时删掉的发件箱条目：暂存的文件随之删除，不必等下次启动的 sweepBlobs
+    (randomIds) => {
+      for (const id of randomIds) void deleteBlobs(id)
+    },
+  )
   store.scheduleMuteExpiry()
   // 发件箱里已经没有的待上传文件（换了账号、表结构重建、入队前崩溃）
   await sweepBlobs(new Set(store.allOutbox().map((row) => row.random_id)))
@@ -106,7 +126,6 @@ async function start(userId: string) {
   runtime = { pool, db, conn, engine }
 
   post({ k: 'ready', build: BUILD })
-  for (const message of queue.splice(0)) void handle(message)
   conn.start()
 }
 
@@ -121,7 +140,7 @@ async function installPool(sqlite3: Sqlite3Static): Promise<SAHPoolUtil> {
   }
 }
 
-async function handle({ tab, id, op, args }: TabMessage) {
+async function handle({ tab, id, op, args }: CallMessage) {
   try {
     const value = await run(op, args, tab)
     post({ k: 'result', tab, id, ok: true, value })

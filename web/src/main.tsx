@@ -13,9 +13,10 @@ import { inPip } from './features/pip/pip'
 import { requestReload } from './lib/reload'
 import { startLeaderElection } from './sync/client'
 
-// 离线外壳与推送通知（以后还有媒体缓存）。开发时 /sw.js 由 vite.config.ts 映射到 src/sw/index.ts
+// 离线外壳、推送通知与媒体缓存。开发时 /sw.js 由 vite.config.ts 映射到 src/sw/index.ts。
+// 不安全的上下文与部分浏览器的隐私窗口没有 Service Worker
 navigator.serviceWorker
-  .register('/sw.js', { type: 'module', updateViaCache: 'none' })
+  ?.register('/sw.js', { type: 'module', updateViaCache: 'none' })
   .catch((e: unknown) => console.warn('service worker registration failed', e))
 // 发布新版本后，旧页面要按需加载的代码块已经不在了
 addEventListener('vite:preloadError', () => requestReload())
@@ -40,7 +41,7 @@ void navigator.storage.persist()
 
 const router = createAppRouter(boot)
 // 点击通知时，已打开的窗口由 Service Worker 聚焦后告知要打开的会话
-navigator.serviceWorker.addEventListener('message', (e: MessageEvent<{ k: string; chat_id: string }>) => {
+navigator.serviceWorker?.addEventListener('message', (e: MessageEvent<{ k: string; chat_id: string }>) => {
   if (e.data.k === 'open-chat') void router.navigate({ to: '/c/$chatId', params: { chatId: e.data.chat_id } })
 })
 

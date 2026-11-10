@@ -20,7 +20,7 @@ flowchart TB
 ```
 
 - **Leader 选举**：每个标签页都排队请求 `navigator.locks.request('web-chat-leader', …)`，拿到锁的标签页启动同步 Worker 并一直持有锁。Leader 关闭后锁被释放，下一个标签页自动接任。
-- **同步 Worker 直接监听 `BroadcastChannel`**，为所有标签页（包括 Leader 自己）服务，不经过 Leader 主线程中转。请求带标签页 ID 与请求 ID；新 Leader 就绪时广播 `ready`，各标签页重放尚未得到结果的请求。因此所有请求都必须幂等：例如发送消息的 `random_id` 由标签页生成，重放不会重复入队。
+- **同步 Worker 直接监听 `BroadcastChannel`**，为所有标签页（包括 Leader 自己）服务，不经过 Leader 主线程中转。请求带标签页 ID 与请求 ID；新 Leader 就绪时广播 `ready`，各标签页重放尚未得到结果的请求；就绪之前收到的请求同步 Worker 不处理，免得执行两次。因此所有请求都必须幂等：例如发送消息的 `random_id` 由标签页生成，重放不会重复入队。
 - **交接时本地库可能仍被占用**：上一任 Worker 释放 OPFS 句柄之前，新 Worker 安装 `opfs-sahpool` 会失败，需要带退避重试。
 - **本地库在运行中丢失时自动重建**：浏览器可能在 Worker 运行期间清掉 OPFS（实测在无痕式上下文里闲置后发生），之后每次读写都报 `no such table`，连接却仍然在线，收到的更新全部丢掉。同步 Worker 在请求出错和未捕获的异常时检查表结构版本，对不上就断开连接、关闭本地库，请 Leader 标签页终止它（释放 OPFS 句柄）并换一个新的 Worker。新 Worker 像首次登录一样建库、全量同步，就绪后广播 `ready`，与换 Leader 走同一条路。没发出去的发件箱随本地库一起丢失。
 - **服务端以关闭码 4000 顶替同一设备的旧连接**，收到后不再重连，避免两个 Worker 互相踢下线。
@@ -48,7 +48,7 @@ flowchart TB
 - **更新**：新 SW 安装后立即接管（`skipWaiting` + `clients.claim`），不提示。导航网络优先，所以每次打开几乎都是最新版；协议不兼容旧客户端（见下文 § 新版本），不适合缓存优先。
 - **媒体缓存**：媒体域名上的图片缓存优先，见 [05 § 客户端缓存](./05-media.md#客户端缓存)。
 - **推送通知**：SW 收到推送后按载荷显示通知，`tag` 为 `chat_id`，新消息 `renotify`，撤回与编辑 `silent` 替换。点击通知时，有打开的窗口就聚焦并 `postMessage` 让页面内路由打开会话，没有就 `openWindow('/c/{chatId}')`。打开会话且页面可见时，关掉本机这个会话的通知。
-- **推送订阅**（`features/notifications/push.ts`）：Chrome 的 Dedicated Worker 里没有 `navigator.serviceWorker`，所以订阅由标签页取得，经 `setPush` 交给同步 Worker；同步 Worker 记住它，每次连接后用 `push.set` 上报（换 Leader 时标签页重新交一次）。本机开关存在 `localStorage`：权限已授予且没有关闭时，启动时自动订阅（不需要用户手势）；开启时先退掉旧订阅再订阅，endpoint 随之更换。每台设备第一次登录后弹一次带「Turn on」按钮的 Toast；设置 → Notifications 里有本机开关与通知预览。iOS 只有添加到主屏幕后才有推送，此时开关处提示先添加。
+- **推送订阅**（`features/notifications/push.ts`）：Chrome 的 Dedicated Worker 里没有 `navigator.serviceWorker`，所以订阅由标签页取得，经 `setPush` 交给同步 Worker；同步 Worker 记住它，每次连接后用 `push.set` 上报（换 Leader 时标签页重新交一次）。本机开关存在 `localStorage`：权限已授予且没有关闭时，启动时自动订阅（不需要用户手势）；开启时先退掉旧订阅再订阅，endpoint 随之更换。没有开启时对话列表上方常驻一条带「Turn on」按钮的 Alert（`push-prompt.tsx`），点叉后这台设备不再提示；设置 → Notifications 里有本机开关与通知预览。iOS 只有添加到主屏幕后才有推送，此时开关处提示先添加。
 - **分享目标**（Web Share Target，仅 Chromium）：Manifest 的 `share_target` 把系统分享面板的文字、链接与文件 `POST` 到 `/share`。SW 拦下后把内容暂存到 IndexedDB `share`（只留最新一次），再 303 跳转到 `/share` 页面。页面复用对话列表选会话（桌面端在左栏，移动端在主区，顶部一条 Alert 可取消）；选中后输入框预填分享的文字与附件，由用户确认后发送。退出登录时连同暂存一起清除。
 - **图标**：`favicon.svg` 是 lucide `message-circle`，有未读时换成 `favicon-unread.svg`（`message-circle-more`），都随系统深浅色切换描边颜色。应用图标是同一图形，深色底、白色描边，另有一份 maskable 版本。PNG 由 `bash scripts/gen-icons.sh` 调用本机 Chrome 无头模式从 `public/icons/*.svg` 生成。
 
@@ -154,6 +154,8 @@ flowchart TB
 - **扬声器**：通话的声音、回铃音与试听（`AudioContext.setSinkId`）与语音消息的播放器都用 `setSinkId` 放到选定的扬声器，选定的不在时用系统默认，插回来时重新设置。不支持 `setSinkId` 的浏览器（iOS Safari）或只有一个输出设备时不显示扬声器的选择。
 
 ## 平台能力（直接使用，不做降级）
+
+同步 Worker 启动失败（没有 OPFS、存储空间不足、本地库迁移失败、脚本加载不了）时广播 `failed`，之后每收到一个请求都再广播一次；脚本没能加载时由 Leader 标签页代为回答。各标签页换成一个说明原因的 Empty，「Try again」请 Leader 标签页换一个新的 Worker。没有 Service Worker 的上下文（不安全的上下文、部分隐私窗口）照常启动，只是没有离线外壳与推送。
 
 | 能力 | 用途 |
 | --- | --- |

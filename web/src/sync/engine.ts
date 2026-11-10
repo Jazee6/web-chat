@@ -34,7 +34,7 @@ import { inviteCodeOf, linkOnly } from 'shared/text'
 import { LINK_WAIT_MS, resolveWebLink } from '@/features/link/resolve'
 import { MEDIA_ORIGIN } from '@/lib/deploy'
 import { deleteBlobs, saveBlobs } from './blobs'
-import type { OpError, Ops, OutgoingMessage, WorkerMessage } from './bridge'
+import { OpFailure, type OpError, type Ops, type OutgoingMessage, type WorkerMessage } from './bridge'
 import { OfflineError, type Connection, type RpcResult } from './connection'
 import { GAP_WAIT_MS, classify, drain, needsReconcile } from './logic'
 import type { Binding, SealedMedia, SecretPayload, SecretReaction } from './secret/format'
@@ -65,18 +65,6 @@ const SECRET_ATTEMPTS = 3
 const PROGRESS_INTERVAL_MS = 100
 /** 链接预览卡片的图片在 OPFS 暂存目录里的文件名 */
 const LINK_FILE = 'l'
-
-/** 操作失败，code 与 userIds 原样返回给标签页 */
-export class OpFailure extends Error {
-  readonly code: OpError
-  readonly userIds: string[] | undefined
-
-  constructor(code: OpError, userIds?: string[]) {
-    super(code)
-    this.code = code
-    this.userIds = userIds
-  }
-}
 
 type ChatUpdate = Extract<Update, { k: 'chat' }>
 type ReadyLink = Extract<OutboxLink, { state: 'ready' }>
@@ -197,13 +185,17 @@ export class Engine {
       }, GAP_WAIT_MS)
       return
     }
+    const applied = [item]
     this.store.tx(() => {
       this.applyUser(item)
       const { ready, waiting } = drain(item.pts, this.userPending)
       for (const next of ready) this.applyUser(next)
+      applied.push(...ready)
       this.userPending = waiting
     })
-    this.refreshProfiles(false).catch(ignoreOffline)
+    // 只为更新里出现、本地还没有的用户拉资料
+    const ids = this.store.missingUserIds(applied.flatMap((u) => userEventIds(u.ev)))
+    if (ids.length > 0) this.refreshProfiles(false, ids).catch(ignoreOffline)
   }
 
   private applyUser(item: PendingUser) {
@@ -369,7 +361,7 @@ export class Engine {
       const cur = this.store.chatState(chatId)
       this.store.dropMessages(chatId)
       this.putMessages(chatId, page.messages)
-      this.store.setChatState(chatId, { pts: Math.max(cur?.pts ?? 0, r.pts), min_seq: pageStart(page.messages) })
+      this.store.setChatState(chatId, { pts: Math.max(cur?.pts ?? 0, r.pts), min_seq: pageStart(page.messages, PAGE_SIZE) })
       this.drainChat(chatId)
     })
     fetchPinned()
@@ -660,9 +652,10 @@ export class Engine {
 
   // ---------- 用户资料 ----------
 
-  private async refreshProfiles(all: boolean, extra: string[] = []) {
+  /** only：只拉这些用户；不给时 all 为全部相关的用户，否则为其中本地还没有的 */
+  private async refreshProfiles(all: boolean, only?: string[]) {
     if (!this.conn.online) return
-    const ids = [...new Set([...this.store.knownUserIds(!all), ...extra])]
+    const ids = only ? [...new Set(only)] : this.store.knownUserIds(!all)
     for (let i = 0; i < ids.length; i += MAX_PAGE_LIMIT) {
       const r = unwrap(await this.conn.request('users.get', { ids: ids.slice(i, i + MAX_PAGE_LIMIT) }))
       this.store.tx(() => this.store.putUsers(r.users))
@@ -965,15 +958,10 @@ export class Engine {
   async loadOlder({ chatId, limit = PAGE_SIZE }: Ops['loadOlder']['args']) {
     const state = this.store.chatState(chatId)
     if (!state || state.min_seq <= 1) return { done: true }
-    const page = unwrap(
-      await this.conn.request('messages.history', {
-        chat_id: chatId,
-        before_seq: state.min_seq,
-        limit: Math.min(limit, MAX_PAGE_LIMIT),
-      }),
-    )
+    const size = Math.min(limit, MAX_PAGE_LIMIT)
+    const page = unwrap(await this.conn.request('messages.history', { chat_id: chatId, before_seq: state.min_seq, limit: size }))
     // 秘密聊天翻到本设备加入之前就停：再往前的都解不开
-    const start = isSecret(chatId) && this.secrets.reachedJoin(chatId, page.messages) ? 1 : pageStart(page.messages)
+    const start = isSecret(chatId) && this.secrets.reachedJoin(chatId, page.messages) ? 1 : pageStart(page.messages, size)
     this.store.tx(() => {
       const cur = this.store.chatState(chatId) ?? state
       this.putMessages(chatId, page.messages)
@@ -1431,8 +1419,26 @@ function isSecret(chatId: string) {
 }
 
 /** 一页历史消息的起点；不足一页说明已经到了会话开头 */
-function pageStart(messages: { seq: number }[]): number {
-  return messages.length < PAGE_SIZE ? 1 : messages[0]!.seq
+/** user 更新里提到的用户 */
+function userEventIds(ev: UserEvent): string[] {
+  switch (ev.type) {
+    case 'dialog': {
+      const p = ev.dialog.top_preview
+      const action = p?.kind === 'service' ? messageUserIds({ sender_id: p.sender_id, kind: 'service', action: p.action }) : []
+      return [...(chatPair(ev.dialog.chat_id) ?? []), ...(p ? [p.sender_id] : []), ...action]
+    }
+    case 'relation':
+      return [ev.relation.user_id]
+    case 'call':
+      return [ev.call.peer_id]
+    default:
+      return []
+  }
+}
+
+/** 一页的第一条；没取满 limit 条说明已经到了会话开头 */
+function pageStart(messages: { seq: number }[], limit: number): number {
+  return messages.length < limit ? 1 : messages[0]!.seq
 }
 
 function unwrap<M extends Method>(res: RpcResult<M>) {

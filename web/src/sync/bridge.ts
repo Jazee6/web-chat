@@ -222,7 +222,25 @@ export type OpError =
   | 'internal'
 
 /** build 为标签页的构建版本：与同步 Worker 不一致时不处理，较旧的一方重载 */
-export type TabMessage = { k: 'call'; tab: string; build: number; id: number; op: Op; args: unknown }
+/** 操作失败：同步 Worker 里抛出，code 与 userIds 原样交给标签页，标签页再以同样的形式抛给调用方 */
+export class OpFailure extends Error {
+  readonly code: OpError
+  /** 与错误有关的用户（blocked 时为拉黑了自己的人） */
+  readonly userIds: string[] | undefined
+
+  constructor(code: OpError, userIds?: string[]) {
+    super(code)
+    this.code = code
+    this.userIds = userIds
+  }
+}
+
+export type CallMessage = { k: 'call'; tab: string; build: number; id: number; op: Op; args: unknown }
+
+export type TabMessage =
+  | CallMessage
+  /** 同步 Worker 启动失败后，请 Leader 标签页换一个新的再试 */
+  | { k: 'retry' }
 
 export type WorkerMessage =
   | { k: 'result'; tab: string; id: number; ok: true; value: unknown }
@@ -233,6 +251,8 @@ export type WorkerMessage =
   | { k: 'status'; status: ConnectionStatus }
   /** 新 Leader 就绪：标签页重放尚未得到结果的请求；build 为同步 Worker 的构建版本 */
   | { k: 'ready'; build: number }
+  /** 同步 Worker 启动失败（浏览器不支持 OPFS、存储空间不足、本地库打不开）；之后每收到一个请求都再说一次 */
+  | { k: 'failed' }
   /** 有更新的版本：构建早于 newest 的标签页重载。服务端拒绝了旧协议时 newest 为 Infinity */
   | { k: 'outdated'; newest: number }
   /** 瞬时状态，不进本地库：私聊对象的在线状态、正在输入（action 为 null 表示对方已发出消息） */

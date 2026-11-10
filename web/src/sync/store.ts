@@ -42,7 +42,7 @@ export type CipherRow = {
   reactions: Record<string, string> | null
 }
 
-/** v1 的表结构：1.0 发布之前仍可直接修改，之后只能在 MIGRATIONS 末尾追加新的步骤（见 docs/adr/0013） */
+/** v1 的表结构：不再修改，改表只在 MIGRATIONS 末尾追加新的步骤（见 docs/adr/0013） */
 const V1 = [
   `CREATE TABLE kv (
     key   TEXT PRIMARY KEY,
@@ -450,6 +450,8 @@ const MAX_TIMER_MS = 2 ** 31 - 1
 
 export class Store {
   private changed = new Set<string>()
+  /** 本事务里删掉的发件箱条目：提交之后再删 OPFS 里暂存的文件（回滚时行还在，文件不能删） */
+  private removedOutbox: number[] = []
   private depth = 0
   /** 最近一次静音到期时刷新对话列表：静音是否生效由查询时的当前时间决定，到期本身不改动本地库 */
   private muteTimer: ReturnType<typeof setTimeout> | undefined
@@ -457,11 +459,13 @@ export class Store {
   private readonly db: Database
   private readonly me: string
   private readonly onChange: (topics: string[]) => void
+  private readonly onOutboxRemoved: (randomIds: number[]) => void
 
-  constructor(db: Database, me: string, onChange: (topics: string[]) => void) {
+  constructor(db: Database, me: string, onChange: (topics: string[]) => void, onOutboxRemoved: (randomIds: number[]) => void = () => {}) {
     this.db = db
     this.me = me
     this.onChange = onChange
+    this.onOutboxRemoved = onOutboxRemoved
   }
 
   /** 事务结束后一次性广播受影响的主题 */
@@ -469,8 +473,11 @@ export class Store {
     if (this.depth > 0) return fn()
     this.depth++
     try {
-      return this.db.transaction(() => fn())
+      const result = this.db.transaction(() => fn())
+      if (this.removedOutbox.length > 0) this.onOutboxRemoved(this.removedOutbox)
+      return result
     } finally {
+      this.removedOutbox = []
       this.depth--
       if (this.changed.size > 0) {
         const list = [...this.changed]
@@ -588,6 +595,7 @@ export class Store {
 
   /** 删除对话：连同本地消息、同步状态与成员一起删除 */
   private deleteChat(chatId: string) {
+    this.outboxRemoved(this.db.selectValues('SELECT random_id FROM outbox WHERE chat_id = ?', [chatId]).map(Number))
     for (const table of ['dialogs', 'messages', 'chats', 'chat_members', 'outbox', 'drafts', 'played', 'secret_groups', 'secret_epochs']) {
       this.db.exec({ sql: `DELETE FROM ${table} WHERE chat_id = ?`, bind: [chatId] })
     }
@@ -1025,7 +1033,15 @@ export class Store {
 
   deleteOutbox(randomId: number) {
     const chatId = this.db.selectValue('DELETE FROM outbox WHERE random_id = ? RETURNING chat_id', [randomId])
-    if (chatId !== undefined) this.touch(topics.outbox, topics.chat(chatId as string))
+    if (chatId === undefined) return
+    this.touch(topics.outbox, topics.chat(chatId as string))
+    this.outboxRemoved([randomId])
+  }
+
+  private outboxRemoved(randomIds: number[]) {
+    if (randomIds.length === 0) return
+    if (this.depth > 0) this.removedOutbox.push(...randomIds)
+    else this.onOutboxRemoved(randomIds)
   }
 
   /** 忘掉已经上传的对象键（待发对象已过期被删），下次发送时重新上传 */

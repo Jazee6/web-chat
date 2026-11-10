@@ -1,6 +1,6 @@
 import { useEffect, useState, type CSSProperties } from 'react'
 import { Outlet } from '@tanstack/react-router'
-import { MonitorOffIcon, WifiOffIcon } from 'lucide-react'
+import { DatabaseIcon, MonitorOffIcon, WifiOffIcon } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from '@/components/ui/empty'
@@ -13,14 +13,16 @@ import { signIn, type Boot } from '@/features/auth/session'
 import { SidebarPanels } from '@/features/contacts/sidebar-panel'
 import { useUnreadBadge } from '@/features/notifications/badge'
 import { Splash } from './splash'
-import { useConnectionStatus } from '@/sync/client'
+import { retrySync, useConnectionStatus, useSyncFailed } from '@/sync/client'
 
 /** 登录后的布局：左栏对话列表或联系人列表（桌面可完全收起，移动端为抽屉），右侧为当前页面 */
 export function AppLayout({ boot }: { boot: Boot }) {
+  const syncFailed = useSyncFailed()
   if (!boot.me) {
     if (boot.reason === 'offline') return <Offline />
     return boot.reason === 'removed' ? <Removed /> : <RedirectToSignIn />
   }
+  if (syncFailed) return <StorageFailed />
 
   return (
     <MeContext value={boot.me}>
@@ -100,6 +102,28 @@ function Removed() {
         >
           {redirecting && <Spinner data-icon="inline-start" />}
           Sign in again
+        </Button>
+      </EmptyContent>
+    </Empty>
+  )
+}
+
+/** 同步 Worker 启动失败：浏览器不支持 OPFS、存储空间不足或本地库打不开 */
+function StorageFailed() {
+  return (
+    <Empty className="h-svh">
+      <EmptyHeader>
+        <EmptyMedia variant="icon">
+          <DatabaseIcon />
+        </EmptyMedia>
+        <EmptyTitle role="heading" aria-level={1}>Couldn’t open your chats</EmptyTitle>
+        <EmptyDescription>
+          This browser can’t store chats on this device. It may not be supported, be out of space, or be in private mode.
+        </EmptyDescription>
+      </EmptyHeader>
+      <EmptyContent>
+        <Button variant="outline" onClick={retrySync}>
+          Try again
         </Button>
       </EmptyContent>
     </Empty>

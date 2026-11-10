@@ -5,10 +5,11 @@ import { PRESENCE_RENEW_MS, type PushSubscriptionKeys } from 'shared/protocol'
 import {
   CHANNEL,
   LEADER_LOCK,
+  OpFailure,
+  type CallMessage,
   type ConnectionStatus,
   type InitMessage,
   type Op,
-  type OpError,
   type Ops,
   type LeaderMessage,
   type TabMessage,
@@ -19,22 +20,12 @@ import { requestReload } from '@/lib/reload'
 import { applyPresence, applyTyping, applyUpload } from './transient'
 import type { Call, GroupCall } from 'shared/protocol'
 
-export class OpFailure extends Error {
-  readonly code: OpError
-  /** 与错误有关的用户（blocked 时为拉黑了自己的人） */
-  readonly userIds: string[] | undefined
-
-  constructor(code: OpError, userIds?: string[]) {
-    super(code)
-    this.code = code
-    this.userIds = userIds
-  }
-}
+export { OpFailure }
 
 const tabId = crypto.randomUUID()
 const channel = new BroadcastChannel(CHANNEL)
 let nextId = 1
-const pending = new Map<number, { message: TabMessage; resolve: (value: never) => void; reject: (e: Error) => void }>()
+const pending = new Map<number, { message: CallMessage; resolve: (value: never) => void; reject: (e: Error) => void }>()
 const topicListeners = new Set<{ topics: Set<string>; notify: () => void }>()
 const wipedListeners = new Set<(reason?: 'revoked') => void>()
 const readyListeners = new Set<() => void>()
@@ -50,9 +41,28 @@ let push: PushSubscriptionKeys | null | undefined
 let status: ConnectionStatus = 'connecting'
 const statusListeners = new Set<() => void>()
 
+/** 同步 Worker 启动失败：界面换成错误状态，等用户重试 */
+let failed = false
+const failedListeners = new Set<() => void>()
+/** 本标签页是 Leader 时：换一个新的同步 Worker */
+let respawn: (() => void) | null = null
+/** 本标签页是 Leader、而同步 Worker 的脚本没能加载：替它回答其他标签页的请求 */
+let workerBroken = false
+/** 本标签页是 Leader 时：当前的同步 Worker 已经就绪 */
+let workerReady = false
+
 channel.onmessage = (e: MessageEvent<TabMessage | WorkerMessage>) => {
   const message = e.data
   switch (message.k) {
+    case 'call':
+      if (workerBroken) channel.postMessage({ k: 'failed' } satisfies WorkerMessage)
+      return
+    case 'retry':
+      respawn?.()
+      return
+    case 'failed':
+      setFailed(true)
+      return
     case 'result': {
       if (message.tab !== tabId) return
       const call = pending.get(message.id)
@@ -74,6 +84,8 @@ channel.onmessage = (e: MessageEvent<TabMessage | WorkerMessage>) => {
       if (BUILD < message.newest) requestReload()
       return
     case 'ready':
+      workerReady = true
+      setFailed(false)
       // 同步 Worker 是更新的版本：本标签页的请求它不会处理
       if (message.build > BUILD) requestReload()
       // 新 Leader 就绪：重放还没有结果的请求（请求均为幂等），重新告知本标签页的状态，刷新连接状态
@@ -109,7 +121,7 @@ channel.onmessage = (e: MessageEvent<TabMessage | WorkerMessage>) => {
 }
 
 export function call<O extends Op>(op: O, args: Ops[O]['args']): Promise<Ops[O]['result']> {
-  const message: TabMessage = { k: 'call', tab: tabId, build: BUILD, id: nextId++, op, args }
+  const message: CallMessage = { k: 'call', tab: tabId, build: BUILD, id: nextId++, op, args }
   return new Promise((resolve, reject) => {
     pending.set(message.id, { message, resolve, reject })
     channel.postMessage(message)
@@ -151,13 +163,13 @@ export function onCall(listener: (call: Call | null, tab: string | null) => void
   return () => callListeners.delete(listener)
 }
 
-/** 发给本标签页的通话信令 */
 /** 群组通话的变化 */
 export function onGroupCall(listener: (chatId: string, call: GroupCall | null, mine: boolean) => void): () => void {
   groupCallListeners.add(listener)
   return () => groupCallListeners.delete(listener)
 }
 
+/** 发给本标签页的通话信令 */
 export function onCallSignal(listener: (callId: string, data: string) => void): () => void {
   signalListeners.add(listener)
   return () => signalListeners.delete(listener)
@@ -179,31 +191,77 @@ export function startLeaderElection(userId: string) {
   if (started) return
   started = true
   void navigator.locks.request(LEADER_LOCK, () => {
+    let worker: Worker | null = null
     const spawn = () => {
-      const worker = new Worker(new URL('./worker.ts', import.meta.url), { type: 'module', name: 'sync' })
+      worker?.terminate()
+      workerBroken = false
+      workerReady = false
+      const next = new Worker(new URL('./worker.ts', import.meta.url), { type: 'module', name: 'sync' })
+      worker = next
       // 本地库在运行中丢失：终止它（释放 OPFS 句柄），换一个新的 Worker；本地库已被更新的版本迁移过：重载
-      worker.addEventListener('message', (e: MessageEvent<LeaderMessage>) => {
+      next.addEventListener('message', (e: MessageEvent<LeaderMessage>) => {
         if (e.data.k === 'outdated') {
           requestReload()
           return
         }
-        worker.terminate()
         spawn()
       })
-      worker.postMessage({ k: 'init', userId } satisfies InitMessage)
+      // 脚本没能加载（或加载时就出错）：Worker 自己发不出 failed，由本标签页代为告知。
+      // 就绪之后的未捕获错误也会冒泡到这里，那些不算启动失败
+      next.addEventListener('error', (e) => {
+        if (workerReady || worker !== next) return
+        console.error('sync worker failed to load', e.message)
+        workerBroken = true
+        setFailed(true)
+        channel.postMessage({ k: 'failed' } satisfies WorkerMessage)
+      })
+      next.postMessage({ k: 'init', userId } satisfies InitMessage)
     }
+    respawn = spawn
     spawn()
     return new Promise<never>(() => {})
   })
   void call('status', {}).then(setStatus)
 
-  // 可见性：变化时上报，可见期间定期上报（同步 Worker 据此判断标签页还活着），关闭时报不可见
+  // 可见性：变化时上报，可见期间定期上报（同步 Worker 据此判断标签页还活着），关闭时报不可见。
+  // 关闭时也不再查看会话（组件的清理函数这时不会执行）；从往返缓存里恢复时重新告知
   document.addEventListener('visibilitychange', reportVisibility)
-  addEventListener('pagehide', () => void call('presence', { visible: false }))
+  addEventListener('pagehide', () => {
+    void call('presence', { visible: false })
+    if (viewing) void call('view', { chatId: null })
+  })
+  addEventListener('pageshow', (e) => {
+    if (!e.persisted) return
+    reportVisibility()
+    if (viewing) void call('view', { chatId: viewing })
+  })
   setInterval(() => {
     if (document.visibilityState === 'visible') reportVisibility()
   }, PRESENCE_RENEW_MS)
   reportVisibility()
+}
+
+function setFailed(next: boolean) {
+  if (failed === next) return
+  failed = next
+  for (const listener of failedListeners) listener()
+}
+
+/** 同步 Worker 启动失败后重试：由 Leader 标签页换一个新的 Worker，就绪后各标签页照常重放请求 */
+export function retrySync() {
+  setFailed(false)
+  if (respawn) respawn()
+  else channel.postMessage({ k: 'retry' } satisfies TabMessage)
+}
+
+export function useSyncFailed(): boolean {
+  return useSyncExternalStore(
+    (listener) => {
+      failedListeners.add(listener)
+      return () => failedListeners.delete(listener)
+    },
+    () => failed,
+  )
 }
 
 function setStatus(next: ConnectionStatus) {

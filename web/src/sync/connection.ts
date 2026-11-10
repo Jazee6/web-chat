@@ -21,6 +21,8 @@ import { reconnectDelay } from './logic'
 
 /** 连续多少次握手失败后检查登录状态（浏览器不暴露升级请求的 401，只能看到 1006） */
 const HANDSHAKE_FAILURES_BEFORE_AUTH_CHECK = 2
+/** 握手多久没完成就放弃重来：网络黑洞时浏览器自己的超时很长，期间一直停在 connecting，online 事件也不会重试 */
+const HANDSHAKE_TIMEOUT_MS = 15_000
 
 export type RpcResult<M extends Method> =
   | { ok: true; r: MethodResults[M] }
@@ -56,6 +58,7 @@ export class Connection {
   private pending = new Map<number, Pending>()
   private retryTimer: ReturnType<typeof setTimeout> | undefined
   private heartbeat: ReturnType<typeof setInterval> | undefined
+  private handshakeTimer: ReturnType<typeof setTimeout> | undefined
   private awaitingPong = false
   private stopped = false
 
@@ -106,9 +109,16 @@ export class Connection {
     const ws = new WebSocket(this.url)
     this.ws = ws
     let opened = false
+    this.handshakeTimer = setTimeout(() => {
+      if (this.ws !== ws) return
+      this.detach(new OfflineError())
+      ws.close()
+      this.scheduleRetry()
+    }, HANDSHAKE_TIMEOUT_MS)
 
     ws.onopen = () => {
       opened = true
+      clearTimeout(this.handshakeTimer)
       this.attempt = 0
       this.failedHandshakes = 0
       this.startHeartbeat()
@@ -158,6 +168,7 @@ export class Connection {
   /** 放弃当前连接：拒绝所有未完成请求，不再处理它的事件 */
   private detach(error: Error) {
     clearInterval(this.heartbeat)
+    clearTimeout(this.handshakeTimer)
     const ws = this.ws
     if (ws) {
       ws.onopen = ws.onmessage = ws.onclose = null
