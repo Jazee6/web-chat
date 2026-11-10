@@ -26,6 +26,8 @@ const INDEX = '/'
 const SHELL_URL = '/?shell'
 /** 导航网络优先：超过这个时间还没有响应就先用缓存的外壳 */
 const NAV_TIMEOUT_MS = 3000
+/** 介绍页不是 SPA 的路由：只走网络，不用外壳兜底，否则网络慢时外壳会把它显示成 404 */
+const LANDING_PATHS = new Set(['/zh', '/en'])
 
 self.addEventListener('install', (e) => {
   e.waitUntil(
@@ -62,9 +64,9 @@ self.addEventListener('fetch', (e) => {
   // 视频不缓存：<video> 用 Range 请求边下边播，直接交给浏览器
   if (url.origin === MEDIA_ORIGIN) return isVideoUrl(req.url) ? undefined : e.respondWith(media(e))
   if (url.origin !== self.location.origin || url.pathname === '/ws') return
-  // API 不经过缓存。但 OAuth 回调这类导航已经由导航预加载发出过一次：不调用 respondWith 时浏览器会丢弃预加载
+  // API 与介绍页不经过缓存。但 OAuth 回调这类导航已经由导航预加载发出过一次：不调用 respondWith 时浏览器会丢弃预加载
   // 再请求一次，回调的 state 被预加载那次消费掉，后一次就报 state_mismatch
-  if (url.pathname.startsWith('/api/')) {
+  if (url.pathname.startsWith('/api/') || LANDING_PATHS.has(url.pathname)) {
     if (req.mode === 'navigate') e.respondWith(preloadOrFetch(e))
     return
   }
