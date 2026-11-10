@@ -207,6 +207,26 @@ describe('推送', () => {
     await eventually(async () => expect(await pushOf(b.id, device)).toBeNull())
   })
 
+  it('一台设备推送出错（网络错误）不影响其他设备：失效的订阅照样清除', async () => {
+    const { b, send } = await privatePair()
+    const broken = await createSession(b.id)
+    const gone = await createSession(b.id)
+    for (const device of [broken, gone]) {
+      const c = await connect(b.id, device)
+      await c.call('push.set', { subscription: subscription(device) })
+      c.ws.close()
+    }
+    await inUser(b.id, (o) => {
+      o.sendPush = async (s) => {
+        if (s.endpoint === subscription(broken).endpoint) throw new Error('network')
+        return 410
+      }
+    })
+    await send('hi')
+    await eventually(async () => expect(await pushOf(b.id, gone)).toBeNull())
+    expect(await pushOf(b.id, broken)).not.toBeNull()
+  })
+
   it('session 已失效的设备不推送，并清除订阅', async () => {
     const { b, send } = await privatePair()
     const expired = await createSession(b.id, { expiresAt: Date.now() - 1000 })

@@ -52,11 +52,19 @@ export async function displayNames(sql: Sql, env: Env, ids: string[]): Promise<M
   return names
 }
 
-/** 推给每台设备；推送服务报告订阅失效（404 / 410）时清除（1 行），其他错误只记录，下一条再试 */
+/**
+ * 推给每台设备；推送服务报告订阅失效（404 / 410）时清除（1 行），其他错误（包括网络错误）只记录，下一条再试。
+ * 每台设备各自处理：一台出错不影响其他设备的结果与清理
+ */
 export async function pushTo(sql: Sql, send: SendPush, devices: PushDevice[], payload: PushPayload, options: PushOptions) {
   await Promise.all(
     devices.map(async (device) => {
-      const status = await send(JSON.parse(device.push) as PushSubscriptionKeys, payload, options)
+      let status: number
+      try {
+        status = await send(JSON.parse(device.push) as PushSubscriptionKeys, payload, options)
+      } catch (e) {
+        return console.error('push failed', { error: String(e) })
+      }
       if (status >= 200 && status < 300) return
       if (status !== 404 && status !== 410) return console.error('push rejected', { status })
       sql.run('UPDATE devices SET push = NULL WHERE id = ?', device.id)

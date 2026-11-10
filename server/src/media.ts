@@ -77,10 +77,11 @@ const objectUrl = (env: Env, key: string) => `https://${env.R2_ACCOUNT_ID}.r2.cl
  */
 export async function copyObject(env: Env, src: string, dst: string): Promise<boolean> {
   const res = await s3(env).fetch(objectUrl(env, dst), { method: 'PUT', headers: { 'x-amz-copy-source': `/${env.R2_BUCKET}/${src}` } })
-  if (res.status === 404) return false
   // 带上响应正文：调用深度超限时 R2 也可能以 4xx 拒绝，正文里有原因
-  if (!res.ok) throw new Error(`copy failed: ${res.status} ${(await res.text()).slice(0, 500)}`)
-  return true
+  if (!res.ok && res.status !== 404) throw new Error(`copy failed: ${res.status} ${(await res.text()).slice(0, 500)}`)
+  // 不读的正文要取消，否则一直占着出站连接（同时最多 6 个）
+  await res.body?.cancel()
+  return res.ok
 }
 
 /**
@@ -88,6 +89,7 @@ export async function copyObject(env: Env, src: string, dst: string): Promise<bo
  */
 export async function objectExists(env: Env, key: string): Promise<boolean> {
   const res = await s3(env).fetch(objectUrl(env, key), { method: 'HEAD' })
+  await res.body?.cancel()
   if (res.status === 404) return false
   if (!res.ok) throw new Error(`head failed: ${res.status}`)
   return true

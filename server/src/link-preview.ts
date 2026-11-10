@@ -46,8 +46,9 @@ async function safeFetch(start: URL, appHost: string, accept: string): Promise<{
       headers: { 'User-Agent': USER_AGENT, Accept: accept },
       signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
     })
-    if (res.status < 300 || res.status >= 400) return res.ok ? { res, url } : null
+    if (res.ok) return { res, url }
     await res.body?.cancel()
+    if (res.status < 300 || res.status >= 400) return null
     const next = res.headers.get('Location')
     const checked = next ? checkTarget(new URL(next, url).href, appHost) : null
     if (!checked) return null

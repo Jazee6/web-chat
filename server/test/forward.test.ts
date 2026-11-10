@@ -1,5 +1,5 @@
 import { env } from 'cloudflare:test'
-import { newGroupChatId, privateChatId, sentKey, sentMedia, type MessageEntity, type Photo, type Update, type Video, type Voice } from 'shared/protocol'
+import { newGroupChatId, newSecretChatId, privateChatId, sentKey, sentMedia, type MessageEntity, type Photo, type Update, type Video, type Voice } from 'shared/protocol'
 import { describe, expect, it } from 'vitest'
 import { ownsKey } from '../src/media'
 import { chatWrites, connect, createUser, eventually, inUser, randomId, stored, userWrites } from './helpers'
@@ -242,6 +242,24 @@ describe('messages.forward', () => {
     expect(await cb.call('messages.forward', { from_chat_id: group, seq: 2, to_chat_id: dm, random_id: randomId() })).toEqual({
       ok: false,
       e: 'blocked',
+    })
+    expect(copied).toBe(0)
+  })
+
+  it('目标是秘密聊天：返回 bad_request，不复制媒体', async () => {
+    const { a, b, c, group, ca, cb } = await setup()
+    await ca.call('messages.sendMedia', { chat_id: group, random_id: randomId(), media: await stored([photo(a.id)]) })
+    let copied = 0
+    await inUser(b.id, (o) => {
+      o.copyObject = async () => {
+        copied++
+        return true
+      }
+    })
+    const secret = newSecretChatId(b.id, c.id)
+    expect(await cb.call('messages.forward', { from_chat_id: group, seq: 2, to_chat_id: secret, random_id: randomId() })).toEqual({
+      ok: false,
+      e: 'bad_request',
     })
     expect(copied).toBe(0)
   })

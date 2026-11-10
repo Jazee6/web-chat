@@ -271,7 +271,10 @@ export class UserDO extends DurableObject<Env> {
     if (!VAPID_PRIVATE_KEY || !VAPID_PUBLIC_KEY) return 410
     // VAPID 的 sub 用应用地址：推送服务出问题时据此联系应用方
     this.vapid ??= new Vapid(VAPID_PRIVATE_KEY, VAPID_PUBLIC_KEY, BETTER_AUTH_URL)
-    return (await sendWebPush(subscription, JSON.stringify(payload), options, this.vapid)).status
+    const res = await sendWebPush(subscription, JSON.stringify(payload), options, this.vapid)
+    // 只要状态，正文取消掉，免得占着出站连接
+    await res.body?.cancel()
+    return res.status
   }
   /** 服务端复制一个媒体对象（发送与转发时），源对象不存在时返回 false；测试替换为本地 R2 上的复制 */
   copyObject = (src: string, dst: string): Promise<boolean> => copyObject(this.env, src, dst)
@@ -645,6 +648,8 @@ export class UserDO extends DurableObject<Env> {
         const check = this.checkChat(chatId, me.user_id)
         if (!check.ok) return check
       }
+      // 秘密聊天只收密文，send 一律拒绝：在复制媒体之前就拒绝，不白白消耗 R2 操作
+      if (parseSecretChatId(to_chat_id)) return err('bad_request')
       const got = await this.chat(from_chat_id).getMessages(from_chat_id, me.user_id, [seq])
       if (!got.ok) return got
       const source = got.r.messages[0]
@@ -738,16 +743,17 @@ export class UserDO extends DurableObject<Env> {
       const before = this.presence()
       const now = Date.now()
       const hidden_at = visible ? me.hidden_at : me.visible ? now : me.hidden_at
-      ws.serializeAttachment({ ...me, visible, hidden_at, viewing: [...new Set(viewing)] } satisfies Attachment)
+      const unique = [...new Set(viewing)]
+      ws.serializeAttachment({ ...me, visible, hidden_at, viewing: unique } satisfies Attachment)
       const after = this.presence()
       if (before.status !== after.status) this.notifyWatchers(me.user_id, after)
 
       const groupCalls: GroupCall[] = []
+      const hides = this.settings().last_seen === 'nobody'
       const peers = await Promise.all(
-        [...new Set(viewing)].map(async (chatId) => {
+        unique.map(async (chatId) => {
           if (!isGroupChatId(chatId) && !chatPair(chatId)?.includes(me.user_id)) return null
           const peerId = chatPair(chatId)?.find((id) => id !== me.user_id)
-          const hides = this.settings().last_seen === 'nobody'
           const [presence, viewed] = await Promise.all([
             peerId ? this.env.USER.getByName(peerId).watchPresence(me.user_id, hides) : null,
             this.chat(chatId).view(chatId, me.user_id),
@@ -970,17 +976,7 @@ export class UserDO extends DurableObject<Env> {
       } else if (cur.status !== 'left') {
         return err('bad_request')
       }
-      // 保留墓碑行供其他设备同步删除（1 行写入）；置顶、静音一并取消，重新入群得到的是全新的对话
-      const row: DialogRow = {
-        ...cur,
-        status: 'deleted',
-        pinned_rank: null,
-        muted_until: 0,
-        draft: null,
-        mentions: null,
-        pts: ++this.userPts,
-      }
-      this.putDialogState(row)
+      this.putDialogState(this.tombstone(cur))
       return ok(null)
     },
 
@@ -1338,8 +1334,10 @@ export class UserDO extends DurableObject<Env> {
 
   /** 与对方现有的秘密聊天（对话还在的）；没有为 null */
   private secretChatWith(selfId: string, peerId: string): string | null {
+    // 自己出现在每个秘密聊天里，不能当作对方来找
+    if (peerId === selfId) return null
     const rows = this.sql.all<{ chat_id: string }>("SELECT chat_id FROM dialogs WHERE kind = 'secret' AND status = 'member'")
-    return rows.find((r) => parseSecretChatId(r.chat_id)?.includes(peerId) && peerId !== selfId)?.chat_id ?? null
+    return rows.find((r) => parseSecretChatId(r.chat_id)?.includes(peerId))?.chat_id ?? null
   }
 
   /** 拉黑与解除拉黑同样记到与对方的秘密聊天里 */
@@ -1565,11 +1563,21 @@ export class UserDO extends DurableObject<Env> {
 
   /** 写对话行里用户私有的状态（1 行写入）并推给自己的所有设备 */
   private putDialogState(row: DialogRow) {
+    this.broadcast([this.writeDialogState(row)])
+  }
+
+  /** 写对话行里用户私有的状态（1 行写入），返回要推给自己设备的更新 */
+  private writeDialogState(row: DialogRow): Update {
     this.sql.run(
       'UPDATE dialogs SET status = ?, pinned_rank = ?, muted_until = ?, draft = ?, mentions = ?, pts = ? WHERE chat_id = ?',
       row.status, row.pinned_rank, row.muted_until, row.draft, row.mentions, row.pts, row.chat_id,
     )
-    this.broadcast([{ k: 'user', pts: row.pts, ev: { type: 'dialog', dialog: toDialog(row) } }])
+    return { k: 'user', pts: row.pts, ev: { type: 'dialog', dialog: toDialog(row) } }
+  }
+
+  /** 删除对话留下的墓碑行，供其他设备同步删除；置顶、静音一并取消，重新入群得到的是全新的对话 */
+  private tombstone(cur: DialogRow): DialogRow {
+    return { ...cur, status: 'deleted', pinned_rank: null, muted_until: 0, draft: null, mentions: null, pts: ++this.userPts }
   }
 
   /**
@@ -1740,12 +1748,7 @@ export class UserDO extends DurableObject<Env> {
     // 对方删除了秘密聊天：对话一并删除，留下墓碑（1 行）
     if (events.some((e) => e.type === 'chat_deleted')) {
       if (!cur || cur.status === 'deleted') return []
-      const row: DialogRow = { ...cur, status: 'deleted', pinned_rank: null, muted_until: 0, draft: null, mentions: null, pts: ++this.userPts }
-      this.sql.run(
-        'UPDATE dialogs SET status = ?, pinned_rank = ?, muted_until = ?, draft = ?, mentions = ?, pts = ? WHERE chat_id = ?',
-        row.status, row.pinned_rank, row.muted_until, row.draft, row.mentions, row.pts, row.chat_id,
-      )
-      return [{ k: 'user', pts: row.pts, ev: { type: 'dialog', dialog: toDialog(row) } }]
+      return [this.writeDialogState(this.tombstone(cur))]
     }
     const changes = events
       .flatMap((e) => (e.type === 'peer_read' || e.type === 'chat_deleted' ? [] : [e]))
