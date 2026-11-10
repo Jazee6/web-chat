@@ -1685,7 +1685,9 @@ export class ChatDO extends DurableObject<Env> {
     if (!check.ok) return check
     const s = this.secret!
     if (!s.leaves.some((l) => l.device_id === deviceId && l.user_id === userId)) return ok(null)
-    if (!s.resets.includes(deviceId)) this.putSecret({ ...s, resets: [...s.resets, deviceId] })
+    // 已经请求过的不再通知：加入不了的设备每次收到通知都会再请求一次，通知它自己会形成循环
+    if (s.resets.includes(deviceId)) return ok(null)
+    this.putSecret({ ...s, resets: [...s.resets, deviceId] })
     this.notifySecret()
     return ok(null)
   }

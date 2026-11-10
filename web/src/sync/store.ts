@@ -27,8 +27,12 @@ import {
 } from 'shared/protocol'
 import { topics, type PreparedPreview, type Row } from './bridge'
 
-/** 还没解开的秘密聊天消息：cipher 为消息的密文，reactions 为每人加密的回应 */
+/**
+ * 还没解开的秘密聊天消息：cipher 为消息的密文，reactions 为每人加密的回应。
+ * retry：这个版本已经解开写过，只是还有回应缺纪元密钥，追上之后再解
+ */
 export type CipherRow = {
+  retry: boolean
   chat_id: string
   seq: number
   pts: number
@@ -756,15 +760,17 @@ export class Store {
 
   // ---------- 秘密聊天 ----------
 
-  /** 还没解开的消息（每次最多 limit 条） */
+  /** 还没解开的消息（每次最多 limit 条）；只差回应的排在后面 */
   cipherRows(limit: number): CipherRow[] {
     const rows = this.db.selectObjects(
-      'SELECT chat_id, seq, pts, sender_id, edit_date, cipher FROM messages WHERE cipher IS NOT NULL ORDER BY chat_id, seq LIMIT ?',
+      `SELECT chat_id, seq, pts, sender_id, edit_date, cipher FROM messages
+       WHERE cipher IS NOT NULL ORDER BY json_extract(cipher, '$.retry') IS NOT NULL, chat_id, seq LIMIT ?`,
       [limit],
     )
     return rows.map((r) => {
-      const c = JSON.parse(r.cipher as string) as { cipher: string; reactions?: Record<string, string> }
+      const c = JSON.parse(r.cipher as string) as { cipher: string; reactions?: Record<string, string>; retry?: 1 }
       return {
+        retry: c.retry === 1,
         chat_id: r.chat_id as string,
         seq: Number(r.seq),
         pts: Number(r.pts),
@@ -784,7 +790,8 @@ export class Store {
   }
 
   /**
-   * 解开的消息写回（只在行没有再变过时）：body 为明文的消息体，sealed / broken 为解不开的
+   * 解开的消息写回（只在行没有再变过时）：body 为明文的消息体，sealed / broken 为解不开的。
+   * keepCipher：还有回应缺纪元密钥，保留密文并记下 retry，追上之后再解一次；新版本到来时随密文一起换掉
    */
   putPlain(
     chatId: string,
@@ -792,10 +799,12 @@ export class Store {
     pts: number,
     body: Extract<Message, { kind: 'text' | 'media' }> | { kind: 'sealed' | 'broken' },
     randomId: number | null,
+    keepCipher = false,
   ) {
     const plain = body.kind === 'text' || body.kind === 'media' ? body : null
     this.db.exec({
-      sql: `UPDATE messages SET kind = ?, text = ?, media = ?, reply_to = ?, reactions = ?, random_id = coalesce(random_id, ?), cipher = NULL
+      sql: `UPDATE messages SET kind = ?, text = ?, media = ?, reply_to = ?, reactions = ?, random_id = coalesce(random_id, ?),
+              cipher = CASE WHEN ? THEN json_set(cipher, '$.retry', 1) END
             WHERE chat_id = ? AND seq = ? AND pts = ? AND cipher IS NOT NULL`,
       bind: [
         body.kind,
@@ -804,6 +813,7 @@ export class Store {
         plain?.reply_to ?? null,
         plain?.reactions ? JSON.stringify(plain.reactions) : null,
         randomId,
+        keepCipher ? 1 : 0,
         chatId, seq, pts,
       ],
     })

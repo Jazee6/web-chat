@@ -189,7 +189,7 @@ describe('secret chats', () => {
     store.tx(() => store.putMessages(SECRET, [cipher({ reactions: { u2: 'r1' } })]))
     expect(row()).toMatchObject({ kind: 'cipher', text: null })
     expect(store.cipherRows(10)).toEqual([
-      { chat_id: SECRET, seq: 1, pts: 1, sender_id: 'u2', edit_date: null, cipher: 'c1', reactions: { u2: 'r1' } },
+      { retry: false, chat_id: SECRET, seq: 1, pts: 1, sender_id: 'u2', edit_date: null, cipher: 'c1', reactions: { u2: 'r1' } },
     ])
 
     plain(1, 'hi')
@@ -216,6 +216,23 @@ describe('secret chats', () => {
     expect(row()).toMatchObject({ text: 'hi' })
     plain(2, 'edited')
     expect(row()).toMatchObject({ kind: 'text', text: 'edited', cipher: null })
+  })
+
+  test('reactions still waiting for their epoch keep the ciphertext for another try', () => {
+    store.tx(() => store.putMessages(SECRET, [cipher({ reactions: { u3: 'r1' } })]))
+    store.tx(() => store.putPlain(SECRET, 1, 1, { chat_id: SECRET, seq: 1, pts: 1, sender_id: 'u2', date: 0, kind: 'text', text: 'hi' }, 9, true))
+    expect(row()).toMatchObject({ kind: 'text', text: 'hi' })
+    expect(store.cipherRows(10)).toEqual([expect.objectContaining({ retry: true, cipher: 'c1', reactions: { u3: 'r1' } })])
+
+    // 还没解过的排在前面
+    store.tx(() => store.putMessages(SECRET, [cipher({ seq: 2, pts: 2 })]))
+    expect(store.cipherRows(10).map((r) => [r.seq, r.retry])).toEqual([
+      [2, false],
+      [1, true],
+    ])
+
+    plain(1, 'hi')
+    expect(row()).toMatchObject({ cipher: null })
   })
 
   test('own sent messages stay as plaintext; recalling clears pending ciphertext', () => {

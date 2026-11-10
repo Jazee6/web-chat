@@ -256,6 +256,11 @@ describe('secrets.commit', () => {
     await eventually(() => expect(a1.events).toContainEqual({ type: 'secret', chat_id: chatId }))
     const state = await a1.call('secrets.state', { chat_id: chatId })
     expect(state.ok && state.r.resets).toEqual([b1.deviceId])
+    // 重复的请求不再通知（否则加入不了的设备与服务端之间会循环）
+    const seen = a1.events.length
+    expect(await b1.call('secrets.reset', { chat_id: chatId })).toEqual({ ok: true, r: null })
+    await new Promise((resolve) => setTimeout(resolve, 50))
+    expect(a1.events.slice(seen)).not.toContainEqual({ type: 'secret', chat_id: chatId })
     const device = { user_id: b.id, device_id: b1.deviceId }
     expect(
       await a1.call('secrets.commit', { chat_id: chatId, epoch: 2, commit: b64('c'), welcome: b64('w'), adds: [device], removes: [b1.deviceId] }),

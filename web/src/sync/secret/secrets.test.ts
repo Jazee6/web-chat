@@ -30,6 +30,7 @@ class FakeServer {
   resets: string[] = []
   commits: (SecretCommit & { welcomeFor: string[] })[] = []
   messages: Message[] = []
+  resetCalls = 0
 
   private claim(device: string): ClaimedKeyPackage | null {
     const d = this.keys.get(device)
@@ -93,6 +94,7 @@ class FakeServer {
             .map(({ welcomeFor, welcome, ...c }) => ({ ...c, ...(welcomeFor.includes(device) && welcome ? { welcome } : {}) })),
         }
       case 'secrets.reset':
+        this.resetCalls++
         if (!this.resets.includes(device)) this.resets.push(device)
         return null
       default:
@@ -198,6 +200,9 @@ describe('Secrets', () => {
     await b1again.secrets.reconcile(CHAT)
     expect(server.resets).toEqual(['b1'])
     expect(b1again.epoch()).toBeNull()
+    // 成员把它重新加入之前，收到通知也不再重复请求
+    await b1again.secrets.refresh(CHAT)
+    expect(server.resetCalls).toBe(1)
     await a1.secrets.refresh(CHAT)
     expect(server.epoch).toBe(3)
     await b1again.secrets.reconcile(CHAT)

@@ -24,7 +24,10 @@ type Mls = typeof import('./mls')
 type ClientState = Awaited<ReturnType<Mls['decodeState']>>
 
 let mlsModule: Promise<Mls> | null = null
-/** ts-mls 只在用到秘密聊天时才加载 */
+/**
+ * ts-mls 按需加载：新设备第一次连上时要生成 KeyPackage（别人才能对它发起秘密聊天），那时就会加载；
+ * 之后 KeyPackage 够用时，只在用到秘密聊天时才加载
+ */
 const mls = () => (mlsModule ??= import('./mls'))
 
 /** 提交被别的设备抢先时，追上之后重来几次 */
@@ -63,6 +66,11 @@ export class Secrets {
   private unsealAgain = false
   /** 解开时缺纪元密钥、已经为它检查过的会话：进入新纪元或有新的提交之前不再重复检查 */
   private waiting = new Set<string>()
+  /**
+   * 已经请求过重新加入的会话与当时的纪元：`${chat_id}:${epoch}`。成员把本设备重新加入（进入新纪元）之前不再请求，
+   * 收到 secret 事件时也不清掉，否则加入不了的设备每收到一次通知就再请求一次
+   */
+  private resetsSent = new Set<string>()
 
   private readonly store: Store
   private readonly conn: Connection
@@ -213,13 +221,21 @@ export class Secrets {
       ? await m.join(welcome.welcome!, await Promise.all(keys.map((k) => unwrap(k.private))), pair).catch(() => null)
       : null
     if (!joined || m.epochOf(joined.state) !== welcome!.epoch) {
-      await this.request('secrets.reset', { chat_id: chatId })
+      await this.requestReset(chatId, state.epoch)
       return false
     }
     const used = keys[joined.used]!
     await this.enter(chatId, joined.state, m.epochOf(joined.state))
     this.store.tx(() => this.store.deleteSecretKey(used.ref))
     return true
+  }
+
+  /** 请成员把本设备重新加入；同一个纪元只请求一次 */
+  private async requestReset(chatId: string, epoch: number) {
+    const key = `${chatId}:${epoch}`
+    if (this.resetsSent.has(key)) return
+    await this.request('secrets.reset', { chat_id: chatId })
+    this.resetsSent.add(key)
   }
 
   /** 进入一个纪元：存下（包了一层的）MLS 状态、这个纪元的密钥与组里的设备 */
@@ -259,7 +275,7 @@ export class Secrets {
           // 处理不了（例如本设备自己的提交成功了、确认却丢了，新状态没存下）：只能请成员把本设备重新加入
           console.error('secret commit failed', chatId, c.epoch, e)
           this.store.tx(() => this.store.dropSecretGroup(chatId))
-          await this.request('secrets.reset', { chat_id: chatId })
+          await this.requestReset(chatId, commits.at(-1)!.epoch)
           return false
         }
         await this.enter(chatId, state)
@@ -466,6 +482,8 @@ export class Secrets {
   private async unsealPass() {
     const rows = this.store.cipherRows(UNSEAL_BATCH)
     const pending = new Set<string>()
+    /** 有回应缺纪元密钥的会话：不挡住同一会话里后面的消息，只是同样要追上提交 */
+    const behind = new Set<string>()
     const replies = new Map<string, number[]>()
     let progress = false
     for (const row of rows) {
@@ -476,7 +494,7 @@ export class Secrets {
         pending.add(row.chat_id)
         continue
       }
-      progress = true
+      if (!row.retry) progress = true
       if (payload === 'sealed' || payload === null) {
         this.store.tx(() => this.store.putPlain(row.chat_id, row.seq, row.pts, { kind: payload === 'sealed' ? 'sealed' : 'broken' }, null))
         continue
@@ -486,10 +504,14 @@ export class Secrets {
         this.store.tx(() => this.store.putPlain(row.chat_id, row.seq, row.pts, { kind: 'broken' }, null))
         continue
       }
-      const reactions = await this.reactions(row.chat_id, row.seq, row.reactions)
+      const { reactions, waiting } = await this.reactions(row.chat_id, row.seq, row.reactions)
+      if (waiting) behind.add(row.chat_id)
+      // 已经写过明文、回应仍缺密钥：没有变化
+      if (row.retry && waiting) continue
+      progress = true
       const body = toPlain(row.chat_id, row.seq, row.pts, row.sender_id, payload, reactions)
-      this.store.tx(() => this.store.putPlain(row.chat_id, row.seq, row.pts, body, payload.random_id))
-      if (payload.reply_to) replies.set(row.chat_id, [...(replies.get(row.chat_id) ?? []), payload.reply_to])
+      this.store.tx(() => this.store.putPlain(row.chat_id, row.seq, row.pts, body, payload.random_id, waiting))
+      if (payload.reply_to && !row.retry) replies.set(row.chat_id, [...(replies.get(row.chat_id) ?? []), payload.reply_to])
     }
     for (const [chatId, seqs] of replies) this.hooks.onReplies(chatId, seqs)
     for (const p of this.store.cipherPreviews()) {
@@ -510,7 +532,7 @@ export class Secrets {
       this.store.tx(() => this.store.putPlainPreview(p.chat_id, p.pts, preview))
     }
     // 缺提交的会话：追上之后会再解一轮；同一个会话不重复触发
-    for (const chatId of pending) {
+    for (const chatId of new Set([...pending, ...behind])) {
       if (this.waiting.has(chatId)) continue
       this.waiting.add(chatId)
       void this.reconcile(chatId)
@@ -518,18 +540,24 @@ export class Secrets {
     if (progress && rows.length === UNSEAL_BATCH) this.unsealAgain = true
   }
 
-  /** 每人一条加密的回应：解不开的略过；按 REACTIONS 的顺序 */
-  private async reactions(chatId: string, seq: number, sealed: Record<string, string> | null): Promise<Reactions | undefined> {
-    if (!sealed) return undefined
+  /** 每人一条加密的回应：解不开的略过，缺纪元密钥的记下 waiting；按 REACTIONS 的顺序 */
+  private async reactions(
+    chatId: string,
+    seq: number,
+    sealed: Record<string, string> | null,
+  ): Promise<{ reactions: Reactions | undefined; waiting: boolean }> {
+    if (!sealed) return { reactions: undefined, waiting: false }
     const out: Reactions = {}
+    let waiting = false
     for (const [userId, cipher] of Object.entries(sealed)) {
       const r = await this.decrypt<SecretReaction>(chatId, userId, cipher, { kind: 'react', seq })
+      if (r === 'pending') waiting = true
       if (r === null || typeof r !== 'object' || !REACTIONS.includes(r.emoji)) continue
       ;(out[r.emoji] ??= []).push(userId)
     }
     const ordered: Reactions = {}
     for (const e of REACTIONS) if (out[e]) ordered[e] = out[e]
-    return Object.keys(ordered).length > 0 ? ordered : undefined
+    return { reactions: Object.keys(ordered).length > 0 ? ordered : undefined, waiting }
   }
 }
 
