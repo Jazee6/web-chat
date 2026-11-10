@@ -119,7 +119,7 @@ export type Ops = {
   /**
    * 添加到我的贴纸：处理好的图片（上传后添加），或一条贴纸消息里的贴纸。必须在线，结果经 upd 推回所有设备
    */
-  addSticker: { args: { sticker: PreparedSticker } | { chatId: string; seq: number }; result: null }
+  addSticker: { args: { sticker: PreparedSticker; randomId: number } | { chatId: string; seq: number }; result: null }
   /** 从我的贴纸里移除：必须在线 */
   removeSticker: { args: { key: string }; result: null }
   /** 开始秘密聊天，返回会话 ID（已经有了就是那个） */

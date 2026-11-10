@@ -247,6 +247,9 @@ const MIGRATIONS = [
       PRIMARY KEY (device_id, ref)
     ) STRICT, WITHOUT ROWID`,
   ],
+  // v2：从图片添加的贴纸记下标签页生成的 random_id，换 Leader 时重新上传、重放的请求据此不再添加第二张。
+  // 行数很少（上限 200 张加墓碑），不建索引
+  ['ALTER TABLE stickers ADD COLUMN random_id INTEGER'],
 ]
 
 export class UserDO extends DurableObject<Env> {
@@ -904,6 +907,14 @@ export class UserDO extends DurableObject<Env> {
         if (!mime || !ownsKey(key, this.env.MEDIA_KEY_PREFIX, me.user_id, 'p')) return err('bad_request')
         if (mime !== 'image/gif' && Math.max(w, h) > STICKER_SIZE) return err('bad_request')
         sticker = { type: 'sticker', key: savedKey(key), mime, w, h, size, thumbhash }
+        // 同一次添加的重放（换 Leader 时又上传了一份，键不同）：已经加过了，这一份待发对象用不上
+        if (params.random_id !== undefined) {
+          const prev = this.sql.one<{ key: string }>('SELECT key FROM stickers WHERE random_id = ?', params.random_id)
+          if (prev) {
+            if (prev.key !== sticker.key) this.dropObjects([key])
+            return ok(null)
+          }
+        }
       }
       const cur = this.sql.one<StickerRow>('SELECT * FROM stickers WHERE key = ?', sticker.key)
       if (cur && cur.removed === 0) return ok(null)
@@ -917,9 +928,11 @@ export class UserDO extends DurableObject<Env> {
       const pts = ++this.userPts
       const row: StickerRow = { ...sticker, added_at: Date.now(), removed: 0, pts }
       this.sql.run(
-        `INSERT INTO stickers (key, mime, w, h, size, thumbhash, added_at, removed, pts) VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?)
-         ON CONFLICT (key) DO UPDATE SET added_at = excluded.added_at, removed = 0, pts = excluded.pts`,
+        `INSERT INTO stickers (key, mime, w, h, size, thumbhash, added_at, removed, pts, random_id) VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, ?)
+         ON CONFLICT (key) DO UPDATE SET added_at = excluded.added_at, removed = 0, pts = excluded.pts,
+           random_id = coalesce(excluded.random_id, stickers.random_id)`,
         row.key, row.mime, row.w, row.h, row.size, row.thumbhash, row.added_at, pts,
+        params.from === 'upload' ? (params.random_id ?? null) : null,
       )
       this.broadcast([{ k: 'user', pts, ev: { type: 'sticker', ...toStickerChange(row) } }])
       return ok(null)

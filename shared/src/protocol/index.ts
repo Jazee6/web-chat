@@ -907,7 +907,16 @@ export const methodParams = {
    * 已有 MAX_STICKERS 张时返回 sticker_limit；重放不会添加第二张
    */
   'stickers.add': v.variant('from', [
-    v.object({ from: v.literal('upload'), key: MediaKey, w: Dimension, h: Dimension, size: StickerSize, thumbhash: Thumbhash }),
+    // random_id：标签页生成，换 Leader 时重放的请求带着同一个（那时已经又上传了一份，键不同），不会加出两张
+    v.object({
+      from: v.literal('upload'),
+      key: MediaKey,
+      w: Dimension,
+      h: Dimension,
+      size: StickerSize,
+      thumbhash: Thumbhash,
+      random_id: v.optional(RandomId),
+    }),
     v.object({ from: v.literal('message'), chat_id: ChatId, seq: Seq }),
   ]),
   /** 从我的贴纸里移除；对象不删除，已经发出的贴纸消息照常显示 */

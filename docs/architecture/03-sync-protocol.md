@@ -161,7 +161,7 @@ sequenceDiagram
 | `settings.set {last_seen?}` | UserDO | 只写有变化的项；经 `user_pts` 同步到所有设备 |
 | `contacts.set {user_id, alias}` | UserDO（→ D1 校验对方存在） | 加为联系人或修改备注名（空串等于不设）；没有变化时不写。不能加自己 |
 | `contacts.remove {user_id}` | UserDO | 取消联系人，备注名一并清除；与拉黑互不影响 |
-| `stickers.add {from: 'upload', key, w, h, size, thumbhash}` / `{from: 'message', chat_id, seq}` | UserDO（→ ChatDO） | 添加到我的贴纸：上传的待发对象复制到 `s/`；或引用一条读得到的贴纸消息里的贴纸。已有 200 张返回 `sticker_limit`；已经在收藏里的不写；1 行写入，经 `user_pts` 推给所有设备 |
+| `stickers.add {from: 'upload', key, w, h, size, thumbhash, random_id?}` / `{from: 'message', chat_id, seq}` | UserDO（→ ChatDO） | 添加到我的贴纸：上传的待发对象复制到 `s/`；或引用一条读得到的贴纸消息里的贴纸。已有 200 张返回 `sticker_limit`；已经在收藏里的不写；`random_id` 已经添加过的（换 Leader 时重新上传后重放）不写，并删掉这次的待发对象；1 行写入，经 `user_pts` 推给所有设备 |
 | `stickers.remove {key}` | UserDO | 从我的贴纸移除：留墓碑（1 行写入），不删对象；没有时不写 |
 | `users.block / users.unblock {user_id}` | UserDO → 私聊 ChatDO | 先让私聊的 `ChatDO` 记下或清除拉黑，再写自己的 `relations` 行。拉黑期间私聊双方发送、编辑都返回 `blocked`，不写任何行；输入中不转发；拉黑者的已读不推给对方。见 [ADR-0007](../adr/0007-block-rejects-explicitly.md) |
 | `dialogs.delete {chat_id}` | UserDO | 删除只读对话：写墓碑行、递增 `user_pts`。秘密聊天对双方生效：`ChatDO` 删掉内容，另一方的 `UserDO` 也删掉对话 |

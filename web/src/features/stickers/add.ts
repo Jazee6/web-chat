@@ -5,6 +5,7 @@ import { opErrorMessage } from '@/features/groups/errors'
 import { mediaImgProps } from '@/features/media/media-url'
 import { formatBytes } from '@/lib/format'
 import { OpFailure, call } from '@/sync/client'
+import { randomId } from '@/sync/logic'
 import { StickerError, prepareSticker } from './prepare'
 
 const COUNT_SQL = 'SELECT count(*) AS n FROM stickers'
@@ -21,7 +22,8 @@ export async function addStickerFromImage(source: string | Blob) {
       return
     }
     const blob = typeof source === 'string' ? await fetchImage(source) : source
-    await call('addSticker', { sticker: await prepareSticker(blob) })
+    // random_id 在这里生成：换 Leader 时重放的请求会重新上传，服务端据此不加出第二张
+    await call('addSticker', { sticker: await prepareSticker(blob), randomId: randomId() })
     toast.add({ type: 'success', title: 'Added to stickers' })
   } catch (e) {
     toast.add({ type: 'error', title: "Couldn't add the sticker", description: describe(e) })

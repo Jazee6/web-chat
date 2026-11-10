@@ -193,7 +193,7 @@ type LinkPreview =
   - 静态图缩到长边 512 以内（不放大），编码为 WebP；浏览器编不了 WebP 时（Safari）`convertToBlob` 按规范退回 PNG，两者都保留透明，不铺白底。
   - GIF 原样保留动画，尺寸不变。
   - 处理后超过 2MB（`MAX_STICKER_BYTES`）的不能添加。
-  - 同步 Worker 以上传类型 `sticker` 申请签名、传到待发区，再调用 `stickers.add {from: 'upload', key, w, h, size, thumbhash}`。`UserDO` 校验键是自己的待发键，格式由文件名决定（不信客户端），静态图长边不超过 512；先查上限再复制到同一目录的 `s/`（`savedKey`），写入收藏行后删除待发对象。重放时待发对象已经删了、`s/` 还在，照常成功；都不在时返回 `media_expired`。
+  - 同步 Worker 以上传类型 `sticker` 申请签名、传到待发区，再调用 `stickers.add {from: 'upload', key, w, h, size, thumbhash, random_id}`。`random_id` 由标签页生成：换 Leader 时重放的请求会重新上传一份（键不同），`UserDO` 按 `random_id` 认出已经添加过，不加第二张，删掉多传的待发对象。`UserDO` 校验键是自己的待发键，格式由文件名决定（不信客户端），静态图长边不超过 512；先查上限再复制到同一目录的 `s/`（`savedKey`），写入收藏行后删除待发对象。重放时待发对象已经删了、`s/` 还在，照常成功；都不在时返回 `media_expired`。
 - **从贴纸消息添加**：`stickers.add {from: 'message', chat_id, seq}`，`UserDO` 经 `ChatDO` 确认这条消息读得到、确实是贴纸消息，直接把它的键记进收藏，不上传、不复制。已经在收藏里的什么都不做；移除过的复活并排到最前。
 - **上限**：我的贴纸最多 200 张（`MAX_STICKERS`，不含墓碑），满了返回 `sticker_limit`。标签页在处理与上传之前先查本地的数量。
 - **发送**：普通会话里 `messages.sendSticker {chat_id, random_id, key, reply_to?}`。`UserDO` 只接受自己收藏里（未移除）的键，格式、宽高、ThumbHash 都取自收藏行，然后交给 `ChatDO` 写一条贴纸消息，**不经过 R2**。发件箱里的贴纸记着它在我的贴纸里的键（`source`），确认时本地写的就是这个键。贴纸消息不清空草稿：点选贴纸不动输入框里的文字。

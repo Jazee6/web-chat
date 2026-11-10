@@ -1270,7 +1270,7 @@ export class Engine {
       if (e instanceof UploadOffline) throw new OpFailure('offline')
       throw e
     }
-    unwrap(await this.conn.request('stickers.add', { from: 'upload', key, w, h, size: file.size, thumbhash }))
+    unwrap(await this.conn.request('stickers.add', { from: 'upload', key, w, h, size: file.size, thumbhash, random_id: args.randomId }))
     return null
   }
 

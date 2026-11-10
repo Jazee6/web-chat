@@ -46,6 +46,29 @@ describe('stickers.add', () => {
     expect(sync.ok && sync.r.stickers).toMatchObject([{ key: saved, sticker: { mime: 'image/png' } }])
   })
 
+  it('换 Leader 时重新上传、带着同一个 random_id 重放：不加第二张，多传的待发对象删掉', async () => {
+    const a = await createUser()
+    const ca = await connect(a.id)
+    const rid = randomId()
+    const add = async () => {
+      const key = pendingKey(a.id)
+      await env.MEDIA.put(key, 'x')
+      expect(await ca.call('stickers.add', { from: 'upload', key, w: 512, h: 400, size: 1, thumbhash: THUMBHASH, random_id: rid })).toEqual({
+        ok: true,
+        r: null,
+      })
+      return key
+    }
+    const first = await add()
+    const before = await userWrites(a.id)
+    const second = await add()
+    expect((await userWrites(a.id)) - before).toBe(0)
+    await eventually(async () => expect(await env.MEDIA.head(second)).toBeNull())
+    expect(await env.MEDIA.head(savedKey(second))).toBeNull()
+    const sync = await ca.call('sync.user', { pts: 0 })
+    expect(sync.ok && sync.r.stickers.map((s) => s.key)).toEqual([savedKey(first)])
+  })
+
   it('格式由文件名决定，静态图长边不超过 512，键必须是自己的待发键；待发对象过期返回 media_expired', async () => {
     const [a, b] = await Promise.all([createUser(), createUser()])
     const ca = await connect(a.id)
